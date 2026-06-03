@@ -2279,6 +2279,7 @@ function renderQDailyOverview(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
   const sq=(($('qd-search')&&$('qd-search').value)||'').toLowerCase().trim();
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
+  list=list.filter(e=>empNat(e)!=='中国');
   list=list.filter(e=>getEmpKPIs(e).length>0&&(empStatus(e)!=='resigned'||qdMonthVals(e.id).length>0));
   if(sq)list=list.filter(e=>e.id.toLowerCase().includes(sq)||e.name.toLowerCase().includes(sq));
   list.sort((a,b)=>{const va=qdMonthVals(a.id),vb=qdMonthVals(b.id);const aa=va.length?va.reduce((s,x)=>s+x.v,0)/va.length:-1;const ab=vb.length?vb.reduce((s,x)=>s+x.v,0)/vb.length:-1;return ab-aa;});
@@ -2397,7 +2398,7 @@ function renderQRank(){
   const wrap=$('qr-content');if(!wrap)return;
   const dF=$('qr-dept')?$('qr-dept').value:'';
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
-  list=list.filter(e=>empStatus(e)!=='resigned');
+  list=list.filter(e=>empNat(e)!=='中国'&&empStatus(e)!=='resigned');
   const scored=list.map(e=>{const adj=calcAdjustedMonthScore(e.id);return{e,adj,avg:adj.score,kpiN:getEmpKPIs(e).length};});
   const posMap={};scored.forEach(r=>{const pos=r.e.position||'（未设置岗位）';if(!posMap[pos])posMap[pos]=[];posMap[pos].push(r);});
   const posList=Object.entries(posMap).sort(([,a],[,b])=>{const avgA=a.reduce((s,x)=>s+x.avg,0)/a.length;const avgB=b.reduce((s,x)=>s+x.avg,0)/b.length;return avgB-avgA;});
