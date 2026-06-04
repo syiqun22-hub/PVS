@@ -3750,12 +3750,16 @@ function renderAttAnalysis(){
   if(anaGrp==='dept'){
     emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});
   }else{
-    emps.forEach(e=>{const dk=e.dept||'未分配',sk=e.section||'未分科室',k=dk+'|||'+sk;if(!groups[k])groups[k]=[];groups[k].push(e);});
+    emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]={dept:e.dept||'未分配',emps:[]};groups[k].emps.push(e);});
   }
-  let rows=Object.keys(groups).map(k=>{
-    if(anaGrp==='sec'){const[dept,name]=k.split('|||');return{name,dept,...computeWeekStats(groups[k],anaWeekOff)};}
-    return{name:k,...computeWeekStats(groups[k],anaWeekOff)};
-  }).sort((a,b)=>anaGrp==='sec'?(a.dept||'').localeCompare(b.dept||'')||b.attRate-a.attRate:b.attRate-a.attRate);
+  let rows;
+  if(anaGrp==='dept'){
+    rows=Object.keys(groups).map(name=>({name,dept:'',...computeWeekStats(groups[name],anaWeekOff)}))
+      .sort((a,b)=>b.attRate-a.attRate);
+  }else{
+    rows=Object.keys(groups).map(name=>({name,dept:groups[name].dept,...computeWeekStats(groups[name].emps,anaWeekOff)}))
+      .sort((a,b)=>(a.dept||'').localeCompare(b.dept||'')||b.attRate-a.attRate);
+  }
   if(anaExclBlank)rows=rows.filter(r=>r.emp>0);   // 整组无考勤记录则不显示
   // overall stat cards
   const all=computeWeekStats(emps,anaWeekOff);
