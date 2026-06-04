@@ -3750,9 +3750,12 @@ function renderAttAnalysis(){
   if(anaGrp==='dept'){
     emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});
   }else{
-    emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]=[];groups[k].push(e);});
+    emps.forEach(e=>{const dk=e.dept||'未分配',sk=e.section||'未分科室',k=dk+'|||'+sk;if(!groups[k])groups[k]=[];groups[k].push(e);});
   }
-  let rows=Object.keys(groups).map(name=>({name,...computeWeekStats(groups[name],anaWeekOff)})).sort((a,b)=>b.attRate-a.attRate);
+  let rows=Object.keys(groups).map(k=>{
+    if(anaGrp==='sec'){const[dept,name]=k.split('|||');return{name,dept,...computeWeekStats(groups[k],anaWeekOff)};}
+    return{name:k,...computeWeekStats(groups[k],anaWeekOff)};
+  }).sort((a,b)=>anaGrp==='sec'?(a.dept||'').localeCompare(b.dept||'')||b.attRate-a.attRate:b.attRate-a.attRate);
   if(anaExclBlank)rows=rows.filter(r=>r.emp>0);   // 整组无考勤记录则不显示
   // overall stat cards
   const all=computeWeekStats(emps,anaWeekOff);
@@ -3768,10 +3771,13 @@ function renderAttAnalysis(){
   $('ana-ch2-title').textContent='各'+(anaGrp==='dept'?'部门':'科室')+'旷工占比对比';
   if(!rows.length){$('ana-tbl-body').innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';}
   else{
-    $('ana-tbl-body').innerHTML=rows.map(r=>{
+    let prevDept=null;
+  $('ana-tbl-body').innerHTML=rows.map(r=>{
       const rateCls=r.attRate>=95?'badge-success':r.attRate>=85?'badge-info':r.attRate>=70?'badge-warning':'badge-danger';
       const fiCls=r.fiRate<=1?'badge-success':r.fiRate<=3?'badge-warning':'badge-danger';
-      return`<tr><td><strong>${r.name}</strong></td><td style="text-align:right;font-family:monospace">${r.emp}</td><td style="text-align:right;font-family:monospace;color:#155724;font-weight:600">${r.aDays}</td><td style="text-align:right;font-family:monospace">${r.expTotal}</td><td style="text-align:right"><span class="badge ${rateCls}" style="font-family:monospace">${r.attRate.toFixed(1)}%</span></td><td style="text-align:right;font-family:monospace;color:#856404">${r.absDays}</td><td style="text-align:right;font-family:monospace;color:${r.fiDays>0?'#dc3545':'var(--color-text-tertiary)'};font-weight:${r.fiDays>0?'600':'400'}">${r.fiDays}</td><td style="text-align:right"><span class="badge ${fiCls}" style="font-family:monospace">${r.fiRate.toFixed(2)}%</span></td></tr>`;
+      let deptHdr='';
+      if(anaGrp==='sec'&&r.dept!==prevDept){prevDept=r.dept;deptHdr=`<tr style="background:var(--color-background-secondary)"><td colspan="8" style="padding:5px 8px;font-weight:600;color:var(--color-text-secondary);font-size:12px">▸ ${r.dept}</td></tr>`;}
+      return deptHdr+`<tr><td style="padding-left:${anaGrp==='sec'?'20px':'8px'}"><strong>${r.name}</strong></td><td style="text-align:right;font-family:monospace">${r.emp}</td><td style="text-align:right;font-family:monospace;color:#155724;font-weight:600">${r.aDays}</td><td style="text-align:right;font-family:monospace">${r.expTotal}</td><td style="text-align:right"><span class="badge ${rateCls}" style="font-family:monospace">${r.attRate.toFixed(1)}%</span></td><td style="text-align:right;font-family:monospace;color:#856404">${r.absDays}</td><td style="text-align:right;font-family:monospace;color:${r.fiDays>0?'#dc3545':'var(--color-text-tertiary)'};font-weight:${r.fiDays>0?'600':'400'}">${r.fiDays}</td><td style="text-align:right"><span class="badge ${fiCls}" style="font-family:monospace">${r.fiRate.toFixed(2)}%</span></td></tr>`;
     }).join('');
   }
   // charts
