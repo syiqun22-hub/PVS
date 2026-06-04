@@ -626,7 +626,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <input id="emp-s" style="width:190px" placeholder="搜索姓名/工号" oninput="filterEmp()">
     <select id="emp-df" onchange="filterEmp()" style="width:130px"><option value="">全部部门</option></select>
     <select id="emp-sf" onchange="filterEmp()" style="width:115px"><option value="">全部状态</option></select>
-    <select id="emp-empf" onchange="filterEmp()" style="width:100px"><option value="active">在职</option><option value="resigned">离职</option><option value="">在职+离职</option></select>
+    <select id="emp-empf" onchange="filterEmp()" style="width:100px"><option value="active">在职</option><option value="standby">待岗</option><option value="resigned">离职</option><option value="">全部</option></select>
     <select id="emp-nf" onchange="filterEmp()" style="width:110px"><option value="">全部国籍</option><option value="中国">中国</option><option value="墨西哥">墨西哥</option></select>
     <button class="btn btn-p" id="btn-add-emp" onclick="openAddEmp()"><i class="ti ti-plus"></i> 新增员工</button>
     <button class="btn" id="btn-import-emp" onclick="openImport()"><i class="ti ti-upload"></i> 导入</button>
@@ -1249,7 +1249,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="fg"><label class="fl">岗位</label><select id="ne-pos"><option value="">— 请选择岗位 —</option></select></div>
       <div class="fg"><label class="fl">入职日期</label><input id="ne-date" type="date"></div>
       <div class="fg"><label class="fl">国籍</label><select id="ne-nat"><option value="墨西哥">墨西哥</option><option value="中国">中国</option></select></div>
-      <div class="fg"><label class="fl">在职状态</label><select id="ne-status" onchange="updateNeResignVis()"><option value="active">在职</option><option value="resigned">离职</option></select></div>
+      <div class="fg"><label class="fl">在职状态</label><select id="ne-status" onchange="updateNeResignVis()"><option value="active">在职</option><option value="standby">待岗</option><option value="resigned">离职</option></select></div>
       <div class="fg" id="ne-resign-wrap" style="display:none"><label class="fl">离职日期</label><input id="ne-resign" type="date"></div>
       <div class="fg" id="ne-restype-wrap" style="display:none"><label class="fl">离职类型</label><select id="ne-restype"><option value="">— 请选择 —</option><optgroup label="主动离职"><option value="旷工离职">旷工离职</option><option value="辞职">辞职</option><option value="退休">退休</option><option value="死亡">死亡</option></optgroup><optgroup label="被动离职"><option value="公司解除">公司解除</option><option value="试用期不通过">试用期不通过</option><option value="人员优化">人员优化</option></optgroup></select></div>
     </div>
@@ -1935,7 +1935,7 @@ async function loadAll(){
       document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa"><div style="background:#162145;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)"><div style="font-size:32px;margin-bottom:12px">⚙️</div><div style="font-size:18px;font-weight:600;margin-bottom:10px">请先配置 Supabase</div><div style="font-size:13px;color:#666;line-height:1.7">打开 index.html 文件，找到顶部的<br><code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_URL</code> 和 <code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_ANON_KEY</code><br>填入你的 Supabase 项目信息后重新上传。</div></div></div>`;
       return;
     } else {
-      var eR,dR,secR,kR,pR,aR,sR,attR,srR,otR,edR,dsdR;
+      var eR,dR,secR,kR,pR,aR,sR,attR,srR,otR,edR,dsdR,ldR;
 
       // 从 pvs_config 加载配置
       const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
@@ -1943,7 +1943,7 @@ async function loadAll(){
         const cfg = {};
         cfgRows.forEach(r => { cfg[r.id] = r.value; });
         eR=cfg.employees;dR=cfg.departments;secR=cfg.sections;kR=cfg.kpiTemplates;
-        pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;let ldR=cfg.lateData;
+        pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;ldR=cfg.lateData;
       }
 
       // 从 pvs_daily 加载逐日得分
@@ -2067,19 +2067,20 @@ function allEmps(){return currentUser&&currentUser.role==='admin'?employees:empl
 function visibleEmps(){return allEmps().filter(isActive);}
 function empStatus(e){return (e&&e.status)?e.status:'active';}
 function isResigned(e){return empStatus(e)==='resigned';}
+function isStandby(e){return empStatus(e)==='standby';}
 function isActive(e){return !isResigned(e);}
 // 解析 YYYY/MM/DD 或 YYYY-MM-DD → Date（无效返回 null）
 function parseYMD(s){if(!s)return null;const m=String(s).trim().match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);if(!m)return null;const d=new Date(+m[1],+m[2]-1,+m[3]);return isNaN(d.getTime())?null:d;}
 function empResignDate(e){return isResigned(e)?parseYMD(e.resignDate):null;}
 // allEmps：按角色可见的全部员工（含离职）；visibleEmps：仅在职（所有绩效/考勤统计均不含离职）
-window.allEmps=allEmps;window.isResigned=isResigned;window.isActive=isActive;window.parseYMD=parseYMD;
+window.allEmps=allEmps;window.isResigned=isResigned;window.isStandby=isStandby;window.isActive=isActive;window.parseYMD=parseYMD;
 // 国籍 / 岗位类型 辅助：未设置国籍默认按「墨西哥」处理
 function empNat(e){return (e&&e.nationality)?e.nationality:'墨西哥';}
 window.empNat=empNat;
 function empPosTypeName(e){const p=positions.find(p=>p.name===(e&&e.position));return p?(p.posType||''):'';}
 function isSkillPos(e){return empPosTypeName(e).includes('技能职');}
 // 墨方考勤：仅国籍为墨西哥的员工（在职）
-function mxEmps(){return visibleEmps().filter(e=>empNat(e)==='墨西哥');}
+function mxEmps(){return visibleEmps().filter(e=>empNat(e)==='墨西哥'&&!isStandby(e));}
 // 中方：仅国籍为中国的员工（在职）
 function cnEmps(){return visibleEmps().filter(e=>empNat(e)==='中国');}
 // 逐日明细月度均分：直接读 dailyScores，任意年月均可用
@@ -2089,7 +2090,7 @@ function getDailyMonthAvg(empId,y,m){
   return count>0?Math.round(total/count*10)/10:null;
 }
 // 周维度花名册：在职员工正常显示；离职员工仅在其离职日所在周及之前出现（离职日之后的单元格显示 baja），从而保留历史考勤
-function mxEmpsForWeek(weekStart,weekEnd){return allEmps().filter(e=>{if(empNat(e)!=='墨西哥')return false;if(isActive(e))return true;const rd=parseYMD(e.resignDate),jd=parseYMD(e.joinDate);if(rd&&rd<weekStart)return false;if(jd&&jd>weekEnd)return false;return true;});}
+function mxEmpsForWeek(weekStart,weekEnd){return allEmps().filter(e=>{if(empNat(e)!=='墨西哥')return false;if(isStandby(e))return false;if(isActive(e))return true;const rd=parseYMD(e.resignDate),jd=parseYMD(e.joinDate);if(rd&&rd<weekStart)return false;if(jd&&jd>weekEnd)return false;return true;});}
 // MONTH NAV
 function updateMonthLabels(){
   const lbl=mLabel(curY,curM);
@@ -3039,9 +3040,9 @@ function filterEmp(){
   const s=($('emp-s').value||'').toLowerCase(),dept=$('emp-df').value,status=$('emp-sf').value;
   const natF=($('emp-nf')&&$('emp-nf').value)||'';
   const empf=($('emp-empf')&&$('emp-empf').value!==undefined)?$('emp-empf').value:'active';
-  let list=allEmps().filter(e=>{if(s&&!e.name.toLowerCase().includes(s)&&!e.id.toLowerCase().includes(s))return false;if(dept&&e.dept!==dept)return false;if(natF&&empNat(e)!==natF)return false;if(empf==='active'&&isResigned(e))return false;if(empf==='resigned'&&!isResigned(e))return false;const ms=getMS(e.id);if(status==='done'&&!ms.done)return false;if(status==='pending'&&ms.done)return false;return true;});
+  let list=allEmps().filter(e=>{if(s&&!e.name.toLowerCase().includes(s)&&!e.id.toLowerCase().includes(s))return false;if(dept&&e.dept!==dept)return false;if(natF&&empNat(e)!==natF)return false;if(empf==='active'&&(isResigned(e)||isStandby(e)))return false;if(empf==='standby'&&!isStandby(e))return false;if(empf==='resigned'&&!isResigned(e))return false;const ms=getMS(e.id);if(status==='done'&&!ms.done)return false;if(status==='pending'&&ms.done)return false;return true;});
   const isAdmin=currentUser&&currentUser.role==='admin';
-  $('emp-table').innerHTML=list.map(e=>{const ms=getMS(e.id);const salGrade=getSalaryGrade(e);const resigned=isResigned(e);const _rtCat=resignCategory(e.resignType);const _rtBadge=resigned&&e.resignType?`<span class="badge" style="margin-left:4px;font-size:9px;background:${_rtCat==='被动离职'?'#fdecea':'#fff4e0'};color:${_rtCat==='被动离职'?'#c0392b':'#b9770e'}" title="${_rtCat}">${e.resignType}</span>`:'';const statCell=resigned?`<span class="badge badge-gray" title="\u79bb\u804c\u65e5\uff1a${e.resignDate||'-'}">\u79bb\u804c \u00b7 ${e.resignDate||''}</span>${_rtBadge}`:'<span class="badge badge-success">\u5728\u804c</span>';const actBtns=isAdmin?`<button class="btn btn-sm" onclick="openEditEmp('${e.id}')" title="\u7f16\u8f91\u4fe1\u606f"><i class="ti ti-user-edit"></i></button>${resigned?`<button class="btn btn-sm" onclick="reinstateEmp('${e.id}')" title="\u6062\u590d\u5728\u804c"><i class="ti ti-user-check"></i></button>`:`<button class="btn btn-sm" onclick="resignEmp('${e.id}')" title="\u6807\u8bb0\u79bb\u804c"><i class="ti ti-user-x"></i></button>`}<button class="btn-del btn btn-sm" onclick="delEmp('${e.id}')" title="\u5220\u9664\u5458\u5de5"><i class="ti ti-trash"></i></button>`:'';return`<tr${resigned?' style="opacity:.62"':''}><td style="font-family:monospace;font-size:12px">${e.id}</td><td style="font-family:monospace;font-size:12px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong></td><td>${e.dept}</td><td>${e.section||'-'}</td><td>${e.team||'-'}</td><td>${e.position||'-'}</td><td style="color:var(--color-text-secondary)">${e.joinDate||'-'}</td><td>${empNat(e)==='\u4e2d\u56fd'?'<span class="badge badge-info">\u4e2d\u56fd</span>':'<span class="badge badge-gray">\u58a8\u897f\u54e5</span>'}</td><td>${statCell}</td><td><span style="font-family:monospace;font-weight:600;background:var(--color-background-info);color:var(--color-text-info);padding:2px 8px;border-radius:4px">${salGrade}</span></td><td><div style="display:flex;gap:4px">${actBtns}</div></td></tr>`;}).join('');
+  $('emp-table').innerHTML=list.map(e=>{const ms=getMS(e.id);const salGrade=getSalaryGrade(e);const resigned=isResigned(e);const _rtCat=resignCategory(e.resignType);const _rtBadge=resigned&&e.resignType?`<span class="badge" style="margin-left:4px;font-size:9px;background:${_rtCat==='被动离职'?'#fdecea':'#fff4e0'};color:${_rtCat==='被动离职'?'#c0392b':'#b9770e'}" title="${_rtCat}">${e.resignType}</span>`:'';const standby=isStandby(e);const statCell=resigned?`<span class="badge badge-gray" title="\u79bb\u804c\u65e5\uff1a${e.resignDate||'-'}">\u79bb\u804c \u00b7 ${e.resignDate||''}</span>${_rtBadge}`:standby?'<span class="badge" style="background:#fef3c7;color:#92400e">\u5f85\u5c97</span>`:'<span class="badge badge-success">\u5728\u804c</span>';const actBtns=isAdmin?`<button class="btn btn-sm" onclick="openEditEmp('${e.id}')" title="编辑信息"><i class="ti ti-user-edit"></i></button>${resigned||standby?`<button class="btn btn-sm" onclick="reinstateEmp('${e.id}')" title="恢复在岗"><i class="ti ti-user-check"></i></button>`:`<button class="btn btn-sm" onclick="resignEmp('${e.id}')" title="标记离岗"><i class="ti ti-user-x"></i></button>`}<button class="btn-del btn btn-sm" onclick="delEmp('${e.id}')" title="删除员工"><i class="ti ti-trash"></i></button>`:'';'return`<tr${resigned?' style="opacity:.62"':standby?' style="opacity:.8;background:#fffbeb"':'')}><td style="font-family:monospace;font-size:12px">${e.id}</td><td style="font-family:monospace;font-size:12px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong></td><td>${e.dept}</td><td>${e.section||'-'}</td><td>${e.team||'-'}</td><td>${e.position||'-'}</td><td style="color:var(--color-text-secondary)">${e.joinDate||'-'}</td><td>${empNat(e)==='\u4e2d\u56fd'?'<span class="badge badge-info">\u4e2d\u56fd</span>':'<span class="badge badge-gray">\u58a8\u897f\u54e5</span>'}</td><td>${statCell}</td><td><span style="font-family:monospace;font-weight:600;background:var(--color-background-info);color:var(--color-text-info);padding:2px 8px;border-radius:4px">${salGrade}</span></td><td><div style="display:flex;gap:4px">${actBtns}</div></td></tr>`;}).join('');
 }
 function updateNeSecOptions(keepSec){const d=$('ne-dept').value;const cur=keepSec!==undefined?keepSec:$('ne-sec').value;const rel=sections.filter(s=>s.deptName===d);let opts='<option value="">— 不限定科室 —</option>';if(d)opts+=`<option value="${d}">${d}（本部门直属）</option>`;opts+=rel.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');const known=new Set(['',d].concat(rel.map(s=>s.name)));if(cur&&!known.has(cur))opts+=`<option value="${cur}">${cur}</option>`;$('ne-sec').innerHTML=opts;if(cur)$('ne-sec').value=cur;}
 function updateNePosOptions(){const d=$('ne-dept').value,sec=$('ne-sec').value;let rel=positions.filter(p=>!d||p.deptName===d);if(sec){const realSec=new Set(sections.map(s=>s.name));rel=rel.filter(p=>{const ps=p.sectionName;if(!ps||ps===p.deptName||!realSec.has(ps))return true;return ps===sec;});}$('ne-pos').innerHTML='<option value="">— 请选择岗位 —</option>'+rel.map(p=>`<option value="${p.name}">${p.code} · ${p.name}</option>`).join('');}
@@ -3061,6 +3062,12 @@ function _pad2s(n){return String(n).padStart(2,'0');}
 function inputFromYMD(s){const d=parseYMD(s);return d?`${d.getFullYear()}-${_pad2s(d.getMonth()+1)}-${_pad2s(d.getDate())}`:'';}
 function toYMD(v){const d=parseYMD(v);return d?`${d.getFullYear()}/${_pad2s(d.getMonth()+1)}/${_pad2s(d.getDate())}`:'';}
 function applyEmpStatus(emp,status,resignVal,resignType){
+  if(status==='standby'){
+    emp.status='standby';
+    delete emp.resignDate;
+    delete emp.resignType;
+    return;
+  }
   if(status==='resigned'){
     emp.status='resigned';
     // 兼容 Date 对象（XLSX cellDates:true）、YYYY/MM/DD、YYYY-MM-DD 字符串

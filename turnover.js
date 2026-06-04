@@ -24,7 +24,8 @@
     let list;
     try{list=(typeof allEmps==='function')?allEmps():(window.employees||[]);}catch(_){list=window.employees||[];}
     const nat=e=>(e&&e.nationality)?e.nationality:'墨西哥';
-    return list.filter(e=>nat(e)==='墨西哥');
+    const isStby=e=>e&&e.status==='standby';
+    return list.filter(e=>nat(e)==='墨西哥'&&!isStby(e));
   }
   function resignedOf(e){return e&&e.status==='resigned';}
   // 有效科室：若 section 为空、或等于部门名（"本部门直属"），均视为无科室
