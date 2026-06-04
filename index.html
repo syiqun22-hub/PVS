@@ -22,6 +22,7 @@
 </template>
 
 <template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 56"><rect width="80" height="56" fill="#162145"/><text x="40" y="36" font-size="22" text-anchor="middle" fill="#fff">📊</text></svg></template>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>/*!
@@ -1686,69 +1687,196 @@ function calcTotal(scoresObj,emp){const kpis=emp?getEmpKPIs(emp):kpiTemplates;le
 // ============================================================
 const SUPABASE_URL = 'https://qykocssjgdbscdhlbepm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5a29jc3NqZ2Ric2NkaGxiZXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTQ2MzMsImV4cCI6MjA5NTQ5MDYzM30.XI-YvK0HB3ra5IQsR-8LT-sKw_3XjU0BTODpHW9uqWI';
-const TABLE_NAME = 'pms_store';
 // ============================================================
+/*
+  SQL SCHEMA — run in Supabase SQL editor to create the 5 tables:
 
-// Supabase REST API helper
-const SB = {
-  headers: {
-    'Content-Type': 'application/json',
-    'apikey': SUPABASE_ANON_KEY,
-    'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
-    'Prefer': 'return=representation'
-  },
-  async get(key) {
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/${TABLE_NAME}?key=eq.${encodeURIComponent(key)}&select=value`,
-        { headers: this.headers }
-      );
-      if (!res.ok) return null;
-      const rows = await res.json();
-      return rows.length ? { value: rows[0].value } : null;
-    } catch(e) { console.error('SB.get error', e); return null; }
-  },
-  async set(key, value) {
-    // 仅禁止纯本地文件协议写入（防止误操作），其余环境均可写入 Supabase
-    if (window.location.protocol === 'file:') {
-      console.warn('[SB] file: 协议，跳过写入');
-      return null;
-    }
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/${TABLE_NAME}`,
-        {
-          method: 'POST',
-          headers: { ...this.headers, 'Prefer': 'resolution=merge-duplicates,return=representation' },
-          body: JSON.stringify({ key, value })
-        }
-      );
-      if (!res.ok) { console.error('SB.set error', await res.text()); return null; }
-      return { key, value };
-    } catch(e) { console.error('SB.set error', e); return null; }
+  create table if not exists pvs_config (
+    id text primary key,
+    value jsonb
+  );
+
+  create table if not exists pvs_daily (
+    emp_id text,
+    date text,
+    data jsonb,
+    updated_at timestamptz default now(),
+    primary key (emp_id, date)
+  );
+
+  create table if not exists pvs_attendance (
+    week_key text,
+    emp_id text,
+    date text,
+    status text,
+    primary key (week_key, emp_id, date)
+  );
+
+  create table if not exists pvs_salary_reviews (
+    emp_id text primary key,
+    data jsonb,
+    updated_at timestamptz default now()
+  );
+
+  create table if not exists pvs_overtime (
+    emp_id text,
+    period text,
+    data jsonb,
+    updated_at timestamptz default now(),
+    primary key (emp_id, period)
+  );
+
+  -- Enable Realtime on all tables (run once):
+  alter publication supabase_realtime add table pvs_config;
+  alter publication supabase_realtime add table pvs_daily;
+  alter publication supabase_realtime add table pvs_attendance;
+  alter publication supabase_realtime add table pvs_salary_reviews;
+  alter publication supabase_realtime add table pvs_overtime;
+*/
+
+// Supabase JS SDK client (loaded via CDN in <head>)
+const _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Guard: skip writes on file: protocol
+function _sbWriteAllowed() {
+  if (window.location.protocol === 'file:') {
+    console.warn('[SB] file: 协议，跳过写入');
+    return false;
   }
-};
-
-async function sg(k) {
-  try { const r = await SB.get(k); return r ? JSON.parse(r.value) : null; }
-  catch { return null; }
+  return true;
 }
 
+// ---- Granular save helpers ----
+
+async function saveConfig() {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const configItems = [
+      { id: 'employees', value: employees },
+      { id: 'departments', value: departments },
+      { id: 'sections', value: sections },
+      { id: 'kpiTemplates', value: kpiTemplates },
+      { id: 'positions', value: positions },
+      { id: 'accounts', value: accounts },
+      { id: 'expectedDays', value: expectedDays },
+      { id: 'monthlyScores', value: monthlyScores },
+    ];
+    const { error } = await _sbClient.from('pvs_config').upsert(configItems, { onConflict: 'id' });
+    if (error) { console.error('saveConfig error', error); return false; }
+    return true;
+  } catch(e) { console.error('saveConfig error', e); return false; }
+}
+
+async function saveDaily(empId, date) {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const data = (dailyScores[empId] && dailyScores[empId][date]) || null;
+    const { error } = await _sbClient.from('pvs_daily').upsert(
+      { emp_id: empId, date, data, updated_at: new Date().toISOString() },
+      { onConflict: 'emp_id,date' }
+    );
+    if (error) { console.error('saveDaily error', error); return false; }
+    return true;
+  } catch(e) { console.error('saveDaily error', e); return false; }
+}
+
+async function saveAttendance(weekKey, empId, date, status) {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const { error } = await _sbClient.from('pvs_attendance').upsert(
+      { week_key: weekKey, emp_id: empId, date, status },
+      { onConflict: 'week_key,emp_id,date' }
+    );
+    if (error) { console.error('saveAttendance error', error); return false; }
+    return true;
+  } catch(e) { console.error('saveAttendance error', e); return false; }
+}
+
+async function saveSalaryReview(empId) {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const data = salaryReviews[empId] || null;
+    const { error } = await _sbClient.from('pvs_salary_reviews').upsert(
+      { emp_id: empId, data, updated_at: new Date().toISOString() },
+      { onConflict: 'emp_id' }
+    );
+    if (error) { console.error('saveSalaryReview error', error); return false; }
+    return true;
+  } catch(e) { console.error('saveSalaryReview error', e); return false; }
+}
+
+async function saveOvertime(empId, period) {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const data = (overtimeData[period] && overtimeData[period][empId]) || null;
+    const { error } = await _sbClient.from('pvs_overtime').upsert(
+      { emp_id: empId, period, data, updated_at: new Date().toISOString() },
+      { onConflict: 'emp_id,period' }
+    );
+    if (error) { console.error('saveOvertime error', error); return false; }
+    return true;
+  } catch(e) { console.error('saveOvertime error', e); return false; }
+}
+
+// ---- Batch save (backward compat) ----
 async function saveAll() {
   try {
-    const snapshot = {
-      employees, departments, sections, kpiTemplates, positions, accounts,
-      monthlyScores, attendanceData, salaryReviews, overtimeData, dailyScores, expectedDays,
-      _savedAt: Date.now()
-    };
-    const result = await SB.set('snapshot', JSON.stringify(snapshot));
-    if(result === null){
-      if(window.location.protocol !== 'file:'){
-        console.error('saveAll: SB.set 返回 null，写入失败');
-        toast('⚠️ 保存失败，请检查网络连接');
-        return false;
+    if (!_sbWriteAllowed()) return true;
+
+    // Save config (employees, departments, sections, kpiTemplates, positions,
+    //              accounts, expectedDays, monthlyScores)
+    const cfgOk = await saveConfig();
+    if (!cfgOk) { toast('⚠️ 保存失败，请检查网络连接'); return false; }
+
+    // Save all dailyScores
+    const dailyUpserts = [];
+    for (const empId of Object.keys(dailyScores)) {
+      for (const date of Object.keys(dailyScores[empId])) {
+        dailyUpserts.push({ emp_id: empId, date, data: dailyScores[empId][date], updated_at: new Date().toISOString() });
       }
     }
+    if (dailyUpserts.length) {
+      const { error } = await _sbClient.from('pvs_daily').upsert(dailyUpserts, { onConflict: 'emp_id,date' });
+      if (error) { console.error('saveAll dailyScores error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+    }
+
+    // Save all attendanceData
+    const attUpserts = [];
+    for (const weekKey of Object.keys(attendanceData)) {
+      const wk = attendanceData[weekKey];
+      for (const empId of Object.keys(wk)) {
+        const row = wk[empId];
+        for (const date of Object.keys(row)) {
+          attUpserts.push({ week_key: weekKey, emp_id: empId, date, status: row[date] });
+        }
+      }
+    }
+    if (attUpserts.length) {
+      const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts, { onConflict: 'week_key,emp_id,date' });
+      if (error) { console.error('saveAll attendanceData error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+    }
+
+    // Save all salaryReviews
+    const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
+    if (srUpserts.length) {
+      const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
+      if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+    }
+
+    // Save all overtimeData (keyed: overtimeData[period][empId])
+    const otUpserts = [];
+    for (const period of Object.keys(overtimeData)) {
+      const pk = overtimeData[period];
+      for (const empId of Object.keys(pk)) {
+        otUpserts.push({ emp_id: empId, period, data: pk[empId], updated_at: new Date().toISOString() });
+      }
+    }
+    if (otUpserts.length) {
+      const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
+      if (error) { console.error('saveAll overtimeData error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+    }
+
+    _lastSavedAt = Date.now();
     return true;
   } catch(e) { console.error('saveAll error', e); toast('⚠️ 保存失败：'+e.message); return false; }
 }
@@ -1767,16 +1895,52 @@ async function loadAll(){
       document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa"><div style="background:#162145;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)"><div style="font-size:32px;margin-bottom:12px">⚙️</div><div style="font-size:18px;font-weight:600;margin-bottom:10px">请先配置 Supabase</div><div style="font-size:13px;color:#666;line-height:1.7">打开 index.html 文件，找到顶部的<br><code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_URL</code> 和 <code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_ANON_KEY</code><br>填入你的 Supabase 项目信息后重新上传。</div></div></div>`;
       return;
     } else {
-      // eR 等变量必须在 else 块外部可访问（供后面 if(!eR||_idFixed) 使用）
-      // 所以用 var 声明，让它提升到函数作用域
+      // Load config table
       var eR,dR,secR,kR,pR,aR,sR,attR,srR,otR,edR,dsdR;
-      const snap = await sg('snapshot');
-      if(snap){
-        eR=snap.employees;dR=snap.departments;secR=snap.sections;kR=snap.kpiTemplates;
-        pR=snap.positions;aR=snap.accounts;sR=snap.monthlyScores;attR=snap.attendanceData;
-        srR=snap.salaryReviews;otR=snap.overtimeData;edR=snap.expectedDays;dsdR=snap.dailyScores;
-        _lastSavedAt=snap._savedAt||0;
+      const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
+      if (cfgRows && cfgRows.length) {
+        const cfg = {};
+        cfgRows.forEach(r => { cfg[r.id] = r.value; });
+        eR=cfg.employees;dR=cfg.departments;secR=cfg.sections;kR=cfg.kpiTemplates;
+        pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;
       }
+
+      // Load pvs_daily
+      const { data: dailyRows } = await _sbClient.from('pvs_daily').select('emp_id,date,data');
+      dsdR = {};
+      if (dailyRows) {
+        dailyRows.forEach(r => {
+          if (!dsdR[r.emp_id]) dsdR[r.emp_id] = {};
+          dsdR[r.emp_id][r.date] = r.data;
+        });
+      }
+
+      // Load pvs_attendance
+      const { data: attRows } = await _sbClient.from('pvs_attendance').select('week_key,emp_id,date,status');
+      attR = {};
+      if (attRows) {
+        attRows.forEach(r => {
+          if (!attR[r.week_key]) attR[r.week_key] = {};
+          if (!attR[r.week_key][r.emp_id]) attR[r.week_key][r.emp_id] = {};
+          attR[r.week_key][r.emp_id][r.date] = r.status;
+        });
+      }
+
+      // Load pvs_salary_reviews
+      const { data: srRows } = await _sbClient.from('pvs_salary_reviews').select('emp_id,data');
+      srR = {};
+      if (srRows) { srRows.forEach(r => { srR[r.emp_id] = r.data; }); }
+
+      // Load pvs_overtime
+      const { data: otRows } = await _sbClient.from('pvs_overtime').select('emp_id,period,data');
+      otR = {};
+      if (otRows) {
+        otRows.forEach(r => {
+          if (!otR[r.period]) otR[r.period] = {};
+          otR[r.period][r.emp_id] = r.data;
+        });
+      }
+
       employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};
     }
     if(!positions||positions.length===0){positions=defPositions();}
@@ -5160,37 +5324,104 @@ function getEmpKPIs(emp){
   if(!p||!p.kpiRefs)return[];
   return p.kpiRefs.map(ref=>{const k=getKpiById(ref.kpiId);return k?{...k,weight:ref.weight||0}:null;}).filter(Boolean);
 }
+// Helper: refresh active page after remote change
+function _reloadActivePage() {
+  const activePage = document.querySelector('.page.active');
+  if (activePage) {
+    const pid = activePage.id.replace('page-', '');
+    const navEl = document.querySelector('.nav-item.active');
+    if (pid && navEl) showPage(pid, navEl);
+  }
+  toast('🔄 数据已同步（其他用户有新操作）');
+}
+
 // INIT
 loadAll().then(()=>{
   applyI18n();
-  // 每 30 秒轮询一次，检测其他用户的变更
-  setInterval(async () => {
-    if (!currentUser) return;
-    try {
-      const snap = await sg('snapshot');
-      if (snap && snap._savedAt && snap._savedAt > _lastSavedAt) {
-        _lastSavedAt = snap._savedAt;
-        employees=snap.employees||employees;
-        departments=snap.departments||departments;
-        sections=snap.sections||sections;
-        kpiTemplates=snap.kpiTemplates||kpiTemplates;
-        positions=snap.positions||positions;
-        monthlyScores=snap.monthlyScores||monthlyScores;
-        attendanceData=snap.attendanceData||attendanceData;
-        salaryReviews=snap.salaryReviews||salaryReviews;
-        overtimeData=snap.overtimeData||overtimeData;
-        dailyScores=snap.dailyScores||dailyScores;
-        expectedDays=snap.expectedDays||expectedDays;
-        const activePage = document.querySelector('.page.active');
-        if (activePage) {
-          const pid = activePage.id.replace('page-', '');
-          const navEl = document.querySelector('.nav-item.active');
-          if (pid && navEl) showPage(pid, navEl);
-        }
-        toast('🔄 数据已同步（其他用户有新操作）');
-      }
-    } catch(e) {}
-  }, 30000);
+  // Realtime subscriptions — replace 30s polling
+  if (window.location.protocol !== 'file:') {
+    // pvs_config: reload config items
+    _sbClient.channel('pvs_config_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_config' }, async () => {
+        if (!currentUser) return;
+        try {
+          const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
+          if (cfgRows && cfgRows.length) {
+            const cfg = {};
+            cfgRows.forEach(r => { cfg[r.id] = r.value; });
+            if (cfg.employees) employees = cfg.employees;
+            if (cfg.departments) departments = cfg.departments;
+            if (cfg.sections) sections = cfg.sections;
+            if (cfg.kpiTemplates) kpiTemplates = cfg.kpiTemplates;
+            if (cfg.positions) positions = cfg.positions;
+            if (cfg.monthlyScores) monthlyScores = cfg.monthlyScores;
+            if (cfg.expectedDays) expectedDays = cfg.expectedDays;
+          }
+          _reloadActivePage();
+        } catch(e) {}
+      })
+      .subscribe();
+
+    // pvs_daily: update dailyScores
+    _sbClient.channel('pvs_daily_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_daily' }, payload => {
+        if (!currentUser) return;
+        try {
+          const r = payload.new || {};
+          if (r.emp_id && r.date) {
+            if (!dailyScores[r.emp_id]) dailyScores[r.emp_id] = {};
+            dailyScores[r.emp_id][r.date] = r.data;
+            _reloadActivePage();
+          }
+        } catch(e) {}
+      })
+      .subscribe();
+
+    // pvs_attendance: update attendanceData
+    _sbClient.channel('pvs_attendance_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_attendance' }, payload => {
+        if (!currentUser) return;
+        try {
+          const r = payload.new || {};
+          if (r.week_key && r.emp_id && r.date) {
+            if (!attendanceData[r.week_key]) attendanceData[r.week_key] = {};
+            if (!attendanceData[r.week_key][r.emp_id]) attendanceData[r.week_key][r.emp_id] = {};
+            attendanceData[r.week_key][r.emp_id][r.date] = r.status;
+            _reloadActivePage();
+          }
+        } catch(e) {}
+      })
+      .subscribe();
+
+    // pvs_salary_reviews: update salaryReviews
+    _sbClient.channel('pvs_salary_reviews_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_salary_reviews' }, payload => {
+        if (!currentUser) return;
+        try {
+          const r = payload.new || {};
+          if (r.emp_id) {
+            salaryReviews[r.emp_id] = r.data;
+            _reloadActivePage();
+          }
+        } catch(e) {}
+      })
+      .subscribe();
+
+    // pvs_overtime: update overtimeData
+    _sbClient.channel('pvs_overtime_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_overtime' }, payload => {
+        if (!currentUser) return;
+        try {
+          const r = payload.new || {};
+          if (r.emp_id && r.period) {
+            if (!overtimeData[r.period]) overtimeData[r.period] = {};
+            overtimeData[r.period][r.emp_id] = r.data;
+            _reloadActivePage();
+          }
+        } catch(e) {}
+      })
+      .subscribe();
+  }
 });
 </script>
 <!-- ===== Auto ZH→ES translation layer ===== -->
