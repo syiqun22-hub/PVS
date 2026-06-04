@@ -142,7 +142,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .tab.active{color:var(--color-text-primary);border-bottom-color:var(--color-text-primary);font-weight:500}
 .s-FI{background:#dcfce7;color:#166534}.s-A{background:#fee2e2;color:#991b1b}.s-D{background:#fef9c3;color:#854d0e}
 .s-F{background:#2a1f00;color:#fde047}.s-PSG{background:#2e0d15;color:#fda4af}.s-PCG{background:#0a2a15;color:#86efac}
-.s-VAC{background:#0f1e40;color:#93c5fd}.s-INC{background:#2e1500;color:#fdba74}.s-FJ{background:#1e0a40;color:#d8b4fe}
+.s-VAC{background:#0f1e40;color:#93c5fd}.s-INC{background:#2e1500;color:#fdba74}.s-FJ{background:#1e0a40;color:#d8b4fe}.s-PT{background:#e0f2fe;color:#075985}
 .s-empty{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
 .s-baja{background:repeating-linear-gradient(45deg,#1a2540,#1a2540 4px,#253456 4px,#253456 8px);color:#5a7299;cursor:not-allowed;font-style:italic;text-decoration:line-through;text-decoration-thickness:.5px}
 .att-tbl{width:100%;border-collapse:collapse;font-size:12px}
@@ -155,6 +155,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .ot-mini{width:46px;padding:2px 4px;font-size:10px;text-align:center;border:0.5px solid var(--color-border-tertiary);border-radius:3px;color:var(--color-text-secondary);background:transparent;margin-top:3px;display:block;margin-left:auto;margin-right:auto;font-family:var(--font-mono)}
 .ot-mini:focus{outline:none;border-color:var(--color-border-primary);color:var(--color-text-primary)}
 .ot-mini::placeholder{color:var(--color-text-tertiary);font-size:9px}
+.rt-mini{width:46px;padding:2px 4px;font-size:10px;text-align:center;border:0.5px solid #fcd34d;border-radius:3px;color:#92400e;background:transparent;margin-top:2px;display:block;margin-left:auto;margin-right:auto;font-family:var(--font-mono)}
+.rt-mini:focus{outline:none;border-color:#f59e0b;color:#78350f}
+.rt-mini::placeholder{color:#d97706;font-size:9px}
 .exp-days{width:54px;padding:4px 6px;font-size:12px;text-align:center;border:0.5px solid var(--color-border-secondary);border-radius:4px;font-weight:600;font-family:var(--font-mono)}
 .exp-days:focus{outline:none;border-color:var(--color-border-primary)}
 .stat-mini{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:14px 16px}
@@ -801,7 +804,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <span style="font-size:11px;color:var(--color-text-secondary);margin-right:3px">状态：</span>
       <span class="badge s-FI">FI 旷工</span><span class="badge s-A">A 出勤</span><span class="badge s-D">D 休息</span>
       <span class="badge s-F">F 法定节假日</span><span class="badge s-PSG">PSG 无薪事假</span><span class="badge s-PCG">PCG 带薪事假</span>
-      <span class="badge s-VAC">VAC 年假</span><span class="badge s-INC">INC 病假</span><span class="badge s-FJ">FJ 合理缺勤</span>
+      <span class="badge s-VAC">VAC 年假</span><span class="badge s-INC">INC 病假</span><span class="badge s-FJ">FJ 合理缺勤</span><span class="badge s-PT">PT 停产</span>
       <span style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">校验规则：每人每周（周一~周日）须至少 2 天「D 休息」</span>
     </div>
     <div id="att-d-warn" style="display:none;margin-bottom:12px;padding:9px 14px;border-radius:8px;background:#fdecea;border:1px solid #f5b7b1;color:#c0392b;font-size:12.5px;font-weight:500"></div>
@@ -823,7 +826,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <table class="sum-tbl"><thead><tr>
         <th style="text-align:left;padding-left:8px">工号</th><th style="text-align:left">工资编码</th><th style="text-align:left">姓名</th><th style="text-align:left">部门</th>
         <th class="s-FI">FI</th><th class="s-A">A</th><th class="s-D">D</th><th class="s-F">F</th>
-        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th>合计</th>
+        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th>合计</th>
       </tr></thead><tbody id="ws-body"></tbody></table>
     </div>
   </div>
@@ -852,7 +855,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <table class="sum-tbl"><thead><tr>
       <th>工号</th><th>工资编码</th><th>姓名</th><th>部门</th>
       <th class="s-FI">FI</th><th class="s-A">A</th><th class="s-D">D</th><th class="s-F">F</th>
-      <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th>合计</th>
+      <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th>合计</th>
     </tr></thead><tbody id="sum-body"></tbody></table>
   </div>
 </div>
@@ -1521,16 +1524,16 @@ function applyI18n(){
   updateMonthLabels();
 }
 // STATE
-let employees=[],departments=[],sections=[],kpiTemplates=[],positions=[],accounts=[],monthlyScores={},attendanceData={},salaryReviews={},overtimeData={},dailyScores={},expectedDays={};
+let employees=[],departments=[],sections=[],kpiTemplates=[],positions=[],accounts=[],monthlyScores={},attendanceData={},salaryReviews={},overtimeData={},dailyScores={},expectedDays={},lateData={};
 let currentUser=null,currentEvalEmp=null,editingKPIId=null,editingPosId=null,editingKPIPosId=null,editingSectionId=null,cpwId=null,importRows=[],selExpNum=1;
 const _NOW=new Date(),_NY=_NOW.getFullYear(),_NM=_NOW.getMonth()+1;
 let curY=_NY,curM=_NM,qY=_NY,qM=_NM,attHistY=_NY,attHistM=_NM,sumY=_NY,sumM=_NM,deptY=_NY,deptM=_NM;
 let weekOff=0,sortField=null,sortAsc=true;
 let kd='achieve',km='rate',snEmpId=null,snNode=null,actaEmpId=null,opEmpId=null,opType=null;
 let charts={};
-const STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ'];
-const STATUS_LABELS={FI:'旷工',A:'出勤',D:'休息',F:'法定节假日',PSG:'无薪事假',PCG:'带薪事假',VAC:'年假',INC:'病假',FJ:'合理缺勤'};
-const STATUS_CLS={FI:'s-FI',A:'s-A',D:'s-D',F:'s-F',PSG:'s-PSG',PCG:'s-PCG',VAC:'s-VAC',INC:'s-INC',FJ:'s-FJ'};
+const STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT'];
+const STATUS_LABELS={FI:'旷工',A:'出勤',D:'休息',F:'法定节假日',PSG:'无薪事假',PCG:'带薪事假',VAC:'年假',INC:'病假',FJ:'合理缺勤',PT:'停产'};
+const STATUS_CLS={FI:'s-FI',A:'s-A',D:'s-D',F:'s-F',PSG:'s-PSG',PCG:'s-PCG',VAC:'s-VAC',INC:'s-INC',FJ:'s-FJ',PT:'s-PT'};
 const SCORE_NODES=['3个月','6个月','12个月','18个月','30个月'];
 
 // ── 薪资周期定义 ──────────────────────────────────────────
@@ -1770,6 +1773,7 @@ async function saveConfig() {
       { id: 'positions', value: positions },
       { id: 'accounts', value: accounts },
       { id: 'expectedDays', value: expectedDays },
+      { id: 'lateData', value: lateData },
       { id: 'monthlyScores', value: monthlyScores },
     ];
     const { error } = await _sbClient.from('pvs_config').upsert(items, { onConflict: 'id' });
@@ -1896,6 +1900,33 @@ async function saveAndToast(m) {
 }
 let _lastSavedAt = 0;
 
+let _suppressRealtime = false, _suppressTimer = null;
+function _suppressRealtimeFor(ms) {
+  _suppressRealtime = true;
+  clearTimeout(_suppressTimer);
+  _suppressTimer = setTimeout(() => { _suppressRealtime = false; }, ms);
+}
+
+async function saveAttendanceWeekOnly(weekKey) {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const wk = attendanceData[weekKey] || {};
+    const attUpserts = [];
+    for (const empId of Object.keys(wk)) {
+      const row = wk[empId];
+      for (const date of Object.keys(row)) {
+        attUpserts.push({ week_key: weekKey, emp_id: empId, date, status: row[date] });
+      }
+    }
+    if (attUpserts.length) {
+      const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts, { onConflict: 'week_key,emp_id,date' });
+      if (error) { console.error('saveAttWeekOnly error', error); return false; }
+    }
+    _lastSavedAt = Date.now();
+    return true;
+  } catch(e) { console.error('saveAttWeekOnly error', e); return false; }
+}
+
 async function loadAll(){
   showLoading('正在加载...');
   try{
@@ -1912,7 +1943,7 @@ async function loadAll(){
         const cfg = {};
         cfgRows.forEach(r => { cfg[r.id] = r.value; });
         eR=cfg.employees;dR=cfg.departments;secR=cfg.sections;kR=cfg.kpiTemplates;
-        pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;
+        pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;let ldR=cfg.lateData;
       }
 
       // 从 pvs_daily 加载逐日得分
@@ -1935,7 +1966,7 @@ async function loadAll(){
       otR = {};
       if (otRows) { otRows.forEach(r => { if(!otR[r.period])otR[r.period]={}; otR[r.period][r.emp_id]=r.data; }); }
 
-      employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};
+      employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};
     }
     if(!positions||positions.length===0){positions=defPositions();}
     if(!sections||sections.length===0){sections=defSections();}
@@ -1958,7 +1989,7 @@ async function loadAll(){
     if(dedupeIds(positions,'P'))_idFixed=true;
     if(dedupeIds(sections,'SEC'))_idFixed=true;
     if(!eR||_idFixed)await saveAll();
-  }catch(e){console.error(e);employees=defEmployees();departments=defDepts();sections=defSections();kpiTemplates=defKPIs();positions=defPositions();accounts=defAccounts();monthlyScores={};attendanceData={};salaryReviews={};overtimeData={};dailyScores={};expectedDays={};}
+  }catch(e){console.error(e);employees=defEmployees();departments=defDepts();sections=defSections();kpiTemplates=defKPIs();positions=defPositions();accounts=defAccounts();monthlyScores={};attendanceData={};salaryReviews={};overtimeData={};dailyScores={};expectedDays={};lateData={};}
   hideLoading();
 }
 // AUTH
@@ -3499,6 +3530,8 @@ function getExpDays(wk,empId){if(expectedDays[wk]&&expectedDays[wk][empId]!==und
 function setExpDays(wk,empId,v){if(!expectedDays[wk])expectedDays[wk]={};const n=Math.max(0,Math.min(7,parseFloat(v)||0));expectedDays[wk][empId]=n;}
 function getOt(wk,empId,ds){return(overtimeData[wk]&&overtimeData[wk][empId]&&overtimeData[wk][empId][ds])||0;}
 function setOt(empId,wk,ds,v){if(!overtimeData[wk])overtimeData[wk]={};if(!overtimeData[wk][empId])overtimeData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)overtimeData[wk][empId][ds]=n;else delete overtimeData[wk][empId][ds];}
+function getRt(wk,empId,ds){return(lateData[wk]&&lateData[wk][empId]&&lateData[wk][empId][ds])||0;}
+function setRt(empId,wk,ds,v){if(!lateData[wk])lateData[wk]={};if(!lateData[wk][empId])lateData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)lateData[wk][empId][ds]=n;else delete lateData[wk][empId][ds];}
 // 考勤填报：按所选部门填充「科室」下拉（未选部门时列出全部科室）
 function fillAttSecFilter(){
   const sel=$('att-sec-f');if(!sel)return;
@@ -3521,12 +3554,12 @@ function renderAttWeek(){
   const q=($('att-search')?$('att-search').value:'').trim().toLowerCase();
   if(q)emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.id||'').toLowerCase().includes(q)||String(e.salaryCode||'').toLowerCase().includes(q));
   const clr=$('att-search-clear');if(clr)clr.style.display=q?'inline-flex':'none';
-  $('att-week-head').innerHTML=`<th style="text-align:left;padding-left:8px;min-width:76px">工号</th><th style="text-align:left;min-width:90px">工资编码</th><th style="text-align:left;min-width:72px">姓名</th><th style="text-align:left;min-width:70px">部门</th><th style="min-width:76px;background:#fef3c7;color:#92400e">应出勤<br><span style="font-size:10px;font-weight:400">天数</span></th>`+dates.map((d,i)=>`<th style="min-width:68px">周${DAYS_CN[i]}<br><span style="font-size:10px;font-weight:400">${d.getMonth()+1}/${d.getDate()}</span></th>`).join('')+`<th style="min-width:50px">FI天</th><th style="min-width:60px;background:#dbeafe;color:#1e40af">加班<br><span style="font-size:10px;font-weight:400">总时长</span></th><th style="min-width:84px;background:#fef2f2;color:#b91c1c">休息核验<br><span style="font-size:10px;font-weight:400">D≥2</span></th>`;
+  $('att-week-head').innerHTML=`<th style="text-align:left;padding-left:8px;min-width:76px">工号</th><th style="text-align:left;min-width:90px">工资编码</th><th style="text-align:left;min-width:72px">姓名</th><th style="text-align:left;min-width:70px">部门</th><th style="min-width:76px;background:#fef3c7;color:#92400e">应出勤<br><span style="font-size:10px;font-weight:400">天数</span></th>`+dates.map((d,i)=>`<th style="min-width:68px">周${DAYS_CN[i]}<br><span style="font-size:10px;font-weight:400">${d.getMonth()+1}/${d.getDate()}</span></th>`).join('')+`<th style="min-width:50px">FI天</th><th style="min-width:60px;background:#dbeafe;color:#1e40af">加班<br><span style="font-size:10px;font-weight:400">总时长</span></th><th style="min-width:60px;background:#fef3c7;color:#92400e">迟到<br><span style="font-size:10px;font-weight:400">时长(h)</span></th><th style="min-width:84px;background:#fef2f2;color:#b91c1c">休息核验<br><span style="font-size:10px;font-weight:400">D≥2</span></th>`;
   let dFail=0;
   $('att-week-body').innerHTML=emps.map(e=>{
     if(!attendanceData[wk][e.id])attendanceData[wk][e.id]={};
     const fiCnt=dates.filter(d=>attendanceData[wk][e.id][dStr(d)]==='FI').length;
-    const totOt=dates.reduce((sum,d)=>sum+getOt(wk,e.id,dStr(d)),0);
+    const totOt=dates.reduce((sum,d)=>sum+getOt(wk,e.id,dStr(d)),0);const totRt=dates.reduce((sum,d)=>sum+getRt(wk,e.id,dStr(d)),0);
     const expD=getExpDays(wk,e.id);
     const rd=empResignDate(e);
     const cells=dates.map(d=>{
@@ -3546,7 +3579,7 @@ function renderAttWeek(){
         ?`<td style="color:#1f8a5b;font-weight:600;font-size:12px;text-align:center" title="本周休息(D) ${dCnt} 天，符合要求">✓ ${dCnt}天</td>`
         :`<td style="background:#fdecea;color:#c0392b;font-weight:700;font-size:12px;text-align:center" title="本周休息(D)仅 ${dCnt} 天，须至少 2 天">✕ ${dCnt}天</td>`);
     return`<tr${!dOk?' style="background:#fff5f5"':''}><td style="font-family:monospace;font-size:11px">${e.id}</td><td style="font-family:monospace;font-size:11px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong>${nameTag}</td><td style="font-size:12px;color:var(--color-text-secondary)">${e.dept}</td><td><input class="exp-days" type="number" min="0" max="7" step="1" value="${expD}" onchange="setExpDays('${wk}','${e.id}',this.value)"></td>${cells}<td style="font-weight:600;color:${fiCnt>0?'#dc3545':'var(--color-text-tertiary)'}">${fiCnt}</td><td style="font-weight:600;color:${totOt>0?'#1e40af':'var(--color-text-tertiary)'};font-family:monospace">${totOt||'—'}</td>${dCell}</tr>`;
-  }).join('')||`<tr><td colspan="${5+dates.length+3}" style="text-align:center;padding:26px;color:var(--color-text-tertiary)">无符合条件的员工</td></tr>`;
+  }).join('')||`<tr><td colspan="${5+dates.length+4}" style="text-align:center;padding:26px;color:var(--color-text-tertiary)">无符合条件的员工</td></tr>`;
   const _dwarn=$('att-d-warn');
   if(_dwarn){if(dFail>0){_dwarn.style.display='block';_dwarn.innerHTML=`⚠ 本周有 <strong>${dFail}</strong> 名员工休息（D）不足 2 天，请核对下方<strong style="color:#c0392b">红色</strong>行。`;}else{_dwarn.style.display='none';}}
 }
@@ -3563,7 +3596,7 @@ function closePicker(){$('status-picker').style.display='none';}
 function autoClose(e){if(!$('status-picker').contains(e.target))closePicker();}
 async function saveAtt(){await saveAndToast('✅ 考勤已保存');}
 // ATTENDANCE PASTE / IMPORT
-const VALID_STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ'];
+const VALID_STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT'];
 function openAttPaste(){$('att-paste-area').value='';$('att-paste-preview').textContent='';$('modal-att-paste').classList.add('open');setTimeout(()=>$('att-paste-area').focus(),50);}
 function parseAttRows(text){
   const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
@@ -3598,11 +3631,16 @@ async function applyAttPaste(){
   if(!text.trim()){toast('请粘贴数据');return;}
   const rows=parseAttRows(text);
   if(!rows.length){toast('未识别到有效数据行');return;}
+  const weekKey=wKey(weekOff);
   const{matched,unmatched}=applyAttRowsToWeek(rows);
   closeM('modal-att-paste');
   let msg=`已应用 ${matched} 名员工本周考勤`;
   if(unmatched.length)msg+=`，${unmatched.length} 个未匹配（${unmatched.slice(0,3).join(',')}${unmatched.length>3?'...':''}）`;
-  await saveAndToast(msg);renderAttWeek();
+  _suppressRealtimeFor(8000);
+  showLoading('正在保存考勤数据...');
+  const ok=await saveAttendanceWeekOnly(weekKey);
+  hideLoading();
+  if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请重试');}
 }
 function handleAttFile(e){
   const f=e.target.files[0];if(!f)return;
@@ -3625,10 +3663,15 @@ function handleAttFile(e){
         return{key,statuses,expDays};
       }).filter(r=>r.key);
       if(!rows.length){toast('未读到任何有效行');e.target.value='';return;}
+      const weekKey=wKey(weekOff);
       const{matched,unmatched}=applyAttRowsToWeek(rows);
       let msg=`已导入 ${matched} 名员工本周考勤`;
       if(unmatched.length)msg+=`，${unmatched.length} 个未匹配`;
-      await saveAndToast(msg);renderAttWeek();
+      _suppressRealtimeFor(8000);
+      showLoading('正在保存考勤数据...');
+      const ok=await saveAttendanceWeekOnly(weekKey);
+      hideLoading();
+      if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请重试');}
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
     e.target.value='';
   };
@@ -5204,7 +5247,7 @@ async function exportOfflineHTML(){
   try{
     const snap={
       employees,departments,sections,kpiTemplates,positions,accounts,
-      monthlyScores,attendanceData,salaryReviews,overtimeData,dailyScores,expectedDays,
+      monthlyScores,attendanceData,salaryReviews,overtimeData,dailyScores,expectedDays,lateData,lateData,
       _savedAt:Date.now()
     };
     const snapScript=`<script>window.__EMBEDDED_SNAPSHOT=${JSON.stringify(snap)};<\/script>`;
@@ -5285,7 +5328,7 @@ function handleBackupFile(e){
       salaryReviews=data.salaryReviews||{};
       overtimeData=data.overtimeData||{};
       dailyScores=data.dailyScores||{};
-      expectedDays=data.expectedDays||{};
+      expectedDays=data.expectedDays||{};lateData=data.lateData||{};
       await saveAll();
       toast('✅ 恢复成功，2秒后刷新...');
       setTimeout(()=>location.reload(),1500);
@@ -5373,6 +5416,7 @@ function getEmpKPIs(emp){
 }
 // INIT
 function _reloadActivePage() {
+  if (_suppressRealtime) return;
   const activePage = document.querySelector('.page.active');
   if (activePage) {
     const pid = activePage.id.replace('page-', '');
@@ -5401,6 +5445,7 @@ loadAll().then(()=>{
             if (cfg.positions) positions = cfg.positions;
             if (cfg.monthlyScores) monthlyScores = cfg.monthlyScores;
             if (cfg.expectedDays) expectedDays = cfg.expectedDays;
+            if (cfg.lateData) lateData = cfg.lateData;
           }
           _reloadActivePage();
         } catch(e) {}
