@@ -22,8 +22,8 @@
 </template>
 
 <template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 56"><rect width="80" height="56" fill="#162145"/><text x="40" y="36" font-size="22" text-anchor="middle" fill="#fff">📊</text></svg></template>
-<script src="assets/chart.js"></script>
-<script src="assets/xlsx.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>/*!
  * Tabler Icons 2.44.0 by tabler - https://tabler.io
  * License - https://github.com/tabler/tabler-icons/blob/master/LICENSE
@@ -1930,8 +1930,25 @@ function getDayRec(empId,ds){const m=getDS(empId);if(!m[ds])m[ds]={scores:{},fra
 function daysInMonth(y,m){return new Date(y,m,0).getDate();}
 // 某天的考勤状态（考勤按周存储，需定位到周一所在的周键）
 function dayAttStatus(empId,dateObj){const dow=dateObj.getDay();const diff=dow===0?-6:1-dow;const monday=new Date(dateObj.getFullYear(),dateObj.getMonth(),dateObj.getDate()+diff);const wk='week_'+dStr(monday);return(attendanceData[wk]&&attendanceData[wk][empId]&&attendanceData[wk][empId][dStr(dateObj)])||'';}
-// 重新计算某天的绩效总分（与月度同引擎）
-function recalcDayTotal(empId,ds,emp){const rec=getDayRec(empId,ds);const kpis=getEmpKPIs(emp);const filled=kpis.filter(k=>rec.scores[k.id]!=null);rec.totalScore=filled.length?calcTotal(rec.scores,emp):null;return rec.totalScore;}
+// 重新计算某天的绩效总分（按当天有数据的KPI权重归一化）
+function recalcDayTotal(empId,ds,emp){
+  const rec=getDayRec(empId,ds);const kpis=getEmpKPIs(emp);
+  // %指标从分子/分母重新推算actual百分比值（修正旧存储格式）
+  kpis.forEach(k=>{
+    if((k.unit||'').trim()!=='%')return;
+    const frac=rec.fractions&&rec.fractions[k.id];
+    if(frac&&frac.num!=null&&frac.den!=null&&frac.den!==0)
+      rec.scores[k.id]=Math.round(frac.num/frac.den*10000)/100;
+  });
+  let total=0,tw=0;
+  kpis.forEach(k=>{
+    const a=rec.scores[k.id];if(a===null||a===undefined)return;
+    const sc=calcKPIScore(a,k);if(sc===null)return;
+    total+=sc*(k.weight/100);tw+=k.weight;
+  });
+  rec.totalScore=tw>0?Math.round(total/(tw/100)*10)/10:null;
+  return rec.totalScore;
+}
 // 将逐日均分同步到月度评估（让当月查询和逐日明细的总计一致）
 function syncDailyToMonthly(empId){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
@@ -1952,8 +1969,8 @@ function syncDailyToMonthly(empId){
         totalNum+=isZero?0:num;totalDen+=den;cnt++;
       }
       if(cnt>0&&totalDen>0){
-        const cumActual=totalNum/totalDen*k.target;
-        ms.scores[k.id]=Math.round(cumActual*100)/100;
+        const cumActual=Math.round(totalNum/totalDen*10000)/100;
+        ms.scores[k.id]=cumActual;
         ms.fractions[k.id]={num:Math.round(totalNum*100)/100,den:Math.round(totalDen*100)/100};
       }
     } else {
@@ -2041,12 +2058,14 @@ function toggleQRow(empId){
 function renderQRadar(empId){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
   const wrap=document.getElementById('q-radar-wrap-'+empId);if(!wrap)return;
+  // 渲染前先同步逐日数据到月度，确保 ms.scores / ms.done 是最新的
+  syncDailyToMonthly(empId);
   const ms=getMS(empId,qY,qM);
   const kpis=getEmpKPIs(emp);
   if(!kpis.length){wrap.innerHTML='<div style="color:var(--color-text-tertiary);font-size:12px;padding:10px">该员工岗位未配置考核指标。</div>';return;}
   const labels=kpis.map(k=>k.name);
   const scores=kpis.map(k=>{const a=ms.scores&&ms.scores[k.id];return(a!=null)?(calcKPIScore(a,k)||0):0;});
-  const hasAnyData=scores.some(s=>s>0);
+  const hasAnyData=kpis.some(k=>ms.scores&&ms.scores[k.id]!=null);
   // Right-side legend / details table
   const detailRows=kpis.map((k,i)=>{
     const a=ms.scores&&ms.scores[k.id];const s=scores[i];
@@ -2354,7 +2373,7 @@ function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
   else{
     rec.fractions[kpiId]={num:n,den:d};
     const kpi=getEmpKPIs(emp).find(k=>String(k.id)===String(kpiId));
-    if(kpi){const actual=n/d*kpi.target;rec.scores[kpiId]=actual;}
+    if(kpi){const actual=Math.round(n/d*10000)/100;rec.scores[kpiId]=actual;}
   }
   const tot=recalcDayTotal(empId,ds,emp);
   if(tot==null&&Object.keys(rec.scores).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
@@ -2434,7 +2453,10 @@ function calcAdjustedMonthScore(empId){
   const kpis=getEmpKPIs(emp);
   const monthActuals={};
   kpis.forEach(k=>{monthActuals[k.id]=calcMonthlyKpiActual(empId,k,adj0,n);});
-  const score=calcTotal(monthActuals,emp)||0;
+  // 按有数据的KPI权重归一化，避免缺项导致总分偏低
+  let _tot=0,_tw=0;
+  kpis.forEach(k=>{const a=monthActuals[k.id];if(a===null||a===undefined)return;const sc=calcKPIScore(a,k);if(sc===null)return;_tot+=sc*(k.weight/100);_tw+=k.weight;});
+  const score=_tw>0?Math.round(_tot/(_tw/100)*10)/10:0;
   // 统计受考勤影响的录入天数（用于reason提示）
   let adjCount=0;
   for(let d=1;d<=n;d++){
@@ -2460,7 +2482,7 @@ function calcMonthlyKpiActual(empId,kpi,adj,n){
       const isZero=adj.zeroStatuses&&adj.zeroStatuses.has(att);
       totalNum+=isZero?0:num;totalDen+=den;cnt++;
     }
-    return(cnt>0&&totalDen>0)?totalNum/totalDen*kpi.target:null;
+    return(cnt>0&&totalDen>0)?Math.round(totalNum/totalDen*10000)/100:null;
   }else if(isCnt){
     // 次数类指标：统计月度累计总次数，再代入得分逻辑
     let total=0,cnt=0;
