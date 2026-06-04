@@ -1958,19 +1958,10 @@ function syncDailyToMonthly(empId){
         ms.fractions[k.id]={num:Math.round(totalNum*100)/100,den:Math.round(totalDen*100)/100};
       }
     } else {
-      const scores=[],actuals=[];
-      for(let d=1;d<=n;d++){
-        const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
-        if(!rec||!rec.scores||rec.scores[k.id]==null)continue;
-        const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
-        const isZero=adj.zeroStatuses&&adj.zeroStatuses.has(att);
-        actuals.push(rec.scores[k.id]);
-        scores.push(isZero?0:calcKPIScore(rec.scores[k.id],k));
-      }
-      if(scores.length){
-        ms.scores[k.id]=Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10;
-        const avg=actuals.reduce((a,b)=>a+b,0)/actuals.length;
-        ms.fractions[k.id]={num:Math.round(avg*100)/100,den:k.target};
+      const actual=calcMonthlyKpiActual(empId,k,adj,n);
+      if(actual!==null){
+        ms.scores[k.id]=Math.round(actual*100)/100;
+        ms.fractions[k.id]={num:Math.round(actual*100)/100,den:k.target};
       }
     }
   });
@@ -2438,30 +2429,68 @@ function calcAdjustedMonthScore(empId){
   if(inc>0)zeroStatuses.add('INC');
   if(psg>0)zeroStatuses.add('PSG');
   if(fj>0)zeroStatuses.add('FJ');
-  // 计算平均分（仅已录入天；规则2天计0但仍计入分母）
-  const n=pastDaysInMonth();let total=0,count=0,adjCount=0;
+  // 按月累计实际达成代入各KPI得分逻辑，再加权汇总
+  const adj0={zeroStatuses};
+  const n=pastDaysInMonth();
+  const kpis=getEmpKPIs(emp);
+  const monthActuals={};
+  kpis.forEach(k=>{monthActuals[k.id]=calcMonthlyKpiActual(empId,k,adj0,n);});
+  const score=calcTotal(monthActuals,emp)||0;
+  // 统计受考勤影响的录入天数（用于reason提示）
+  let adjCount=0;
   for(let d=1;d<=n;d++){
     const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
     if(!rec||rec.totalScore==null)continue;
-    count++;
     const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
-    if(!zeroStatuses.has(att)){total+=rec.totalScore;}else{adjCount++;}
+    if(zeroStatuses.has(att))adjCount++;
   }
-  const score=count>0?Math.round(total/count*10)/10:0;
   const reason=adjCount>0?`${adjCount} 天按0折算`:'';
   return{score,zeroed:false,reason,zeroStatuses,adjCount};
 }
-// 单个KPI的过去天数平均得分（考勤规则折算）
-function getEmpKpiAvgScore(empId,kpi,adj){
-  // 指标得分正常计算；仅总分受考勤规则影响
-  const n=pastDaysInMonth();let total=0,count=0;
-  for(let d=1;d<=n;d++){
-    const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
-    if(!rec||!rec.scores||rec.scores[kpi.id]==null)continue;
-    count++;
-    total+=calcKPIScore(rec.scores[kpi.id],kpi);
+// 按月累计实际达成：%指标累积分子/分母，次数指标求和，其他指标取平均
+function calcMonthlyKpiActual(empId,kpi,adj,n){
+  const isPct=(kpi.unit||'').trim()==='%';
+  const isCnt=(kpi.unit||'').trim()==='次';
+  if(isPct){
+    let totalNum=0,totalDen=0,cnt=0;
+    for(let d=1;d<=n;d++){
+      const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
+      if(!rec||!rec.fractions||!rec.fractions[kpi.id])continue;
+      const {num,den}=rec.fractions[kpi.id];if(num==null||den==null||den===0)continue;
+      const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
+      const isZero=adj.zeroStatuses&&adj.zeroStatuses.has(att);
+      totalNum+=isZero?0:num;totalDen+=den;cnt++;
+    }
+    return(cnt>0&&totalDen>0)?totalNum/totalDen*kpi.target:null;
+  }else if(isCnt){
+    // 次数类指标：统计月度累计总次数，再代入得分逻辑
+    let total=0,cnt=0;
+    for(let d=1;d<=n;d++){
+      const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
+      if(!rec||!rec.scores||rec.scores[kpi.id]==null)continue;
+      const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
+      const isZero=adj.zeroStatuses&&adj.zeroStatuses.has(att);
+      total+=isZero?0:rec.scores[kpi.id];cnt++;
+    }
+    return cnt>0?total:null;
+  }else{
+    // 其他指标：取月度日均实际达成
+    let total=0,cnt=0;
+    for(let d=1;d<=n;d++){
+      const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
+      if(!rec||!rec.scores||rec.scores[kpi.id]==null)continue;
+      total+=rec.scores[kpi.id];cnt++;
+    }
+    return cnt>0?total/cnt:null;
   }
-  return{score:count>0?Math.round(total/count*10)/10:null,zeroed:false};
+}
+// 单个KPI的月度得分（基于月累计实际达成，考勤规则折算）
+function getEmpKpiAvgScore(empId,kpi,adj){
+  const n=pastDaysInMonth();
+  const actual=calcMonthlyKpiActual(empId,kpi,adj,n);
+  if(actual===null)return{score:null,zeroed:false};
+  const sc=calcKPIScore(actual,kpi);
+  return{score:sc!=null?Math.round(sc*10)/10:null,zeroed:false};
 }
 function renderQRank(){
   if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
