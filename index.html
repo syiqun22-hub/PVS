@@ -1941,9 +1941,21 @@ async function loadAll(){
   hideLoading();
 }
 // AUTH
-function doLogin(){
+async function hashPassword(p){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(p));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function _isHashed(p){return typeof p==='string'&&/^[0-9a-f]{64}$/.test(p);}
+async function doLogin(){
   const u=$('login-user').value.trim(),p=$('login-pass').value;
-  const acc=accounts.find(a=>a.username===u&&a.password===p&&a.active);
+  const ph=await hashPassword(p);
+  // 兼容旧版明文密码：首次登录自动升级为哈希
+  const acc=accounts.find(a=>{
+    if(a.username!==u||!a.active)return false;
+    if(_isHashed(a.password))return a.password===ph;
+    if(a.password===p){a.password=ph;saveAll();return true;}
+    return false;
+  });
   if(!acc){$('lg-err').textContent=lang==='zh'?'账号或密码错误':'Usuario o contraseña incorrectos';return;}
   $('lg-err').textContent='';currentUser=acc;
   $('login-screen').style.display='none';$('main-app').style.display='flex';
@@ -2043,7 +2055,16 @@ function chSumM(d){sumM+=d;if(sumM>12){sumM=1;sumY++;}if(sumM<1){sumM=12;sumY--;
 function chDeptM(d){deptM+=d;if(deptM>12){deptM=1;deptY++;}if(deptM<1){deptM=12;deptY--;}$('dept-month').textContent=mLabel(deptY,deptM);renderDepts();}
 // MONTH SCORES
 function getMS(empId,y,m){const mk=mKey(y||curY,m||curM);if(!monthlyScores[mk])monthlyScores[mk]={};if(!monthlyScores[mk][empId])monthlyScores[mk][empId]={scores:{},fractions:{},done:false,totalScore:null};if(!monthlyScores[mk][empId].fractions)monthlyScores[mk][empId].fractions={};return monthlyScores[mk][empId];}
-function getDeptStats(y,m){return departments.map(d=>{const emps=employees.filter(e=>e.dept===d.name);const done=emps.filter(e=>getMS(e.id,y,m).done);const scores=done.map(e=>getMS(e.id,y,m).totalScore).filter(s=>s!==null);return{...d,_emp:emps.length,_done:done.length,_avg:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:0};});}
+function getDeptStats(y,m){
+  const byDept={};
+  employees.forEach(e=>{if(!byDept[e.dept])byDept[e.dept]=[];byDept[e.dept].push(e);});
+  return departments.map(d=>{
+    const emps=byDept[d.name]||[];
+    let doneCount=0,scoreSum=0,scoreCnt=0;
+    emps.forEach(e=>{const ms=getMS(e.id,y,m);if(ms.done){doneCount++;if(ms.totalScore!==null){scoreSum+=ms.totalScore;scoreCnt++;}}});
+    return{...d,_emp:emps.length,_done:doneCount,_avg:scoreCnt?Math.round(scoreSum/scoreCnt*10)/10:0};
+  });
+}
 // DASHBOARD
 function renderDashboard(){
   const vis=visibleEmps();const total=vis.length,done=vis.filter(e=>getMS(e.id).done).length;
@@ -2157,9 +2178,11 @@ function initQTrendFilters(){
   if($('q-month-trend'))$('q-month-trend').textContent=mLabel(qY,qM);
 }
 function initQFilters(){const sel=$('q-dept');if(sel.options.length<=1){departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});}
-  const secSel=$('q-sec');if(secSel){secSel.innerHTML='<option value="">全部科室</option>';const secs=[...new Set(employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)).map(e=>e.section).filter(Boolean))].sort();secs.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;secSel.appendChild(o);});}
-  const teamSel=$('q-team');if(teamSel){teamSel.innerHTML='<option value="">全部班组</option>';const teams=[...new Set(employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)).map(e=>e.team).filter(Boolean))].sort();teams.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;teamSel.appendChild(o);});}
-  const posSel=$('q-pos');if(posSel){posSel.innerHTML='<option value="">全部岗位</option>';const pos=[...new Set(employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)).map(e=>e.position).filter(Boolean))].sort();pos.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;posSel.appendChild(o);});}
+  const secs=new Set(),teams=new Set(),pos=new Set();
+  employees.forEach(e=>{if(empNat(e)==='墨西哥'&&isActive(e)){if(e.section)secs.add(e.section);if(e.team)teams.add(e.team);if(e.position)pos.add(e.position);}});
+  const secSel=$('q-sec');if(secSel){secSel.innerHTML='<option value="">全部科室</option>';[...secs].sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;secSel.appendChild(o);});}
+  const teamSel=$('q-team');if(teamSel){teamSel.innerHTML='<option value="">全部班组</option>';[...teams].sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;teamSel.appendChild(o);});}
+  const posSel=$('q-pos');if(posSel){posSel.innerHTML='<option value="">全部岗位</option>';[...pos].sort().forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;posSel.appendChild(o);});}
   $('q-month').textContent=mLabel(qY,qM);if(currentUser&&currentUser.role!=='admin'){sel.value=currentUser.dept;sel.disabled=true;}else{sel.disabled=false;}}
 function renderQuery(){
   const dF=$('q-dept').value,gF=$('q-grade').value,s=($('q-search').value||'').toLowerCase();
@@ -3140,10 +3163,14 @@ function renderOrgDept(){
   const s=(($('org-dept-s')&&$('org-dept-s').value)||'').toLowerCase();
   const list=departments.filter(d=>!s||d.name.toLowerCase().includes(s)||(d.head||'').toLowerCase().includes(s));
   $('org-dept-count').textContent=`共 ${departments.length} 个部门`;
+  const secByDept={},posByDept={},empByDept={};
+  sections.forEach(x=>{secByDept[x.deptName]=(secByDept[x.deptName]||0)+1;});
+  positions.forEach(p=>{posByDept[p.deptName]=(posByDept[p.deptName]||0)+1;});
+  employees.forEach(e=>{empByDept[e.dept]=(empByDept[e.dept]||0)+1;});
   $('org-dept-tbody').innerHTML=list.length?list.map(d=>{
-    const secCnt=sections.filter(x=>x.deptName===d.name).length;
-    const posCnt=positions.filter(p=>p.deptName===d.name).length;
-    const empCnt=employees.filter(e=>e.dept===d.name).length;
+    const secCnt=secByDept[d.name]||0;
+    const posCnt=posByDept[d.name]||0;
+    const empCnt=empByDept[d.name]||0;
     return`<tr><td><strong>${d.name}</strong></td><td>${d.head||'-'}</td><td>${secCnt}</td><td>${posCnt}</td><td>${empCnt}</td><td>${canEdit()?`<div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditDept(${d.id})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delDept(${d.id})"><i class="ti ti-trash"></i></button></div>`:'—'}</td></tr>`;
   }).join(''):'<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--color-text-tertiary)">暂无部门</td></tr>';
 }
@@ -5146,9 +5173,9 @@ function renderAccs(){
 function openAddAcc(){$('ac-dept').innerHTML=departments.map(d=>`<option value="${d.name}">${d.name}</option>`).join('');fillAccSections();_renderModuleCheckboxes([]);toggleAccDept();$('ac-user').value='';$('ac-name').value='';$('ac-pw').value='';$('modal-add-acc').classList.add('open');}
 function toggleAccDept(){const isD=$('ac-role').value==='dept_admin';$('ac-dept-wrap').style.display=isD?'flex':'none';$('ac-sec-wrap').style.display=isD?'flex':'none';$('ac-modules-wrap').style.display=isD?'flex':'none';}
 function fillAccSections(){const d=$('ac-dept').value;const rel=sections.filter(s=>s.deptName===d);$('ac-sec').innerHTML='<option value="">— 全部门（不限科室）—</option>'+rel.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');}
-async function saveAcc(){const u=$('ac-user').value.trim(),n=$('ac-name').value.trim(),p=$('ac-pw').value,r=$('ac-role').value,d=r==='dept_admin'?$('ac-dept').value:'',sec=r==='dept_admin'?$('ac-sec').value:'';if(!u||!n||!p){toast('请填写完整');return;}if(accounts.find(a=>a.username===u)){toast('用户名已存在');return;}const mods=r==='dept_admin'?GRANTABLE_MODULES.filter(m=>{const cb=document.getElementById('ac-mod-'+m.id);return cb&&cb.checked;}).map(m=>m.id):[];accounts.push({id:'a'+Date.now(),username:u,displayName:n,password:p,role:r,dept:d,section:sec,modules:mods,active:true});closeM('modal-add-acc');await saveAndToast('账号已创建');renderAccs();}
+async function saveAcc(){const u=$('ac-user').value.trim(),n=$('ac-name').value.trim(),p=$('ac-pw').value,r=$('ac-role').value,d=r==='dept_admin'?$('ac-dept').value:'',sec=r==='dept_admin'?$('ac-sec').value:'';if(!u||!n||!p){toast('请填写完整');return;}if(accounts.find(a=>a.username===u)){toast('用户名已存在');return;}const mods=r==='dept_admin'?GRANTABLE_MODULES.filter(m=>{const cb=document.getElementById('ac-mod-'+m.id);return cb&&cb.checked;}).map(m=>m.id):[];const ph=await hashPassword(p);accounts.push({id:'a'+Date.now(),username:u,displayName:n,password:ph,role:r,dept:d,section:sec,modules:mods,active:true});closeM('modal-add-acc');await saveAndToast('账号已创建');renderAccs();}
 function openCPW(id){cpwId=id;const a=accounts.find(x=>x.id===id);$('cpw-for').textContent='账号：'+a.displayName;$('cpw-1').value='';$('cpw-2').value='';$('modal-cpw').classList.add('open');}
-async function saveCPW(){const p1=$('cpw-1').value,p2=$('cpw-2').value;if(!p1){toast('请输入密码');return;}if(p1!==p2){toast('两次不一致');return;}const a=accounts.find(x=>x.id===cpwId);if(a)a.password=p1;closeM('modal-cpw');await saveAndToast('密码已修改');renderAccs();}
+async function saveCPW(){const p1=$('cpw-1').value,p2=$('cpw-2').value;if(!p1){toast('请输入密码');return;}if(p1!==p2){toast('两次不一致');return;}const a=accounts.find(x=>x.id===cpwId);if(a)a.password=await hashPassword(p1);closeM('modal-cpw');await saveAndToast('密码已修改');renderAccs();}
 async function toggleAcc(id){const a=accounts.find(x=>x.id===id);if(!a)return;if(a.username==='admin'){toast('超级管理员不可禁用');return;}a.active=!a.active;await saveAndToast(a.active?'已启用':'已禁用');renderAccs();}
 // ============ OFFLINE HTML EXPORT (含数据) ============
 async function exportOfflineHTML(){
@@ -5190,10 +5217,11 @@ function renderBackupStats(){
 }
 function exportBackup(){
   const data={
-    version:'1.0',
+    version:'2.0',
     exportedAt:new Date().toISOString(),
     employees,departments,sections,kpiTemplates,positions,accounts,
-    monthlyScores,attendanceData,salaryReviews
+    monthlyScores,attendanceData,salaryReviews,
+    overtimeData,dailyScores,expectedDays
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -5217,6 +5245,8 @@ function handleBackupFile(e){
 • 指标库 ${(data.kpiTemplates||[]).length} 个
 • 绩效记录覆盖 ${Object.keys(data.monthlyScores||{}).length} 个月
 • 考勤记录覆盖 ${Object.keys(data.attendanceData||{}).length} 周
+• 加班记录覆盖 ${Object.keys(data.overtimeData||{}).length} 个周期
+• 逐日评分覆盖 ${Object.keys(data.dailyScores||{}).length} 名员工
 • 账号 ${(data.accounts||[]).length} 个
 
 ⚠️ 此操作将完全覆盖当前所有数据！
@@ -5232,6 +5262,9 @@ function handleBackupFile(e){
       monthlyScores=data.monthlyScores||{};
       attendanceData=data.attendanceData||{};
       salaryReviews=data.salaryReviews||{};
+      overtimeData=data.overtimeData||{};
+      dailyScores=data.dailyScores||{};
+      expectedDays=data.expectedDays||{};
       await saveAll();
       toast('✅ 恢复成功，2秒后刷新...');
       setTimeout(()=>location.reload(),1500);
