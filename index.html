@@ -324,6 +324,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="avatar" id="user-avatar"></div>
       <div><div style="font-size:13px;font-weight:500;max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="user-name"></div><div style="font-size:11px;color:var(--color-text-tertiary)" id="user-role"></div></div>
     </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button class="btn btn-sm" style="flex:1;justify-content:center" id="refresh-btn" onclick="doRefresh()"><i class="ti ti-refresh"></i>刷新数据</button>
+    </div>
     <button class="btn btn-sm" style="width:100%;justify-content:center" onclick="doLogout()"><i class="ti ti-logout"></i><span data-i18n="btn_logout">退出登录</span></button>
   </div>
 </div>
@@ -1296,6 +1299,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="mc" id="km-rate" onclick="setKM('rate')"><div class="mc-icon">🔁</div><div class="mc-name">完成率＝兑现系数</div><div class="mc-desc">得分=100×完成率</div></div>
       <div class="mc" id="km-r11" onclick="setKM('r11')"><div class="mc-icon">⚖️</div><div class="mc-name">奖一罚一</div><div class="mc-desc">等比奖罚</div></div>
       <div class="mc" id="km-fml" onclick="setKM('fml')"><div class="mc-icon">🧮</div><div class="mc-name">设定公式</div><div class="mc-desc">自定义计分公式</div></div>
+      <div class="mc" id="km-direct" onclick="setKM('direct')"><div class="mc-icon">🎯</div><div class="mc-name">实际达成＝得分</div><div class="mc-desc">得分直接等于实际达成值</div></div>
     </div>
     <div id="kpi-cfg-rate" style="display:none">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
@@ -1678,6 +1682,7 @@ function calcKPIScore(actual,kpi){
   const r=kpi.rule;if(!r)return Math.round(Math.min(calcRate(actual,kpi.target,'achieve')*100,150)*100)/100;
   const rate=calcRate(actual,kpi.target,r.kd||'achieve');
   if(r.km==='rate'){const raw=100*rate;const cap=r.rateCap!=null?r.rateCap:150;const fl=r.rateFloor!=null?r.rateFloor:0;return Math.round(Math.max(Math.min(raw,cap),fl)*100)/100;}
+  if(r.km==='direct')return Math.round(actual*100)/100;
   if(r.formula){try{return evalFormula(r.formula,actual,kpi.target,rate);}catch{return null;}}
   return null;
 }
@@ -1689,44 +1694,30 @@ const SUPABASE_URL = 'https://qykocssjgdbscdhlbepm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5a29jc3NqZ2Ric2NkaGxiZXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTQ2MzMsImV4cCI6MjA5NTQ5MDYzM30.XI-YvK0HB3ra5IQsR-8LT-sKw_3XjU0BTODpHW9uqWI';
 // ============================================================
 /*
-  SQL SCHEMA — run in Supabase SQL editor to create the 5 tables:
+  SQL SCHEMA — 在 Supabase SQL 编辑器中执行一次：
 
   create table if not exists pvs_config (
     id text primary key,
     value jsonb
   );
-
   create table if not exists pvs_daily (
-    emp_id text,
-    date text,
-    data jsonb,
+    emp_id text, date text, data jsonb,
     updated_at timestamptz default now(),
     primary key (emp_id, date)
   );
-
   create table if not exists pvs_attendance (
-    week_key text,
-    emp_id text,
-    date text,
-    status text,
+    week_key text, emp_id text, date text, status text,
     primary key (week_key, emp_id, date)
   );
-
   create table if not exists pvs_salary_reviews (
-    emp_id text primary key,
-    data jsonb,
+    emp_id text primary key, data jsonb,
     updated_at timestamptz default now()
   );
-
   create table if not exists pvs_overtime (
-    emp_id text,
-    period text,
-    data jsonb,
+    emp_id text, period text, data jsonb,
     updated_at timestamptz default now(),
     primary key (emp_id, period)
   );
-
-  -- Enable Realtime on all tables (run once):
   alter publication supabase_realtime add table pvs_config;
   alter publication supabase_realtime add table pvs_daily;
   alter publication supabase_realtime add table pvs_attendance;
@@ -1734,10 +1725,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   alter publication supabase_realtime add table pvs_overtime;
 */
 
-// Supabase JS SDK client (loaded via CDN in <head>)
+// Supabase JS SDK 客户端
 const _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Guard: skip writes on file: protocol
 function _sbWriteAllowed() {
   if (window.location.protocol === 'file:') {
     console.warn('[SB] file: 协议，跳过写入');
@@ -1746,12 +1736,12 @@ function _sbWriteAllowed() {
   return true;
 }
 
-// ---- Granular save helpers ----
+// ---- 颗粒化存储函数 ----
 
 async function saveConfig() {
   if (!_sbWriteAllowed()) return true;
   try {
-    const configItems = [
+    const items = [
       { id: 'employees', value: employees },
       { id: 'departments', value: departments },
       { id: 'sections', value: sections },
@@ -1761,7 +1751,7 @@ async function saveConfig() {
       { id: 'expectedDays', value: expectedDays },
       { id: 'monthlyScores', value: monthlyScores },
     ];
-    const { error } = await _sbClient.from('pvs_config').upsert(configItems, { onConflict: 'id' });
+    const { error } = await _sbClient.from('pvs_config').upsert(items, { onConflict: 'id' });
     if (error) { console.error('saveConfig error', error); return false; }
     return true;
   } catch(e) { console.error('saveConfig error', e); return false; }
@@ -1818,17 +1808,15 @@ async function saveOvertime(empId, period) {
   } catch(e) { console.error('saveOvertime error', e); return false; }
 }
 
-// ---- Batch save (backward compat) ----
+// ---- 批量保存（向后兼容，所有 saveAll() 调用处继续正常工作）----
 async function saveAll() {
   try {
     if (!_sbWriteAllowed()) return true;
 
-    // Save config (employees, departments, sections, kpiTemplates, positions,
-    //              accounts, expectedDays, monthlyScores)
     const cfgOk = await saveConfig();
     if (!cfgOk) { toast('⚠️ 保存失败，请检查网络连接'); return false; }
 
-    // Save all dailyScores
+    // pvs_daily
     const dailyUpserts = [];
     for (const empId of Object.keys(dailyScores)) {
       for (const date of Object.keys(dailyScores[empId])) {
@@ -1837,10 +1825,10 @@ async function saveAll() {
     }
     if (dailyUpserts.length) {
       const { error } = await _sbClient.from('pvs_daily').upsert(dailyUpserts, { onConflict: 'emp_id,date' });
-      if (error) { console.error('saveAll dailyScores error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      if (error) { console.error('saveAll daily error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
     }
 
-    // Save all attendanceData
+    // pvs_attendance
     const attUpserts = [];
     for (const weekKey of Object.keys(attendanceData)) {
       const wk = attendanceData[weekKey];
@@ -1853,17 +1841,17 @@ async function saveAll() {
     }
     if (attUpserts.length) {
       const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts, { onConflict: 'week_key,emp_id,date' });
-      if (error) { console.error('saveAll attendanceData error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      if (error) { console.error('saveAll attendance error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
     }
 
-    // Save all salaryReviews
+    // pvs_salary_reviews
     const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
     if (srUpserts.length) {
       const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
       if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
     }
 
-    // Save all overtimeData (keyed: overtimeData[period][empId])
+    // pvs_overtime  (结构: overtimeData[period][empId][date] = hours)
     const otUpserts = [];
     for (const period of Object.keys(overtimeData)) {
       const pk = overtimeData[period];
@@ -1873,7 +1861,7 @@ async function saveAll() {
     }
     if (otUpserts.length) {
       const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
-      if (error) { console.error('saveAll overtimeData error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      if (error) { console.error('saveAll overtime error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
     }
 
     _lastSavedAt = Date.now();
@@ -1895,8 +1883,9 @@ async function loadAll(){
       document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa"><div style="background:#162145;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)"><div style="font-size:32px;margin-bottom:12px">⚙️</div><div style="font-size:18px;font-weight:600;margin-bottom:10px">请先配置 Supabase</div><div style="font-size:13px;color:#666;line-height:1.7">打开 index.html 文件，找到顶部的<br><code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_URL</code> 和 <code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_ANON_KEY</code><br>填入你的 Supabase 项目信息后重新上传。</div></div></div>`;
       return;
     } else {
-      // Load config table
       var eR,dR,secR,kR,pR,aR,sR,attR,srR,otR,edR,dsdR;
+
+      // 从 pvs_config 加载配置
       const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
       if (cfgRows && cfgRows.length) {
         const cfg = {};
@@ -1905,41 +1894,25 @@ async function loadAll(){
         pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;
       }
 
-      // Load pvs_daily
+      // 从 pvs_daily 加载逐日得分
       const { data: dailyRows } = await _sbClient.from('pvs_daily').select('emp_id,date,data');
       dsdR = {};
-      if (dailyRows) {
-        dailyRows.forEach(r => {
-          if (!dsdR[r.emp_id]) dsdR[r.emp_id] = {};
-          dsdR[r.emp_id][r.date] = r.data;
-        });
-      }
+      if (dailyRows) { dailyRows.forEach(r => { if(!dsdR[r.emp_id])dsdR[r.emp_id]={}; dsdR[r.emp_id][r.date]=r.data; }); }
 
-      // Load pvs_attendance
+      // 从 pvs_attendance 加载考勤
       const { data: attRows } = await _sbClient.from('pvs_attendance').select('week_key,emp_id,date,status');
       attR = {};
-      if (attRows) {
-        attRows.forEach(r => {
-          if (!attR[r.week_key]) attR[r.week_key] = {};
-          if (!attR[r.week_key][r.emp_id]) attR[r.week_key][r.emp_id] = {};
-          attR[r.week_key][r.emp_id][r.date] = r.status;
-        });
-      }
+      if (attRows) { attRows.forEach(r => { if(!attR[r.week_key])attR[r.week_key]={}; if(!attR[r.week_key][r.emp_id])attR[r.week_key][r.emp_id]={}; attR[r.week_key][r.emp_id][r.date]=r.status; }); }
 
-      // Load pvs_salary_reviews
+      // 从 pvs_salary_reviews 加载调薪记录
       const { data: srRows } = await _sbClient.from('pvs_salary_reviews').select('emp_id,data');
       srR = {};
-      if (srRows) { srRows.forEach(r => { srR[r.emp_id] = r.data; }); }
+      if (srRows) { srRows.forEach(r => { srR[r.emp_id]=r.data; }); }
 
-      // Load pvs_overtime
+      // 从 pvs_overtime 加载加班数据
       const { data: otRows } = await _sbClient.from('pvs_overtime').select('emp_id,period,data');
       otR = {};
-      if (otRows) {
-        otRows.forEach(r => {
-          if (!otR[r.period]) otR[r.period] = {};
-          otR[r.period][r.emp_id] = r.data;
-        });
-      }
+      if (otRows) { otRows.forEach(r => { if(!otR[r.period])otR[r.period]={}; otR[r.period][r.emp_id]=r.data; }); }
 
       employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};
     }
@@ -1977,6 +1950,7 @@ function doLogin(){
   applyRoleUI();applyI18n();updateMonthLabels();initSidebarState();setTimeout(()=>renderDashboard(),50);
 }
 function doLogout(){currentUser=null;$('main-app').style.display='none';$('login-screen').style.display='flex';$('login-user').value='';$('login-pass').value='';}
+async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
 function applyRoleUI(){
   const isA=currentUser.role==='admin';
   $('user-avatar').textContent=currentUser.displayName.slice(0,2);
@@ -2094,19 +2068,24 @@ function getDayRec(empId,ds){const m=getDS(empId);if(!m[ds])m[ds]={scores:{},fra
 function daysInMonth(y,m){return new Date(y,m,0).getDate();}
 // 某天的考勤状态（考勤按周存储，需定位到周一所在的周键）
 function dayAttStatus(empId,dateObj){const dow=dateObj.getDay();const diff=dow===0?-6:1-dow;const monday=new Date(dateObj.getFullYear(),dateObj.getMonth(),dateObj.getDate()+diff);const wk='week_'+dStr(monday);return(attendanceData[wk]&&attendanceData[wk][empId]&&attendanceData[wk][empId][dStr(dateObj)])||'';}
-// 重新计算某天的绩效总分（按当天有数据的KPI权重归一化）
+// 取某天单个KPI的实际达成值（与calcMonthlyKpiActual逻辑一致，仅取当天）
+function calcDayKpiActual(rec,kpi){
+  const isPct=(kpi.unit||'').trim()==='%';
+  if(isPct){
+    const frac=rec.fractions&&rec.fractions[kpi.id];
+    if(!frac||frac.num==null||frac.den==null||frac.den===0)return null;
+    return Math.round(frac.num/frac.den*10000)/100;
+  }else{
+    const a=rec.scores&&rec.scores[kpi.id];
+    return(a===null||a===undefined)?null:a;
+  }
+}
+// 重新计算某天的绩效总分（与月度核算逻辑完全一致，仅取当天实际达成）
 function recalcDayTotal(empId,ds,emp){
   const rec=getDayRec(empId,ds);const kpis=getEmpKPIs(emp);
-  // %指标从分子/分母重新推算actual百分比值（修正旧存储格式）
-  kpis.forEach(k=>{
-    if((k.unit||'').trim()!=='%')return;
-    const frac=rec.fractions&&rec.fractions[k.id];
-    if(frac&&frac.num!=null&&frac.den!=null&&frac.den!==0)
-      rec.scores[k.id]=Math.round(frac.num/frac.den*10000)/100;
-  });
   let total=0,tw=0;
   kpis.forEach(k=>{
-    const a=rec.scores[k.id];if(a===null||a===undefined)return;
+    const a=calcDayKpiActual(rec,k);if(a===null)return;
     const sc=calcKPIScore(a,k);if(sc===null)return;
     total+=sc*(k.weight/100);tw+=k.weight;
   });
@@ -2231,8 +2210,19 @@ function renderQRadar(empId){
   const scores=kpis.map(k=>{const a=ms.scores&&ms.scores[k.id];return(a!=null)?(calcKPIScore(a,k)||0):0;});
   const hasAnyData=kpis.some(k=>ms.scores&&ms.scores[k.id]!=null);
   // Right-side legend / details table
+  const _detN=pastDaysInMonth();const _detAdj=calcAdjustedMonthScore(empId);
   const detailRows=kpis.map((k,i)=>{
-    const a=ms.scores&&ms.scores[k.id];const s=scores[i];
+    const isPct=(k.unit||'').trim()==='%';
+    let a;
+    if(isPct){
+      a=ms.scores&&ms.scores[k.id];
+    }else{
+      // 与逐日明细的月总计保持一致：对所有非%指标取月度汇总（而非平均）
+      let sum=0,filled=0;
+      for(let d=1;d<=_detN;d++){const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const cur=rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:null;if(cur!==null){sum+=parseFloat(cur)||0;filled++;}}
+      a=filled>0?Math.round(sum*100)/100:null;
+    }
+    const s=scores[i];
     const rate=a!=null?calcRate(a,k.target,k.rule&&k.rule.kd||'achieve'):null;
     const col=s>=90?'#16a34a':s>=60?'#2563eb':s>0?'#dc2626':'#9ca3af';
     return`<tr><td style="padding:4px 8px;font-size:12px">${k.name}</td><td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--color-text-secondary);font-family:var(--font-mono)">${a!=null?a:'—'} / ${k.target}${k.unit||''}</td><td style="padding:4px 8px;text-align:right;font-size:11px;font-family:var(--font-mono);color:var(--color-text-secondary)">${rate!=null?(rate*100).toFixed(1)+'%':'—'}</td><td style="padding:4px 8px;text-align:right;font-weight:600;color:${col};font-family:var(--font-mono)">${a!=null?s:'—'}</td></tr>`;
@@ -2476,7 +2466,7 @@ function buildEmpDailyBlock(emp){
   const attRow=`<tr style="background:var(--color-background-secondary)"><td style="${lblStyle};background:var(--color-background-secondary);color:var(--color-text-secondary)">考勤</td>${attCells}<td style="text-align:center;font-size:10px;color:var(--color-text-secondary);background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary);white-space:normal;line-height:1.6">${attSummaryText||'—'}</td></tr>`;
   // 绩效总分行（含规则2高亮 + 月合计列）
   let totCells='';
-  for(let d=1;d<=n;d++){const dow=new Date(qY,qM-1,d).getDay();const wk=(dow===0||dow===6);const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const tot=rec&&rec.totalScore!=null?rec.totalScore:null;
+  for(let d=1;d<=n;d++){const dow=new Date(qY,qM-1,d).getDay();const wk=(dow===0||dow===6);const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const tot=rec?(recalcDayTotal(empId,ds,emp),rec.totalScore!=null?rec.totalScore:null):null;
     const dateObj2=new Date(qY,qM-1,d);const att2=dayAttStatus(empId,dateObj2);const isZeroDay=adj.zeroStatuses&&adj.zeroStatuses.has(att2);
     totCells+=`<td id="qd-tot-${empId}-${ds}" style="text-align:center;font-weight:700;font-family:var(--font-mono);${wk?'background:var(--color-background-secondary);':''}${isZeroDay?'background:#2e0d0d;':''}color:${tot!=null?(isZeroDay?'#fca5a5':scoreColor(tot)):'var(--color-border-secondary)'}">${tot!=null?Math.round(tot):'·'}</td>`;}
   const adjScoreCell=adj.zeroed
@@ -2603,6 +2593,8 @@ function calcAdjustedMonthScore(empId){
   const counts=getMonthCounts([emp],qY,qM);const c=counts[empId]||{};
   const fi=c['FI']||0,inc=c['INC']||0,psg=c['PSG']||0,fj=c['FJ']||0;
   // 规则1：月度归零
+  const _sr=salaryReviews[empId]||{};const _actas=(_sr.actas||[]).filter(a=>{if(!a.date)return false;const [ay,am]=a.date.split('-').map(Number);return ay===qY&&am===qM;});
+  if(_actas.length>=1)return{score:0,zeroed:true,reason:`Acta Administrativa ${_actas.length} 次`,zeroStatuses:new Set()};
   if(fi>=1)return{score:0,zeroed:true,reason:`旷工 ${fi} 天`,zeroStatuses:new Set()};
   if(inc>=4)return{score:0,zeroed:true,reason:`病假 ${inc} 天≥4`,zeroStatuses:new Set()};
   if(psg+fj>=2)return{score:0,zeroed:true,reason:`事假/合理缺勤 ${psg+fj} 天≥2`,zeroStatuses:new Set()};
@@ -3286,7 +3278,7 @@ function renderPKLib(){
   const s=(($('pk-search')&&$('pk-search').value)||'').toLowerCase();
   const used=new Set(_pkRefs.map(r=>r.kpiId));
   const list=kpiTemplates.filter(k=>!used.has(k.id)).filter(k=>!s||k.name.toLowerCase().includes(s)||(k.code||'').toLowerCase().includes(s));
-  $('pk-lib').innerHTML=list.length?list.map(k=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);margin-bottom:6px"><span style="font-family:monospace;font-size:10px;color:var(--color-text-secondary)">${k.code||'K'+k.id}</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k.name}</div><div style="font-size:10px;color:var(--color-text-secondary)">${k.type} · 目标 ${k.target}${k.unit||''}</div></div><button class="btn btn-sm btn-p" onclick="addRefToPos(${k.id})"><i class="ti ti-plus"></i></button></div>`).join(''):'<div style="text-align:center;padding:30px;color:var(--color-text-tertiary);font-size:12px">无可添加指标</div>';
+  $('pk-lib').innerHTML=list.length?list.map(k=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);margin-bottom:6px"><span style="font-family:monospace;font-size:10px;color:var(--color-text-secondary)">${k.code||'K'+k.id}</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k.name}</div><div style="font-size:10px;color:var(--color-text-secondary)">${k.type} · 目标 ${k.target}${k.unit||''}</div></div><button class="btn btn-sm btn-p" onclick="addRefToPos(${JSON.stringify(k.id)})"><i class="ti ti-plus"></i></button></div>`).join(''):'<div style="text-align:center;padding:30px;color:var(--color-text-tertiary);font-size:12px">无可添加指标</div>';
 }
 function renderPKSelected(){
   if(!_pkRefs.length){$('pk-selected').innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--color-text-tertiary);font-size:12px">从左侧指标库选取指标，设置权重</div>';$('pk-weight-total').textContent='';return;}
@@ -3310,7 +3302,7 @@ function renderKpiLib(){
   const ML={rate:'完成率=兑现系数',r11:'奖一罚一',r12:'设定公式',r21:'设定公式',fml:'设定公式'};
   $('kl-tbody').innerHTML=list.length?list.map(k=>{
     const usedByPos=positions.filter(p=>(p.kpiRefs||[]).find(r=>r.kpiId===k.id));
-    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td><strong>${k.name}</strong></td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${k.id})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${k.id})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
+    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td><strong>${k.name}</strong></td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${JSON.stringify(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${JSON.stringify(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
   }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
 }
 function openAddKpiLib(){editingKPIId=null;$('klm-title').textContent='新增指标';$('ki-code').value='K'+String(Math.max(0,...kpiTemplates.map(k=>parseInt((k.code||'').replace(/\D/g,''))||0))+1).padStart(3,'0');resetKPIModal();$('modal-add-kpilib').classList.add('open');}
@@ -3320,9 +3312,9 @@ async function saveKpiLib(){
   const code=$('ki-code').value.trim()||('K'+Date.now().toString().slice(-5));
   if(kpiTemplates.find(k=>k.id!==editingKPIId&&k.code===code)){toast('指标编码已存在');return;}
   const formula=$('kf-fml').value.trim();
-  if(km!=='rate'&&!formula){toast('请填写计分公式');return;}
-  const rule={kd,km,rateCap:nv('kr-cap',150),rateFloor:nv('kr-floor',0),formula:km!=='rate'?formula:undefined};
-  const kpi={id:editingKPIId||Date.now(),code,name,type:$('ki-type').value,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,rule};
+  if(km!=='rate'&&km!=='direct'&&!formula){toast('请填写计分公式');return;}
+  const rule={kd,km,rateCap:nv('kr-cap',150),rateFloor:nv('kr-floor',0),formula:(km!=='rate'&&km!=='direct')?formula:undefined};
+  const kpi={id:editingKPIId||uid('K'),code,name,type:$('ki-type').value,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,rule};
   if(editingKPIId){const idx=kpiTemplates.findIndex(k=>k.id===editingKPIId);if(idx>=0)kpiTemplates[idx]=kpi;}
   else{kpiTemplates.push(kpi);}
   closeM('modal-add-kpilib');await saveAndToast('指标已保存');renderKpiLib();
@@ -3379,8 +3371,8 @@ function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';$('ki-targ
 function setKD(v){kd=v;applyKModes();}function setKM(v){km=v;applyKModes();}
 function applyKModes(){
   ['achieve','control'].forEach(v=>$('kp-'+v).classList.toggle('on',v===kd));
-  ['rate','r11','fml'].forEach(v=>$('km-'+v).classList.toggle('on',v===km||(v==='fml'&&km!=='rate'&&km!=='r11')));
-  $('kpi-cfg-rate').style.display=km==='rate'?'block':'none';$('kpi-cfg-fml').style.display=km!=='rate'?'block':'none';
+  ['rate','r11','fml','direct'].forEach(v=>$('km-'+v).classList.toggle('on',v===km||(v==='fml'&&km!=='rate'&&km!=='r11'&&km!=='direct')));
+  $('kpi-cfg-rate').style.display=km==='rate'?'block':'none';$('kpi-cfg-fml').style.display=(km!=='rate'&&km!=='direct')?'block':'none';
   const target=parseFloat($('ki-target').value)||0;
   let fStr='';
   if(kd==='control'){fStr=target===0?'控制类，目标=0：实际=0→100%，实际>0→0%':`控制类：完成率 = MIN(1 + (${target} − 实际) ÷ ${target}, 150%)`;}
@@ -3398,6 +3390,7 @@ function updateKPIPreview(){
   if(isNaN(actual)){$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';return;}
   const rate=calcRate(actual,target,kd);let score=null,err=null;
   try{if(km==='rate'){const cap=nv('kr-cap',150);const fl=nv('kr-floor',0);score=Math.max(Math.min(100*rate,cap),fl);}
+  else if(km==='direct'){score=actual;}
   else{const f=$('kf-fml').value.trim();if(f)score=evalFormula(f,actual,target,rate);else{$('kp-res').style.display='none';return;}}score=Math.round(score*100)/100;}catch(e2){err=e2.message;}
   if(err){$('kp-res').style.display='none';$('kp-err').style.display='block';$('kp-err').textContent='⚠ '+err;$('kp-explain').style.display='none';return;}
   $('kp-err').style.display='none';$('kp-res').style.display='block';$('kp-res-val').textContent=`${(rate*100).toFixed(1)}% → ${score}分`;
@@ -5324,7 +5317,7 @@ function getEmpKPIs(emp){
   if(!p||!p.kpiRefs)return[];
   return p.kpiRefs.map(ref=>{const k=getKpiById(ref.kpiId);return k?{...k,weight:ref.weight||0}:null;}).filter(Boolean);
 }
-// Helper: refresh active page after remote change
+// INIT
 function _reloadActivePage() {
   const activePage = document.querySelector('.page.active');
   if (activePage) {
@@ -5335,12 +5328,10 @@ function _reloadActivePage() {
   toast('🔄 数据已同步（其他用户有新操作）');
 }
 
-// INIT
 loadAll().then(()=>{
   applyI18n();
-  // Realtime subscriptions — replace 30s polling
+  // Realtime 订阅替代 30 秒轮询
   if (window.location.protocol !== 'file:') {
-    // pvs_config: reload config items
     _sbClient.channel('pvs_config_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_config' }, async () => {
         if (!currentUser) return;
@@ -5359,10 +5350,8 @@ loadAll().then(()=>{
           }
           _reloadActivePage();
         } catch(e) {}
-      })
-      .subscribe();
+      }).subscribe();
 
-    // pvs_daily: update dailyScores
     _sbClient.channel('pvs_daily_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_daily' }, payload => {
         if (!currentUser) return;
@@ -5374,10 +5363,8 @@ loadAll().then(()=>{
             _reloadActivePage();
           }
         } catch(e) {}
-      })
-      .subscribe();
+      }).subscribe();
 
-    // pvs_attendance: update attendanceData
     _sbClient.channel('pvs_attendance_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_attendance' }, payload => {
         if (!currentUser) return;
@@ -5390,24 +5377,17 @@ loadAll().then(()=>{
             _reloadActivePage();
           }
         } catch(e) {}
-      })
-      .subscribe();
+      }).subscribe();
 
-    // pvs_salary_reviews: update salaryReviews
     _sbClient.channel('pvs_salary_reviews_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_salary_reviews' }, payload => {
         if (!currentUser) return;
         try {
           const r = payload.new || {};
-          if (r.emp_id) {
-            salaryReviews[r.emp_id] = r.data;
-            _reloadActivePage();
-          }
+          if (r.emp_id) { salaryReviews[r.emp_id] = r.data; _reloadActivePage(); }
         } catch(e) {}
-      })
-      .subscribe();
+      }).subscribe();
 
-    // pvs_overtime: update overtimeData
     _sbClient.channel('pvs_overtime_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_overtime' }, payload => {
         if (!currentUser) return;
@@ -5419,8 +5399,7 @@ loadAll().then(()=>{
             _reloadActivePage();
           }
         } catch(e) {}
-      })
-      .subscribe();
+      }).subscribe();
   }
 });
 </script>
