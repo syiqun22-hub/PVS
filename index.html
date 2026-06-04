@@ -5396,7 +5396,17 @@ function showPage(id,el){
   if(id==='kpi')renderKPI();
   if(id==='attendance')renderAttWeek();
   if(id==='cn-attendance')cnRenderPage();
-  if(id==='turnover'&&typeof renderTurnoverPage==='function')renderTurnoverPage();
+  if(id==='turnover'){
+    if(typeof renderTurnoverPage==='function'){
+      try{renderTurnoverPage();}catch(err){
+        console.error('renderTurnoverPage error:',err);
+        const tb=document.getElementById('to-table');
+        if(tb)tb.innerHTML=`<tr><td colspan="8" style="color:#c0392b;padding:12px">渲染错误：${err.message}</td></tr>`;
+      }
+    }else{
+      console.error('renderTurnoverPage not defined — turnover module failed to load');
+    }
+  }
   if(id==='att-summary')renderSummary();
   if(id==='att-analysis')renderAttAnalysis();
   if(id==='salary-review'){const s=$('sr-dept');if(s.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;s.appendChild(o);});renderSR();}
@@ -6603,6 +6613,12 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   // ---------- 渲染 ----------
   function renderTurnoverPage(){
     if(toY===null){const[y,m]=nowYM();toY=y;toM=m;}
+    // 若员工数据还未从 Supabase 加载完，500ms 后重试
+    const rawList=typeof allEmps==='function'?allEmps():(window.employees||[]);
+    if(rawList.length===0&&typeof loadAll==='function'){
+      const lbl=$('to-month-lbl');if(lbl)lbl.textContent='数据加载中...';
+      setTimeout(renderTurnoverPage,500);return;
+    }
     // 部门下拉
     const sel=$('to-dept-f');
     if(sel){const cur=sel.value;const depts=[...new Set(mxAll().map(gDept))].sort();
@@ -6681,6 +6697,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
   // 工龄分布（本月离职者）
   function renderTenureChart(emps){
+    if(typeof Chart==='undefined')return;
     const first=new Date(toY,toM-1,1),last=new Date(toY,toM,0);
     const buckets=['≤1月','1–3月','3–6月','6–12月','>12月','未知'];
     const counts=[0,0,0,0,0,0];
@@ -6689,7 +6706,8 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
       if(t==null)counts[5]++;
       else if(t<=1)counts[0]++;else if(t<=3)counts[1]++;else if(t<=6)counts[2]++;else if(t<=12)counts[3]++;else counts[4]++;
     });
-    const ctx=$('to-chart-tenure').getContext('2d');
+    const canv=$('to-chart-tenure');if(!canv)return;
+    const ctx=canv.getContext('2d');
     if(_tenureChart)_tenureChart.destroy();
     _tenureChart=new Chart(ctx,{type:'bar',data:{labels:buckets,datasets:[{label:'离职人数',data:counts,backgroundColor:['#e07a5f','#e6a23c','#d4b483','#81b29a','#3d7a64','#adb5bd'],borderRadius:4}]},
       options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
@@ -6697,6 +6715,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
   // 科室近6个月离职率趋势（取本月在岗人数最多的前 8 个科室 + 全厂总览线）
   function renderTrendChart(groups){
+    if(typeof Chart==='undefined')return;
     const months=[];for(let i=5;i>=0;i--){let y=toY,m=toM-i;while(m<1){m+=12;y--;}months.push([y,m]);}
     const labels=months.map(([y,m])=>m+'月');
     const palette=['#2a6fdb','#c0392b','#1f8a5b','#b9770e','#7d3cb5','#0e8a8a','#d6336c','#5a6b7b'];
@@ -6706,7 +6725,8 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     // 全厂总览线
     const allE=Object.values(groups).reduce((a,g)=>a.concat(g.emps),[]);
     datasets.unshift({label:'全厂',data:months.map(([y,m])=>{const st=monthStat(allE,y,m);return st.rate==null?null:+st.rate.toFixed(1);}),borderColor:'#212529',backgroundColor:'#212529',borderWidth:2.5,borderDash:[5,3],pointRadius:0,tension:.3,spanGaps:true});
-    const ctx=$('to-chart-trend').getContext('2d');
+    const tcanv=$('to-chart-trend');if(!tcanv)return;
+    const ctx=tcanv.getContext('2d');
     if(_trendChart)_trendChart.destroy();
     _trendChart=new Chart(ctx,{type:'line',data:{labels,datasets},
       options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'%'}}}}});
