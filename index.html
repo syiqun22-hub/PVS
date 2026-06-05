@@ -1853,7 +1853,7 @@ async function saveAll() {
       if (error) { console.error('saveAll daily error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
     }
 
-    // pvs_attendance
+    // pvs_attendance — 分批发送避免超时
     const attUpserts = [];
     for (const weekKey of Object.keys(attendanceData)) {
       const wk = attendanceData[weekKey];
@@ -1865,8 +1865,11 @@ async function saveAll() {
       }
     }
     if (attUpserts.length) {
-      const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts, { onConflict: 'week_key,emp_id,date' });
-      if (error) { console.error('saveAll attendance error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      const CHUNK = 100;
+      for (let i = 0; i < attUpserts.length; i += CHUNK) {
+        const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts.slice(i, i + CHUNK), { onConflict: 'week_key,emp_id,date' });
+        if (error) { console.error('saveAll attendance error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      }
     }
 
     // pvs_salary_reviews
@@ -1926,7 +1929,19 @@ async function saveAttendanceWeekOnly(weekKey) {
         const chunk = attUpserts.slice(i, i + CHUNK);
         showLoading(`正在保存考勤数据… ${Math.min(i + CHUNK, total)} / ${total}`);
         const { error } = await _sbClient.from('pvs_attendance').upsert(chunk, { onConflict: 'week_key,emp_id,date' });
-        if (error) { console.error('saveAttWeekOnly error', error); return false; }
+        if (error) { console.error('saveAttWeekOnly upsert error:', error); toast('⚠️ 写入失败：' + error.message); return false; }
+      }
+    }
+    // 验证：回查 Supabase 确认行数正确
+    if (attUpserts.length) {
+      showLoading('正在验证保存结果…');
+      const { count, error: cErr } = await _sbClient
+        .from('pvs_attendance')
+        .select('*', { count: 'exact', head: true })
+        .eq('week_key', weekKey);
+      if (!cErr && count !== null && count < attUpserts.length) {
+        console.error(`saveAttWeekOnly verify failed: expected ${attUpserts.length} rows, got ${count}`);
+        return false;
       }
     }
     // 同步保存 lateData（RT 迟到数据存在 pvs_config）
@@ -1967,9 +1982,11 @@ async function loadAll(){
       if (dailyRows) { dailyRows.forEach(r => { if(!dsdR[r.emp_id])dsdR[r.emp_id]={}; dsdR[r.emp_id][r.date]=r.data; }); }
 
       // 从 pvs_attendance 加载考勤
-      const { data: attRows } = await _sbClient.from('pvs_attendance').select('week_key,emp_id,date,status');
+      const { data: attRows, error: attErr } = await _sbClient.from('pvs_attendance').select('week_key,emp_id,date,status');
+      if (attErr) { console.error('[loadAll] pvs_attendance SELECT error:', attErr); toast('⚠️ 考勤数据读取失败：' + attErr.message); }
       attR = {};
       if (attRows) { attRows.forEach(r => { if(!attR[r.week_key])attR[r.week_key]={}; if(!attR[r.week_key][r.emp_id])attR[r.week_key][r.emp_id]={}; attR[r.week_key][r.emp_id][r.date]=r.status; }); }
+      console.log('[loadAll] pvs_attendance rows loaded:', attRows ? attRows.length : 0);
 
       // 从 pvs_salary_reviews 加载调薪记录
       const { data: srRows } = await _sbClient.from('pvs_salary_reviews').select('emp_id,data');
@@ -3699,7 +3716,7 @@ async function applyAttPaste(){
   const ok=await saveAttendanceWeekOnly(weekKey);
   hideLoading();
   _suppressRealtimeFor(0);
-  if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请检查网络后重试');}
+  if(ok){toast('✅ '+msg+'（已写入数据库）');renderAttWeek();}else{toast('⚠️ 保存失败，数据未写入——请刷新后重试');}
 }
 function handleAttFile(e){
   const f=e.target.files[0];if(!f)return;
@@ -3731,7 +3748,7 @@ function handleAttFile(e){
       const ok=await saveAttendanceWeekOnly(weekKey);
       hideLoading();
       _suppressRealtimeFor(0);
-      if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请检查网络后重试');}
+      if(ok){toast('✅ '+msg+'（已写入数据库）');renderAttWeek();}else{toast('⚠️ 保存失败，数据未写入——请刷新后重试');}
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
     e.target.value='';
   };
