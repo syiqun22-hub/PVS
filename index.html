@@ -6601,9 +6601,11 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   // 计算某月某组人群指标
   function monthStat(emps,y,m){
     const first=new Date(y,m-1,1),last=new Date(y,m,0);
+    // 月初人数用上月最后一天，与上月月末一致，不含当月1日入职者
+    const prevLast=new Date(y,m-1,0);
     let start=0,hires=0,resigns=0,end=0;
     emps.forEach(e=>{
-      if(employedOn(e,first))start++;
+      if(employedOn(e,prevLast))start++;
       if(employedOn(e,last))end++;
       if(joinedIn(e,first,last))hires++;
       if(resignedIn(e,first,last))resigns++;
