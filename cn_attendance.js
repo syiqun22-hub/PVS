@@ -223,7 +223,7 @@ function compute(rec){
     else if(p.k==='chai'){ owDays+=1; region+=1; owActualNoSun+=(w===0?0:1); }
     else if(p.k==='hl'){ owDays+=1; hl++; region+=1; }
     else if(p.k==='ldoff'){ ld++; region+=1; }
-    else if(p.k==='qj'){ qj++; }
+    else if(p.k==='qj'){ if((isReg(cat)||isLeader(cat))&&w===0){/* 技能职周日探亲假不计 */}else qj++; }
     else if(p.k==='sj'){ sj++; }
     else if(p.k==='bing'){ bing++; }
     else if(p.k==='hun'||p.k==='sang'||p.k==='pei'){ paid++; }
@@ -232,7 +232,7 @@ function compute(rec){
   total=owDays+cnDays;
   const owY = isBiz(cat)?bizY:skY;        // 国外延时
   const owW = isBiz(cat)?bizW:skW;        // 国外周末
-  const qjReport=(isLeader(cat)||isBiz(cat))?qj:0;   // 探亲假仅班长+业务职
+  const qjReport=qj;   // 技能职探亲假计入总出勤（周日已排除）
   total=owDays+cnDays+qjReport;           // 探亲假计入出勤天数
   const zhuwai = isReg(cat)?0:region;      // 普通技能职驻外补贴=0
   const actual = isReg(cat)?owActualNoSun:null;       // 实际海外出勤仅普通技能职
@@ -241,7 +241,7 @@ function compute(rec){
 
   return {id:rec.id,name:rec.name,dept:rec.dept,section:rec.section,cat,group:catGroup(cat),bucket:catBucket(cat),
     total:+total.toFixed(1),owDays:+owDays.toFixed(1),cnDays:+cnDays.toFixed(1),
-    qj:qjReport,sj,bing,paid,hl,ld,
+    qj,sj,bing,paid,hl,ld,
     owY:+owY.toFixed(1),owW:+owW.toFixed(1),cnY:+cnY.toFixed(1),cnW:+cnW.toFixed(1),holOT,
     region:+region.toFixed(1),zhuwai:+zhuwai.toFixed(1),actual:actual==null?null:+actual.toFixed(1),meal:+meal.toFixed(1),
     totHours:+totHours.toFixed(1),otTotal:+otTotal.toFixed(1)};
