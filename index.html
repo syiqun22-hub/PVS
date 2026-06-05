@@ -1853,21 +1853,12 @@ async function saveAll() {
       if (error) { console.error('saveAll daily error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
     }
 
-    // pvs_attendance — 分批发送避免超时
-    const attUpserts = [];
-    for (const weekKey of Object.keys(attendanceData)) {
-      const wk = attendanceData[weekKey];
-      for (const empId of Object.keys(wk)) {
-        const row = wk[empId];
-        for (const date of Object.keys(row)) {
-          attUpserts.push({ week_key: weekKey, emp_id: empId, date, status: row[date] });
-        }
-      }
-    }
-    if (attUpserts.length) {
-      const CHUNK = 100;
-      for (let i = 0; i < attUpserts.length; i += CHUNK) {
-        const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts.slice(i, i + CHUNK), { onConflict: 'week_key,emp_id,date' });
+    // pvs_attendance — 通过 pvs_config 保存（每周一条记录）
+    const attWeekUpserts = Object.keys(attendanceData).map(wk => ({ id: 'att_' + wk, value: attendanceData[wk] }));
+    if (attWeekUpserts.length) {
+      const CHUNK = 50;
+      for (let i = 0; i < attWeekUpserts.length; i += CHUNK) {
+        const { error } = await _sbClient.from('pvs_config').upsert(attWeekUpserts.slice(i, i + CHUNK), { onConflict: 'id' });
         if (error) { console.error('saveAll attendance error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
       }
     }
@@ -1898,6 +1889,7 @@ async function saveAll() {
 }
 
 async function saveAndToast(m) {
+  _suppressRealtimeFor(15000);
   const ok = await saveAll();
   if(ok !== false){ _lastSavedAt = Date.now(); toast(m); }
 }
@@ -1915,42 +1907,18 @@ async function saveAttendanceWeekOnly(weekKey) {
   if (!_sbWriteAllowed()) return true;
   try {
     const wk = attendanceData[weekKey] || {};
-    const attUpserts = [];
-    for (const empId of Object.keys(wk)) {
-      const row = wk[empId];
-      for (const date of Object.keys(row)) {
-        attUpserts.push({ week_key: weekKey, emp_id: empId, date, status: row[date] });
-      }
-    }
-    if (attUpserts.length) {
-      const CHUNK = 100;
-      const total = attUpserts.length;
-      for (let i = 0; i < total; i += CHUNK) {
-        const chunk = attUpserts.slice(i, i + CHUNK);
-        showLoading(`正在保存考勤数据… ${Math.min(i + CHUNK, total)} / ${total}`);
-        const { error } = await _sbClient.from('pvs_attendance').upsert(chunk, { onConflict: 'week_key,emp_id,date' });
-        if (error) { console.error('saveAttWeekOnly upsert error:', error); toast('⚠️ 写入失败：' + error.message); return false; }
-      }
-    }
-    // 验证：回查 Supabase 确认行数正确
-    if (attUpserts.length) {
-      showLoading('正在验证保存结果…');
-      const { count, error: cErr } = await _sbClient
-        .from('pvs_attendance')
-        .select('*', { count: 'exact', head: true })
-        .eq('week_key', weekKey);
-      if (!cErr && count !== null && count < attUpserts.length) {
-        console.error(`saveAttWeekOnly verify failed: expected ${attUpserts.length} rows, got ${count}`);
-        return false;
-      }
-    }
-    // 同步保存 lateData（RT 迟到数据存在 pvs_config）
+    showLoading('正在保存考勤数据…');
+    const { error } = await _sbClient.from('pvs_config').upsert(
+      [{ id: 'att_' + weekKey, value: wk }], { onConflict: 'id' }
+    );
+    if (error) { console.error('saveAttWeekOnly error:', error); toast('⚠️ 写入失败：' + error.message); return false; }
+    // 同步保存 lateData
     if (Object.keys(lateData).length) {
       showLoading('正在保存迟到数据…');
-      const { error } = await _sbClient.from('pvs_config').upsert(
+      const { error: ldErr } = await _sbClient.from('pvs_config').upsert(
         [{ id: 'lateData', value: lateData }], { onConflict: 'id' }
       );
-      if (error) console.error('saveAttWeekOnly lateData error', error);
+      if (ldErr) console.error('saveAttWeekOnly lateData error', ldErr);
     }
     _lastSavedAt = Date.now();
     return true;
@@ -1981,12 +1949,16 @@ async function loadAll(){
       dsdR = {};
       if (dailyRows) { dailyRows.forEach(r => { if(!dsdR[r.emp_id])dsdR[r.emp_id]={}; dsdR[r.emp_id][r.date]=r.data; }); }
 
-      // 从 pvs_attendance 加载考勤
-      const { data: attRows, error: attErr } = await _sbClient.from('pvs_attendance').select('week_key,emp_id,date,status');
-      if (attErr) { console.error('[loadAll] pvs_attendance SELECT error:', attErr); toast('⚠️ 考勤数据读取失败：' + attErr.message); }
+      // 从 pvs_config 加载考勤（att_week_* 键）
       attR = {};
-      if (attRows) { attRows.forEach(r => { if(!attR[r.week_key])attR[r.week_key]={}; if(!attR[r.week_key][r.emp_id])attR[r.week_key][r.emp_id]={}; attR[r.week_key][r.emp_id][r.date]=r.status; }); }
-      console.log('[loadAll] pvs_attendance rows loaded:', attRows ? attRows.length : 0);
+      if (cfgRows) {
+        cfgRows.forEach(r => {
+          if (r.id && r.id.startsWith('att_week_')) {
+            const weekKey = r.id.slice(4); // remove 'att_' prefix
+            attR[weekKey] = r.value || {};
+          }
+        });
+      }
 
       // 从 pvs_salary_reviews 加载调薪记录
       const { data: srRows } = await _sbClient.from('pvs_salary_reviews').select('emp_id,data');
@@ -3715,8 +3687,7 @@ async function applyAttPaste(){
   showLoading('正在保存考勤数据…');
   const ok=await saveAttendanceWeekOnly(weekKey);
   hideLoading();
-  _suppressRealtimeFor(0);
-  if(ok){toast('✅ '+msg+'（已写入数据库）');renderAttWeek();}else{toast('⚠️ 保存失败，数据未写入——请刷新后重试');}
+  if(ok){_lastSavedAt=Date.now();toast('✅ '+msg+'（已写入数据库）');renderAttWeek();}else{toast('⚠️ 保存失败，数据未写入——请刷新后重试');}
 }
 function handleAttFile(e){
   const f=e.target.files[0];if(!f)return;
@@ -5514,6 +5485,8 @@ function getEmpKPIs(emp){
 // INIT
 function _reloadActivePage() {
   if (_suppressRealtime) return;
+  // 如果距上次保存不足 8 秒，视为自己触发的 Realtime，静默处理
+  if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
   const activePage = document.querySelector('.page.active');
   if (activePage) {
     const pid = activePage.id.replace('page-', '');
@@ -5543,6 +5516,13 @@ loadAll().then(()=>{
             if (cfg.monthlyScores) monthlyScores = cfg.monthlyScores;
             if (cfg.expectedDays) expectedDays = cfg.expectedDays;
             if (cfg.lateData) lateData = cfg.lateData;
+            // handle attendance week keys
+            cfgRows.forEach(r => {
+              if (r.id && r.id.startsWith('att_week_')) {
+                const weekKey = r.id.slice(4);
+                attendanceData[weekKey] = r.value || {};
+              }
+            });
           }
           _reloadActivePage();
         } catch(e) {}
