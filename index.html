@@ -875,10 +875,6 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <button class="month-btn" onclick="chAnaWk(1)">›</button>
       <button class="btn btn-sm" style="margin-left:6px" onclick="anaWeekOff=0;renderAttAnalysis()">本周</button>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:3px">
-      <button class="btn btn-sm" id="ana-grp-dept" onclick="setAnaGrp('dept')" style="background:var(--color-text-primary);color:var(--color-background-primary);border-color:var(--color-text-primary)">按部门</button>
-      <button class="btn btn-sm" id="ana-grp-sec" onclick="setAnaGrp('section')">按科室</button>
-    </div>
     <select id="ana-dept-f" onchange="renderAttAnalysis()" style="width:140px"><option value="">全部部门</option></select>
     <label id="ana-excl-wrap" title="在职但本周无任何考勤记录的员工，视为尚未填报，不计入出勤率与旷工占比" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:5px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md)">
       <input type="checkbox" id="ana-excl-blank" checked="" onchange="anaExclBlank=this.checked;renderAttAnalysis()" style="cursor:pointer;margin:0">
@@ -893,7 +889,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div class="card-header"><div class="card-title" id="ana-tbl-title">部门考勤分析</div></div>
     <div style="overflow-x:auto">
       <table style="width:100%"><thead><tr>
-        <th>名称</th><th style="text-align:right">人数</th><th style="text-align:right">出勤天数(A)</th><th style="text-align:right">应出勤天数</th>
+        <th style="text-align:left">部门</th><th style="text-align:left">科室</th><th style="text-align:right">人数</th><th style="text-align:right">出勤天数(A)</th><th style="text-align:right">应出勤天数</th>
         <th style="text-align:right">出勤率</th><th style="text-align:right">缺勤天数</th><th style="text-align:right">旷工天数(FI)</th><th style="text-align:right">旷工占比</th>
       </tr></thead><tbody id="ana-tbl-body"></tbody></table>
     </div>
@@ -921,6 +917,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <div class="tabs">
     <button class="tab active" onclick="cnSwitchTab('report',this)">月度考勤提报</button>
     <button class="tab" onclick="cnSwitchTab('analysis',this)">分析汇总</button>
+    <button class="tab" onclick="cnSwitchTab('leave',this)">休假台账</button>
   </div>
 
   <!-- Tab1: 月度提报 -->
@@ -1015,6 +1012,25 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       </div>
     </div>
   </div>
+
+  <!-- Tab3: 休假台账 -->
+  <div id="cn-leave-panel" style="display:none">
+    <div class="toolbar">
+      <select id="cn-leave-dept-f" onchange="cnRenderLeave()" style="width:150px"><option value="">全部部门</option></select>
+      <input id="cn-leave-search" placeholder="搜索工号 / 姓名" oninput="cnRenderLeave()" style="width:150px">
+      <button class="btn" style="margin-left:auto" onclick="cnExportLeave()"><i class="ti ti-download"></i> 导出台账</button>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="cn-detail" id="cn-leave-table">
+        <thead><tr>
+          <th>工号</th><th>姓名</th><th>部门</th><th>职类</th>
+          <th>次序</th><th>假期开始（前V）</th><th>假期结束（后V）</th>
+          <th>休假天数</th><th>应休天数</th><th>前期结余</th><th>本次超期天数</th>
+        </tr></thead>
+        <tbody id="cn-leave-body"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 <!-- SALARY REVIEW -->
 <div id="page-salary-review" class="page">
@@ -1039,17 +1055,21 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     </div>
   </div>
 
-  <!-- 本周到期提醒 -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-header">
-      <div class="card-title">⏰ 本周待评价名单（距本周一≤15天到达节点）</div>
-      <span id="ledger-week-count" class="badge badge-info">0人</span>
-    </div>
-    <div id="ledger-week-list" style="font-size:13px;color:var(--color-text-secondary)">加载中...</div>
+  <!-- 标签页切换 -->
+  <div style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid var(--color-border-secondary)">
+    <button id="ledger-tab-btn-pending" class="ledger-tab-btn active" onclick="switchLedgerTab('pending')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-primary);border-bottom:2px solid var(--color-primary);margin-bottom:-2px">
+      ⏰ 待考核 <span id="ledger-tab-count-pending" class="badge badge-info" style="margin-left:6px">0</span>
+    </button>
+    <button id="ledger-tab-btn-week" class="ledger-tab-btn" onclick="switchLedgerTab('week')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
+      📅 当周调薪 <span id="ledger-tab-count-week" class="badge" style="margin-left:6px;background:#dcfce7;color:#166534">0</span>
+    </button>
+    <button id="ledger-tab-btn-past" class="ledger-tab-btn" onclick="switchLedgerTab('past')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
+      ✅ 已过调薪节点 <span id="ledger-tab-count-past" class="badge" style="margin-left:6px;background:#f3f4f6;color:#374151">0</span>
+    </button>
   </div>
 
   <!-- 筛选栏 -->
-  <div class="toolbar">
+  <div class="toolbar" style="margin-top:12px">
     <select id="ledger-filter-node" onchange="renderLedger()" style="width:130px">
       <option value="">全部节点</option>
       <option value="3个月">3个月</option>
@@ -1579,7 +1599,15 @@ function getEmpSalaryNode(emp, refDate){
   return null;
 }
 
-// 获取距今N天内到达某节点的员工 (15天预警窗口)
+// 调薪日 = 入职日 + 节点月数 的下一天
+function getSalaryDate(joinDate, months){
+  const d=new Date(joinDate); d.setHours(0,0,0,0);
+  d.setMonth(d.getMonth()+months);
+  d.setDate(d.getDate()+1); // 满节点当天的下一天
+  return d;
+}
+
+// 获取15天内即将到达调薪日的员工（调薪日前15天起预警）
 function getUpcomingNodeEmps(windowDays=15){
   const today=new Date(); today.setHours(0,0,0,0);
   const result=[];
@@ -1587,14 +1615,13 @@ function getUpcomingNodeEmps(windowDays=15){
     if(!emp.joinDate)return;
     const pos=positions.find(p=>p.name===emp.position);
     if(!pos)return;
-    // Only O category employees
     if(pos.category!=='O'&&pos.category!=='O-T'&&pos.category!=='O-S')return;
-    const join=new Date(emp.joinDate); join.setHours(0,0,0,0);
     SALARY_NODES.forEach(node=>{
-      const nodeDate=new Date(join); nodeDate.setMonth(nodeDate.getMonth()+node.months);
-      const daysUntil=Math.round((nodeDate-today)/86400000);
+      const salaryDate=getSalaryDate(emp.joinDate,node.months);
+      const daysUntil=Math.round((salaryDate-today)/86400000);
+      // 预警：调薪日前15天到调薪日当天
       if(daysUntil>=0&&daysUntil<=windowDays){
-        result.push({emp,node,nodeDate,daysUntil});
+        result.push({emp,node,nodeDate:salaryDate,daysUntil});
       }
     });
   });
@@ -3769,52 +3796,79 @@ function computeWeekStats(emps,wkOff){
   return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate};
 }
 function renderAttAnalysis(){
-  // fill dept filter
   const dfSel=$('ana-dept-f');if(dfSel&&dfSel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;dfSel.appendChild(o);});
   $('ana-week-lbl').textContent=wLabel(anaWeekOff);
   const dF=$('ana-dept-f').value;
   let emps=mxEmps().filter(isSkillPos);if(dF)emps=emps.filter(e=>e.dept===dF);
-  // group
-  const groups={};
-  if(anaGrp==='dept'){
-    emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});
-  }else{
-    emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]={dept:e.dept||'未分配',emps:[]};groups[k].emps.push(e);});
-  }
-  let rows;
-  if(anaGrp==='dept'){
-    rows=Object.keys(groups).map(name=>({name,dept:'',...computeWeekStats(groups[name],anaWeekOff)}))
-      .sort((a,b)=>b.attRate-a.attRate);
-  }else{
-    rows=Object.keys(groups).map(name=>({name,dept:groups[name].dept,...computeWeekStats(groups[name].emps,anaWeekOff)}))
-      .sort((a,b)=>(a.dept||'').localeCompare(b.dept||'')||b.attRate-a.attRate);
-  }
-  if(anaExclBlank)rows=rows.filter(r=>r.emp>0);   // 整组无考勤记录则不显示
+  // 按部门→科室分组
+  const byDept={};
+  emps.forEach(e=>{
+    const d=e.dept||'未分配';
+    const s=(e.section&&e.section!==e.dept)?e.section:'__none__';
+    if(!byDept[d])byDept[d]={emps:[],secs:{}};
+    byDept[d].emps.push(e);
+    if(!byDept[d].secs[s])byDept[d].secs[s]=[];
+    byDept[d].secs[s].push(e);
+  });
+  // 各部门汇总行（用于图表）
+  const deptSummary=Object.keys(byDept).map(dept=>({name:dept,...computeWeekStats(byDept[dept].emps,anaWeekOff)}))
+    .filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
   // overall stat cards
   const all=computeWeekStats(emps,anaWeekOff);
+  const deptCount=Object.keys(byDept).length;
   $('ana-stat-cards').innerHTML=[
-    {l:'参与统计人数',v:all.emp,s:(all.excluded>0?`已排除 ${all.excluded} 名无记录 · `:'')+rows.length+(anaGrp==='dept'?' 个部门':' 个科室'),c:'var(--color-text-primary)'},
+    {l:'参与统计人数',v:all.emp,s:(all.excluded>0?`已排除 ${all.excluded} 名无记录 · `:'')+deptCount+' 个部门',c:'var(--color-text-primary)'},
     {l:'出勤率',v:all.attRate.toFixed(1)+'%',s:`出勤 ${all.aDays} / 应出勤 ${all.expTotal} 天`,c:'#0c63e4'},
     {l:'缺勤天数',v:all.absDays,s:'应出勤 − 出勤',c:'#856404'},
     {l:'旷工占比',v:all.fiRate.toFixed(2)+'%',s:`旷工 ${all.fiDays} 天`,c:'#842029'},
   ].map(x=>`<div class="stat-mini"><div class="stat-mini-lbl">${x.l}</div><div class="stat-mini-val" style="color:${x.c}">${x.v}</div><div class="stat-mini-sub">${x.s}</div></div>`).join('');
-  // table
-  $('ana-tbl-title').textContent=(anaGrp==='dept'?'部门':'科室')+'考勤分析 — '+wLabel(anaWeekOff);
-  $('ana-ch1-title').textContent='各'+(anaGrp==='dept'?'部门':'科室')+'出勤率对比';
-  $('ana-ch2-title').textContent='各'+(anaGrp==='dept'?'部门':'科室')+'旷工占比对比';
-  if(!rows.length){$('ana-tbl-body').innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';}
-  else{
-    let prevDept=null;
-  $('ana-tbl-body').innerHTML=rows.map(r=>{
-      const rateCls=r.attRate>=95?'badge-success':r.attRate>=85?'badge-info':r.attRate>=70?'badge-warning':'badge-danger';
-      const fiCls=r.fiRate<=1?'badge-success':r.fiRate<=3?'badge-warning':'badge-danger';
-      let deptHdr='';
-      if(anaGrp==='sec'&&r.dept!==prevDept){prevDept=r.dept;deptHdr=`<tr style="background:var(--color-background-secondary)"><td colspan="8" style="padding:5px 8px;font-weight:600;color:var(--color-text-secondary);font-size:12px">▸ ${r.dept}</td></tr>`;}
-      return deptHdr+`<tr><td style="padding-left:${anaGrp==='sec'?'20px':'8px'}"><strong>${r.name}</strong></td><td style="text-align:right;font-family:monospace">${r.emp}</td><td style="text-align:right;font-family:monospace;color:#155724;font-weight:600">${r.aDays}</td><td style="text-align:right;font-family:monospace">${r.expTotal}</td><td style="text-align:right"><span class="badge ${rateCls}" style="font-family:monospace">${r.attRate.toFixed(1)}%</span></td><td style="text-align:right;font-family:monospace;color:#856404">${r.absDays}</td><td style="text-align:right;font-family:monospace;color:${r.fiDays>0?'#dc3545':'var(--color-text-tertiary)'};font-weight:${r.fiDays>0?'600':'400'}">${r.fiDays}</td><td style="text-align:right"><span class="badge ${fiCls}" style="font-family:monospace">${r.fiRate.toFixed(2)}%</span></td></tr>`;
-    }).join('');
+  $('ana-tbl-title').textContent='部门 / 科室考勤分析 — '+wLabel(anaWeekOff);
+  $('ana-ch1-title').textContent='各部门出勤率对比';
+  $('ana-ch2-title').textContent='各部门旷工占比对比';
+  // 构建表格 HTML
+  function rowCls(v,hi,mid,lo){return v>=hi?'badge-success':v>=mid?'badge-info':v>=lo?'badge-warning':'badge-danger';}
+  function fiCls(v){return v<=1?'badge-success':v<=3?'badge-warning':'badge-danger';}
+  function secRow(st,secName){
+    const rc=rowCls(st.attRate,95,85,70),fc=fiCls(st.fiRate);
+    return `<tr><td></td><td style="text-align:left"><span style="color:#adb5bd">└</span> ${secName}</td>`+
+      `<td style="text-align:right;font-family:monospace">${st.emp}</td>`+
+      `<td style="text-align:right;font-family:monospace;color:#155724">${st.aDays}</td>`+
+      `<td style="text-align:right;font-family:monospace">${st.expTotal}</td>`+
+      `<td style="text-align:right"><span class="badge ${rc}" style="font-family:monospace">${st.attRate.toFixed(1)}%</span></td>`+
+      `<td style="text-align:right;font-family:monospace;color:#856404">${st.absDays}</td>`+
+      `<td style="text-align:right;font-family:monospace;color:${st.fiDays>0?'#dc3545':'var(--color-text-tertiary)'};font-weight:${st.fiDays>0?600:400}">${st.fiDays}</td>`+
+      `<td style="text-align:right"><span class="badge ${fc}" style="font-family:monospace">${st.fiRate.toFixed(2)}%</span></td></tr>`;
   }
-  // charts
-  drawAnaCharts(rows);
+  let html='';
+  deptSummary.forEach(d=>{
+    const rc=rowCls(d.attRate,95,85,70),fc=fiCls(d.fiRate);
+    const secs=byDept[d.name].secs;
+    const hasSecs=Object.keys(secs).some(k=>k!=='__none__');
+    const b='font-weight:700;';
+    html+=`<tr style="background:var(--color-background-info)">`+
+      `<td style="text-align:left;${b}">${d.name}</td>`+
+      `<td style="text-align:left;${b}color:var(--color-text-secondary)">${hasSecs?'部门汇总':''}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.emp}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace;color:#155724">${d.aDays}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.expTotal}</td>`+
+      `<td style="text-align:right;${b}"><span class="badge ${rc}" style="font-family:monospace">${d.attRate.toFixed(1)}%</span></td>`+
+      `<td style="text-align:right;${b}font-family:monospace;color:#856404">${d.absDays}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace;color:${d.fiDays>0?'#dc3545':'var(--color-text-tertiary)'}">${d.fiDays}</td>`+
+      `<td style="text-align:right;${b}"><span class="badge ${fc}" style="font-family:monospace">${d.fiRate.toFixed(2)}%</span></td></tr>`;
+    if(hasSecs){
+      Object.keys(secs).filter(k=>k!=='__none__').sort().forEach(sec=>{
+        const st=computeWeekStats(secs[sec],anaWeekOff);
+        if(anaExclBlank&&st.emp===0)return;
+        html+=secRow(st,sec);
+      });
+      if(secs['__none__']){
+        const st=computeWeekStats(secs['__none__'],anaWeekOff);
+        if(!anaExclBlank||st.emp>0)html+=secRow(st,'（部门直属）');
+      }
+    }
+  });
+  $('ana-tbl-body').innerHTML=html||'<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';
+  drawAnaCharts(deptSummary);
 }
 function drawAnaCharts(rows){
   const labels=rows.map(r=>r.name);
@@ -4150,34 +4204,27 @@ function renderWatchBlacklist(){
   }
 }
 
+let _ledgerActiveTab='pending';
+
+function switchLedgerTab(tab){
+  _ledgerActiveTab=tab;
+  ['pending','week','past'].forEach(t=>{
+    const btn=document.getElementById('ledger-tab-btn-'+t);
+    if(!btn)return;
+    if(t===tab){
+      btn.style.color='var(--color-primary)';
+      btn.style.borderBottom='2px solid var(--color-primary)';
+    } else {
+      btn.style.color='var(--color-text-secondary)';
+      btn.style.borderBottom='2px solid transparent';
+    }
+  });
+  renderLedger();
+}
+
 function renderLedgerWeek(){
-  const upcoming=getUpcomingNodeEmps(15);
-  const el=document.getElementById('ledger-week-list');
-  const cnt=document.getElementById('ledger-week-count');
-  if(!el)return;
-  cnt.textContent=upcoming.length+'人';
-  if(!upcoming.length){el.innerHTML='<div style="color:var(--color-text-tertiary);padding:8px 0">本周暂无员工到达考核节点</div>';return;}
-  el.innerHTML=upcoming.map(({emp,node,daysUntil})=>{
-    const pos=positions.find(p=>p.name===emp.position)||{};
-    const status=isBlacklisted(emp.id)?'blacklisted':getNodeEvalStatus(emp.id,node.label);
-    const statusBadge=getLedgerStatusBadge(status);
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:30px;height:30px;border-radius:50%;background:var(--color-background-info);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;color:var(--color-text-info)">${emp.name.slice(0,1)}</div>
-        <div>
-          <span style="font-weight:500">${emp.name}</span>
-          <span style="font-size:11px;color:var(--color-text-secondary);margin-left:6px">${emp.id}</span>
-          <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">${emp.dept} · ${emp.position||'—'}</span>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="badge" style="background:#dbeafe;color:#1d4ed8">${node.label}节点</span>
-        <span class="badge" style="background:#fef3c7;color:#92400e">${daysUntil===0?'今天到期':'还有'+daysUntil+'天'}</span>
-        ${statusBadge}
-        ${status==='pending'||status==='evaluating'?`<button class="btn btn-sm btn-p" onclick="openLedgerEval('${emp.id}','${node.label}')">评估</button>`:''}
-      </div>
-    </div>`;
-  }).join('');
+  // kept for backward compat — now handled inside renderLedger tabs
+  renderLedger();
 }
 
 function getLedgerStatusBadge(status){
@@ -4206,10 +4253,14 @@ function renderLedger(){
   const el=document.getElementById('ledger-list');
   if(!el)return;
 
-  // Build all ledger rows: every O-category employee × every node they've reached or are approaching
   const today=new Date(); today.setHours(0,0,0,0);
-  let rows=[];
+  // Current week: Monday to Sunday
+  const dayOfWeek=today.getDay()===0?6:today.getDay()-1; // 0=Mon
+  const weekMon=new Date(today); weekMon.setDate(today.getDate()-dayOfWeek);
+  const weekSun=new Date(weekMon); weekSun.setDate(weekMon.getDate()+6);
 
+  // Build all rows
+  const allRows=[];
   employees.forEach(emp=>{
     if(!emp.joinDate)return;
     const pos=positions.find(p=>p.name===emp.position);
@@ -4218,48 +4269,61 @@ function renderLedger(){
     if(deptF&&emp.dept!==deptF)return;
     if(searchF&&!emp.name.toLowerCase().includes(searchF)&&!emp.id.toLowerCase().includes(searchF))return;
 
-    const join=new Date(emp.joinDate); join.setHours(0,0,0,0);
     const sr=salaryReviews[emp.id]||{};
     const blacklisted=isBlacklisted(emp.id);
 
     SALARY_NODES.forEach(node=>{
-      const nodeDate=new Date(join); nodeDate.setMonth(nodeDate.getMonth()+node.months);
-      const daysUntil=Math.round((nodeDate-today)/86400000);
-      // Show nodes that are within 15 days future or already past
-      if(daysUntil>15)return;
+      const salaryDate=getSalaryDate(emp.joinDate,node.months);
+      const daysUntil=Math.round((salaryDate-today)/86400000);
 
       let status=blacklisted?'blacklisted':getNodeEvalStatus(emp.id,node.label);
-
-      // Check if there's a watch node replacing this one
       const nodeData=sr.nodes&&sr.nodes[node.label];
-      if(nodeData&&nodeData.watchUntil){
-        // Check if watch period has watch evaluation scheduled
-        status='watching';
-      }
+      if(nodeData&&nodeData.watchUntil) status='watching';
 
       if(nodeF&&nodeF!==node.label)return;
       if(statusF&&statusF!==status)return;
 
-      const discScore=calcDisciplineScore(emp.id, nodeDate);
+      const discScore=calcDisciplineScore(emp.id, salaryDate);
       const examScore=nodeData?.examScore;
       const salGrade=pos.level+'-'+node.grade;
 
-      rows.push({emp,pos,node,nodeDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted});
+      // Categorize
+      let tabCat;
+      if(daysUntil>15) return; // too far future, not shown
+      if(daysUntil>=0&&daysUntil<=15) tabCat='pending'; // upcoming within 15 days
+      else if(salaryDate>=weekMon&&salaryDate<=weekSun) tabCat='week'; // salary date in current week (past part)
+      else tabCat='past'; // already past
+
+      // Also mark as 'week' if salary date falls in current week regardless of pending
+      if(daysUntil>=0&&salaryDate>=weekMon&&salaryDate<=weekSun) tabCat='week';
+
+      allRows.push({emp,pos,node,salaryDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted,tabCat});
     });
   });
 
+  // Count per tab
+  const countPending=allRows.filter(r=>r.tabCat==='pending').length;
+  const countWeek=allRows.filter(r=>r.tabCat==='week').length;
+  const countPast=allRows.filter(r=>r.tabCat==='past').length;
+  const setCnt=(id,n)=>{const e=document.getElementById(id);if(e)e.textContent=n;};
+  setCnt('ledger-tab-count-pending',countPending);
+  setCnt('ledger-tab-count-week',countWeek);
+  setCnt('ledger-tab-count-past',countPast);
+
+  const rows=allRows.filter(r=>r.tabCat===_ledgerActiveTab);
+
   if(!rows.length){el.innerHTML='<div class="card" style="text-align:center;color:var(--color-text-tertiary);padding:32px">暂无符合条件的记录</div>';return;}
 
-  el.innerHTML=rows.map(({emp,pos,node,nodeDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted})=>{
+  el.innerHTML=rows.map(({emp,pos,node,salaryDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted})=>{
     const statusBadge=getLedgerStatusBadge(status);
-    const ndStr=nodeDate.toISOString().slice(0,10);
-    const timeTag=daysUntil<0?`<span style="font-size:11px;color:var(--color-text-tertiary)">已过${-daysUntil}天</span>`
-      :daysUntil===0?`<span class="badge" style="background:#fef3c7;color:#92400e">今天到期</span>`
-      :`<span class="badge" style="background:#dbeafe;color:#1d4ed8">还有${daysUntil}天</span>`;
+    const ndStr=salaryDate.toISOString().slice(0,10);
+    const timeTag=daysUntil<0
+      ?`<span style="font-size:11px;color:var(--color-text-tertiary)">已过${-daysUntil}天</span>`
+      :daysUntil===0?`<span class="badge" style="background:#fef3c7;color:#92400e">今日调薪</span>`
+      :`<span class="badge" style="background:#dbeafe;color:#1d4ed8">还有${daysUntil}天调薪</span>`;
 
     const examColor=examScore===undefined?'var(--color-text-tertiary)':examScore>=90?'#16a34a':examScore>=60?'#2563eb':'#dc2626';
     const discColor=discScore>=70?'#16a34a':discScore>=50?'#d97706':'#dc2626';
-
     const canEval=!blacklisted&&(status==='pending'||status==='evaluating'||status==='watching');
     const deptOp=nodeData?.deptOpinion||'';
     const watchInfo=nodeData?.watchUntil?`<span style="font-size:11px;color:#92400e">待观察至 ${nodeData.watchUntil}</span>`:'';
@@ -4278,7 +4342,7 @@ function renderLedger(){
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
           <span class="badge" style="background:#f3f4f6;color:#374151">${node.label}节点</span>
-          <span style="font-size:11px;color:var(--color-text-tertiary)">${ndStr}</span>
+          <span style="font-size:11px;color:var(--color-text-tertiary)">调薪日 ${ndStr}</span>
           ${timeTag}
           ${statusBadge}
           ${watchInfo}

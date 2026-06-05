@@ -241,7 +241,8 @@ window.cnSwitchTab=function(tab,el){
   el.classList.add('active');
   $('cn-report-panel').style.display=tab==='report'?'block':'none';
   $('cn-analysis-panel').style.display=tab==='analysis'?'block':'none';
-  if(tab==='report')cnRenderGrid(); else cnRenderAnalysis();
+  if($('cn-leave-panel'))$('cn-leave-panel').style.display=tab==='leave'?'block':'none';
+  if(tab==='report')cnRenderGrid();else if(tab==='analysis')cnRenderAnalysis();else cnRenderLeave();
 };
 
 /* ===================================================================
@@ -263,7 +264,7 @@ window.cnRenderGrid=function(){
       const p=parse(r.days[d]);
       cells+=`<td class="${cellCls(p)}"><input class="cn-cell" value="${esc(r.days[d])}" data-r="${ri}" data-d="${d}"></td>`;
     }
-    return `<tr><td class="cn-fix cn-fix1" style="font-family:monospace;font-size:11px">${esc(r.id)}</td><td class="cn-fix cn-fix2"><strong>${esc(r.name)}</strong></td><td class="cn-fix cn-fix3" style="font-size:11px;color:var(--color-text-secondary)">${esc(r.dept)}</td><td style="font-size:11px">${esc(r.cat)}</td>${cells}</tr>`;
+    return `<tr><td class="cn-fix cn-fix1" style="font-family:monospace;font-size:11px">${esc(r.id)}</td><td class="cn-fix cn-fix2"><strong>${esc(r.name)}</strong></td><td class="cn-fix cn-fix3" style="font-size:11px;color:var(--color-text-secondary)">${esc(r.dept)}</td><td style="font-size:11px;white-space:nowrap">${esc(catGroup(r.cat))}</td>${cells}</tr>`;
   }).join('');
   // 绑定编辑
   $('cn-grid-body').querySelectorAll('.cn-cell').forEach(inp=>{
@@ -424,6 +425,135 @@ window.cnImportFile=function(e){
     e.target.value='';
   };
   r.readAsArrayBuffer(f);
+};
+
+/* ===================================================================
+   Tab3 — 休假台账
+   =================================================================== */
+
+// 从 localStorage 读取某月某人的日程数据
+function cnGetMonthDays(y,m,empId){
+  const key=`cnAtt_${y}-${String(m).padStart(2,'0')}`;
+  let saved=null;try{saved=JSON.parse(localStorage.getItem(key));}catch(e){}
+  if(!saved)return null;
+  const rec=saved.find(r=>String(r.id)===String(empId));
+  return rec?rec.days:null;
+}
+
+// 构建某员工的全历史时间线 [{date,val}, ...]，按月升序扫描 localStorage
+function cnBuildTimeline(empId){
+  const keys=[];
+  try{for(const k in localStorage){if(k.startsWith('cnAtt_'))keys.push(k);}}catch(e){}
+  keys.sort();
+  const timeline=[];
+  keys.forEach(key=>{
+    const ym=key.slice(6);
+    const y=+ym.slice(0,4),m=+ym.slice(5,7);
+    const days=cnGetMonthDays(y,m,empId);
+    if(!days)return;
+    const dim=new Date(y,m,0).getDate();
+    for(let d=1;d<=dim;d++){
+      const val=(days[d-1]||'').trim();
+      timeline.push({date:new Date(y,m-1,d),val});
+    }
+  });
+  return timeline;
+}
+
+function fmtDate(d){
+  if(!d)return '—';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function dayDiff(a,b){return Math.round((b-a)/86400000);}
+
+// 从时间线提取探亲假旅程：模式 …V, ▲+, V…
+function cnExtractTrips(timeline){
+  const trips=[];
+  let i=0;
+  while(i<timeline.length){
+    if(parse(timeline[i].val).k==='qj'){
+      const qjStart=i;
+      while(i<timeline.length&&parse(timeline[i].val).k==='qj')i++;
+      const qjEnd=i-1;
+      const leaveDays=qjEnd-qjStart+1;
+      let startDate=null;
+      for(let j=qjStart-1;j>=0;j--){if(parse(timeline[j].val).k==='travel'){startDate=timeline[j].date;break;}}
+      let endDate=null;
+      for(let j=qjEnd+1;j<timeline.length;j++){if(parse(timeline[j].val).k==='travel'){endDate=timeline[j].date;break;}}
+      trips.push({startDate,endDate,leaveDays});
+    }else{
+      i++;
+    }
+  }
+  return trips;
+}
+
+// 应休假天数 = INT((startDate - prevEndDate + 1) / 320 * 45)
+function entitledDays(startDate,prevEndDate){
+  if(!startDate||!prevEndDate)return 0;
+  const days=dayDiff(prevEndDate,startDate)+1;
+  return Math.floor(Math.max(0,days)/320*45);
+}
+
+function cnBuildLeaveRows(){
+  const rows=[];
+  RECS.forEach(r=>{
+    const timeline=cnBuildTimeline(r.id);
+    const trips=cnExtractTrips(timeline);
+    let balance=0;
+    let prevEndDate=null;
+    trips.forEach((t,idx)=>{
+      const entitled=entitledDays(t.startDate,prevEndDate);
+      const overdue=t.leaveDays-entitled;
+      rows.push({id:r.id,name:r.name,dept:r.dept,cat:catGroup(r.cat),seq:idx+1,startDate:t.startDate,endDate:t.endDate,leaveDays:t.leaveDays,entitled,balance,overdue});
+      balance=balance+entitled-t.leaveDays;
+      prevEndDate=t.endDate;
+    });
+  });
+  return rows;
+}
+
+let _cnLeaveRows=[];
+window.cnRenderLeave=function(){
+  const ddf=$('cn-leave-dept-f');
+  if(ddf){const cur=ddf.value;ddf.innerHTML='<option value="">全部部门</option>'+depts().map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');ddf.value=depts().includes(cur)?cur:'';}
+  const dep=$('cn-leave-dept-f')?$('cn-leave-dept-f').value:'';
+  const q=($('cn-leave-search')?$('cn-leave-search').value:'').trim().toLowerCase();
+  _cnLeaveRows=cnBuildLeaveRows();
+  let rows=_cnLeaveRows;
+  if(dep)rows=rows.filter(r=>r.dept===dep);
+  if(q)rows=rows.filter(r=>r.name.toLowerCase().includes(q)||String(r.id).includes(q));
+  const body=$('cn-leave-body');
+  if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--color-text-tertiary)">暂无探亲假记录（需要录入含 V 和 ▲ 的考勤数据）</td></tr>';return;}
+  body.innerHTML=rows.map(r=>{
+    const overdueColor=r.overdue>0?'color:#dc2626;font-weight:600':r.overdue<0?'color:#16a34a':'';
+    const balanceColor=r.balance<0?'color:#dc2626':'';
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px">${esc(r.id)}</td>
+      <td><strong>${esc(r.name)}</strong></td>
+      <td style="font-size:11px">${esc(r.dept)}</td>
+      <td><span class="cn-tag cn-tag-${r.cat.includes('管理')?'m':r.cat.includes('技术')||r.cat.includes('职能')?'b':r.cat.includes('班长')?'l':'o'}">${esc(r.cat)}</span></td>
+      <td style="text-align:center">${r.seq}</td>
+      <td style="font-family:monospace;font-size:12px">${fmtDate(r.startDate)}</td>
+      <td style="font-family:monospace;font-size:12px">${fmtDate(r.endDate)}</td>
+      <td class="num">${r.leaveDays}</td>
+      <td class="num">${r.entitled}</td>
+      <td class="num" style="${balanceColor}">${r.balance}</td>
+      <td class="num" style="${overdueColor}">${r.overdue>0?'+'+r.overdue:r.overdue}</td>
+    </tr>`;
+  }).join('');
+};
+
+window.cnExportLeave=function(){
+  if(typeof XLSX==='undefined'){if(window.toast)toast('导出组件未就绪');return;}
+  if(!_cnLeaveRows.length){if(window.toast)toast('暂无数据');return;}
+  const head=['工号','姓名','部门','职类','次序','假期开始（前V）','假期结束（后V）','休假天数','应休天数','前期结余','超期天数'];
+  const aoa=[head,..._cnLeaveRows.map(r=>[r.id,r.name,r.dept,r.cat,r.seq,fmtDate(r.startDate),fmtDate(r.endDate),r.leaveDays,r.entitled,r.balance,r.overdue])];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'休假台账');
+  XLSX.writeFile(wb,'中方驻墨休假台账.xlsx');
+  if(window.toast)toast('导出成功');
 };
 
 })();
