@@ -798,6 +798,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <button class="btn" onclick="document.getElementById('att-file').click()" title="导入 Excel 考勤数据"><i class="ti ti-upload"></i> 导入Excel</button>
         <button class="btn btn-sm" onclick="dlAttTpl()" title="下载考勤导入模板"><i class="ti ti-download"></i> 模板</button>
         <input type="file" id="att-file" accept=".xlsx,.xls" style="display:none" onchange="handleAttFile(event)">
+        <button class="btn btn-sm" id="att-sort-fi-btn" onclick="toggleAttSortFI()" title="按FI数量排序"><i class="ti ti-arrows-sort"></i> FI排序</button>
         <button class="btn btn-p" onclick="saveAtt()"><i class="ti ti-check"></i><span data-i18n="btn_save_att">保存考勤</span></button>
       </div>
     </div>
@@ -3623,6 +3624,8 @@ function fillAttSecFilter(){
   sel.value=names.includes(cur)?cur:'';
 }
 function onAttDeptChange(){fillAttSecFilter();renderAttWeek();}
+let _attSortFI=false;
+function toggleAttSortFI(){_attSortFI=!_attSortFI;const btn=$('att-sort-fi-btn');if(btn){btn.style.background=_attSortFI?'var(--color-text-primary)':'';btn.style.color=_attSortFI?'var(--color-background-primary)':'';btn.style.borderColor=_attSortFI?'var(--color-text-primary)':'';}renderAttWeek();}
 function renderAttWeek(){
   const dates=getWeekDates(weekOff),wk=wKey(weekOff);
   if(!attendanceData[wk])attendanceData[wk]={};
@@ -3633,6 +3636,7 @@ function renderAttWeek(){
   const q=($('att-search')?$('att-search').value:'').trim().toLowerCase();
   if(q)emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.id||'').toLowerCase().includes(q)||String(e.salaryCode||'').toLowerCase().includes(q));
   const clr=$('att-search-clear');if(clr)clr.style.display=q?'inline-flex':'none';
+  if(_attSortFI){emps=emps.slice().sort((a,b)=>{const fa=dates.filter(d=>(attendanceData[wk][a.id]||{})[dStr(d)]==='FI').length;const fb=dates.filter(d=>(attendanceData[wk][b.id]||{})[dStr(d)]==='FI').length;return fb-fa;});}
   $('att-week-head').innerHTML=`<th style="text-align:left;padding-left:8px;min-width:76px">工号</th><th style="text-align:left;min-width:90px">工资编码</th><th style="text-align:left;min-width:72px">姓名</th><th style="text-align:left;min-width:70px">部门</th><th style="min-width:76px;background:#fef3c7;color:#92400e">应出勤<br><span style="font-size:10px;font-weight:400">天数</span></th>`+dates.map((d,i)=>`<th style="min-width:68px">周${DAYS_CN[i]}<br><span style="font-size:10px;font-weight:400">${d.getMonth()+1}/${d.getDate()}</span></th>`).join('')+`<th style="min-width:50px">FI天</th><th style="min-width:60px;background:#dbeafe;color:#1e40af">加班<br><span style="font-size:10px;font-weight:400">总时长</span></th><th style="min-width:60px;background:#fef3c7;color:#92400e">迟到<br><span style="font-size:10px;font-weight:400">时长(h)</span></th><th style="min-width:84px;background:#fef2f2;color:#b91c1c">休息核验<br><span style="font-size:10px;font-weight:400">D≥2</span></th>`;
   let dFail=0;
   $('att-week-body').innerHTML=emps.map(e=>{
