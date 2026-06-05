@@ -586,8 +586,11 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <!-- 逐日明细面板（按天录入指标 & 绩效总分） -->
   <div id="q-panel-daily" style="display:none">
     <div class="card" style="padding:14px 16px;margin-bottom:14px">
-      <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr auto;gap:10px;align-items:end">
-        <div class="fg"><label class="fl">部门</label><select id="qd-dept" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部部门</option></select></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr) 1.5fr 1fr auto;gap:10px;align-items:end">
+        <div class="fg"><label class="fl">部门</label><select id="qd-dept" onchange="_qdAllLimit=12;fillQDailySubFilters();renderQDaily()"><option value="">全部部门</option></select></div>
+        <div class="fg"><label class="fl">科室</label><select id="qd-sec" onchange="_qdAllLimit=12;fillQDailyTeamPos();renderQDaily()"><option value="">全部科室</option></select></div>
+        <div class="fg"><label class="fl">班组</label><select id="qd-team" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部班组</option></select></div>
+        <div class="fg"><label class="fl">岗位</label><select id="qd-pos" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部岗位</option></select></div>
         <div class="fg"><label class="fl">搜索员工（工号 / 姓名）</label><input id="qd-search" placeholder="输入工号或姓名…" oninput="_qdAllLimit=12;renderQDaily()"></div>
         <div class="fg"><label class="fl">月份</label>
           <div class="month-sel" style="width:100%;justify-content:space-between"><button class="month-btn" onclick="chQM(-1)">‹</button><div class="month-lbl" id="qd-month" style="flex:1;text-align:center"></div><button class="month-btn" onclick="chQM(1)">›</button></div>
@@ -2460,12 +2463,27 @@ function exportQuery(){
 // ══════════ 逐日明细（按天录入指标 & 绩效总分） ══════════
 function dsOf(y,m,d){return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 function qdCanEdit(emp){return canEdit()||empInScope(emp);}
+function _qdFiltered(dF,secF){return employees.filter(e=>(!dF||e.dept===dF)&&(!secF||e.section===secF));}
+function fillQDailyTeamPos(){
+  const dF=$('qd-dept')?$('qd-dept').value:'';
+  const secF=$('qd-sec')?$('qd-sec').value:'';
+  const base=_qdFiltered(dF,secF);
+  const tsel=$('qd-team');const psel=$('qd-pos');
+  if(tsel){const teams=new Set(base.map(e=>e.team||e.section2||'').filter(Boolean));const pt=tsel.value;tsel.innerHTML='<option value="">全部班组</option>'+[...teams].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(pt&&teams.has(pt))tsel.value=pt;}
+  if(psel){const pos=new Set(base.map(e=>e.position||'').filter(Boolean));const pp=psel.value;psel.innerHTML='<option value="">全部岗位</option>'+[...pos].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(pp&&pos.has(pp))psel.value=pp;}
+}
+function fillQDailySubFilters(){
+  const dF=$('qd-dept')?$('qd-dept').value:'';
+  const sel=$('qd-sec');if(sel){const secs=new Set(employees.filter(e=>!dF||e.dept===dF).map(e=>e.section||'').filter(Boolean));const prev=sel.value;sel.innerHTML='<option value="">全部科室</option>'+[...secs].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(prev&&secs.has(prev))sel.value=prev;else if(sel.value)sel.value='';}
+  fillQDailyTeamPos();
+}
 function initQDailyFilters(){
   const dsel=$('qd-dept');
   if(dsel&&dsel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;dsel.appendChild(o);});
   if(currentUser&&currentUser.role!=='admin'){dsel.value=currentUser.dept;dsel.disabled=true;
-    if(currentUser.section){_qdAllLimit=9999;}
+    if(currentUser.section){_qdAllLimit=9999;const sel=$('qd-sec');if(sel){sel.value=currentUser.section;sel.disabled=true;}}
   }else{dsel.disabled=false;}
+  fillQDailySubFilters();
   if($('qd-month'))$('qd-month').textContent=mLabel(qY,qM);
 }
 function fillQDailyEmps(){
@@ -2601,8 +2619,14 @@ let _qdAllLimit=12;
 function renderQDailyOverview(){
   const wrap=$('qd-content');if(!wrap)return;
   const dF=$('qd-dept')?$('qd-dept').value:'';
+  const secF=($('qd-sec')&&$('qd-sec').value)||'';
+  const teamF=($('qd-team')&&$('qd-team').value)||'';
+  const posF=($('qd-pos')&&$('qd-pos').value)||'';
   const sq=(($('qd-search')&&$('qd-search').value)||'').toLowerCase().trim();
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
+  if(secF)list=list.filter(e=>e.section===secF);
+  if(teamF)list=list.filter(e=>(e.team||e.section2||'')===teamF);
+  if(posF)list=list.filter(e=>(e.position||'')===posF);
   list=list.filter(e=>empNat(e)!=='中国');
   list=list.filter(e=>getEmpKPIs(e).length>0&&(empStatus(e)!=='resigned'||qdMonthVals(e.id).length>0));
   if(sq)list=list.filter(e=>e.id.toLowerCase().includes(sq)||e.name.toLowerCase().includes(sq));
