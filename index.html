@@ -1902,8 +1902,9 @@ let _lastSavedAt = 0;
 
 let _suppressRealtime = false, _suppressTimer = null;
 function _suppressRealtimeFor(ms) {
-  _suppressRealtime = true;
   clearTimeout(_suppressTimer);
+  if (ms <= 0) { _suppressRealtime = false; return; }
+  _suppressRealtime = true;
   _suppressTimer = setTimeout(() => { _suppressRealtime = false; }, ms);
 }
 
@@ -1919,8 +1920,22 @@ async function saveAttendanceWeekOnly(weekKey) {
       }
     }
     if (attUpserts.length) {
-      const { error } = await _sbClient.from('pvs_attendance').upsert(attUpserts, { onConflict: 'week_key,emp_id,date' });
-      if (error) { console.error('saveAttWeekOnly error', error); return false; }
+      const CHUNK = 100;
+      const total = attUpserts.length;
+      for (let i = 0; i < total; i += CHUNK) {
+        const chunk = attUpserts.slice(i, i + CHUNK);
+        showLoading(`正在保存考勤数据… ${Math.min(i + CHUNK, total)} / ${total}`);
+        const { error } = await _sbClient.from('pvs_attendance').upsert(chunk, { onConflict: 'week_key,emp_id,date' });
+        if (error) { console.error('saveAttWeekOnly error', error); return false; }
+      }
+    }
+    // 同步保存 lateData（RT 迟到数据存在 pvs_config）
+    if (Object.keys(lateData).length) {
+      showLoading('正在保存迟到数据…');
+      const { error } = await _sbClient.from('pvs_config').upsert(
+        [{ id: 'lateData', value: lateData }], { onConflict: 'id' }
+      );
+      if (error) console.error('saveAttWeekOnly lateData error', error);
     }
     _lastSavedAt = Date.now();
     return true;
@@ -3057,7 +3072,31 @@ function filterEmp(){
   }).join('');
 }
 function updateNeSecOptions(keepSec){const d=$('ne-dept').value;const cur=keepSec!==undefined?keepSec:$('ne-sec').value;const rel=sections.filter(s=>s.deptName===d);let opts='<option value="">— 不限定科室 —</option>';if(d)opts+=`<option value="${d}">${d}（本部门直属）</option>`;opts+=rel.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');const known=new Set(['',d].concat(rel.map(s=>s.name)));if(cur&&!known.has(cur))opts+=`<option value="${cur}">${cur}</option>`;$('ne-sec').innerHTML=opts;if(cur)$('ne-sec').value=cur;}
-function updateNePosOptions(){const d=$('ne-dept').value,sec=$('ne-sec').value;let rel=positions.filter(p=>!d||p.deptName===d);if(sec){const realSec=new Set(sections.map(s=>s.name));rel=rel.filter(p=>{const ps=p.sectionName;if(!ps||ps===p.deptName||!realSec.has(ps))return true;return ps===sec;});}$('ne-pos').innerHTML='<option value="">— 请选择岗位 —</option>'+rel.map(p=>`<option value="${p.name}">${p.code} · ${p.name}</option>`).join('');}
+function updateNePosOptions(){
+  const d=$('ne-dept').value;
+  const rel=positions.filter(p=>!d||p.deptName===d);
+  // 按科室分组显示：部门直属优先，各科室依次列出
+  const groups={};
+  rel.forEach(p=>{
+    const sec=(p.sectionName&&p.sectionName!==p.deptName)?p.sectionName:'__dept__';
+    if(!groups[sec])groups[sec]=[];
+    groups[sec].push(p);
+  });
+  let html='<option value="">— 请选择岗位 —</option>';
+  // 部门直属
+  if(groups['__dept__']){
+    if(d)html+=`<optgroup label="${d}（部门直属）">`;
+    groups['__dept__'].forEach(p=>{html+=`<option value="${p.name}">${p.code} · ${p.name}</option>`;});
+    if(d)html+='</optgroup>';
+  }
+  // 各科室
+  Object.keys(groups).filter(k=>k!=='__dept__').sort().forEach(sec=>{
+    html+=`<optgroup label="◎ ${sec}">`;
+    groups[sec].forEach(p=>{html+=`<option value="${p.name}">${p.code} · ${p.name}</option>`;});
+    html+='</optgroup>';
+  });
+  $('ne-pos').innerHTML=html;
+}
 function openAddEmp(){editingPosId=null;$('modal-add-emp .modal-title')&&(document.querySelector('#modal-add-emp .modal-title').textContent='新增员工');$('ne-dept').innerHTML='<option value="">— 请选择部门 —</option>'+departments.map(d=>`<option value="${d.name}">${d.name}</option>`).join('');$('ne-dept').value='';updateNeSecOptions();updateNePosOptions();$('ne-id').value='';$('ne-salcode').value='';$('ne-name').value='';$('ne-date').value='';$('ne-nat').value='墨西哥';$('ne-status').value='active';$('ne-resign').value='';if($('ne-restype'))$('ne-restype').value='';updateNeResignVis();$('ne-id').disabled=false;$('ne-id').dataset.editMode='';$('modal-add-emp').classList.add('open');}
 function openEditEmp(empId){const e=employees.find(x=>x.id===empId);if(!e)return;document.querySelector('#modal-add-emp .modal-title').textContent='编辑员工';$('ne-dept').innerHTML='<option value="">— 请选择部门 —</option>'+departments.map(d=>`<option value="${d.name}">${d.name}</option>`).join('');$('ne-dept').value=e.dept||'';updateNeSecOptions(e.section||'');updateNePosOptions();$('ne-pos').value=e.position||'';$('ne-id').value=e.id;$('ne-salcode').value=e.salaryCode||'';$('ne-name').value=e.name;$('ne-date').value=inputFromYMD(e.joinDate)||'';$('ne-nat').value=e.nationality||'墨西哥';if($('ne-team'))$('ne-team').value=e.team||'';$('ne-status').value=empStatus(e);$('ne-resign').value=inputFromYMD(e.resignDate);if($('ne-restype'))$('ne-restype').value=e.resignType||'';updateNeResignVis();$('ne-id').disabled=true;$('ne-id').dataset.editMode='1';$('modal-add-emp').classList.add('open');}
 async function delEmp(empId){const e=employees.find(x=>x.id===empId);if(!e)return;const hasScores=Object.values(monthlyScores).some(mk=>mk[empId]);const warn=hasScores?`\n\n⚠️ 该员工有历史绩效记录，删除后将一并清除。`:'';if(!confirm(`确定删除员工「${e.name}（${e.id}）」？${warn}\n\n此操作不可撤销。`))return;employees=employees.filter(x=>x.id!==empId);Object.keys(monthlyScores).forEach(mk=>{delete monthlyScores[mk][empId];});Object.keys(attendanceData).forEach(wk=>{delete attendanceData[wk][empId];});delete salaryReviews[empId];await saveAndToast(`已删除员工 ${e.name}`);filterEmp();}
@@ -3655,11 +3694,12 @@ async function applyAttPaste(){
   closeM('modal-att-paste');
   let msg=`已应用 ${matched} 名员工本周考勤`;
   if(unmatched.length)msg+=`，${unmatched.length} 个未匹配（${unmatched.slice(0,3).join(',')}${unmatched.length>3?'...':''}）`;
-  _suppressRealtimeFor(8000);
-  showLoading('正在保存考勤数据...');
+  _suppressRealtimeFor(30000);
+  showLoading('正在保存考勤数据…');
   const ok=await saveAttendanceWeekOnly(weekKey);
   hideLoading();
-  if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请重试');}
+  _suppressRealtimeFor(0);
+  if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请检查网络后重试');}
 }
 function handleAttFile(e){
   const f=e.target.files[0];if(!f)return;
@@ -3686,11 +3726,12 @@ function handleAttFile(e){
       const{matched,unmatched}=applyAttRowsToWeek(rows);
       let msg=`已导入 ${matched} 名员工本周考勤`;
       if(unmatched.length)msg+=`，${unmatched.length} 个未匹配`;
-      _suppressRealtimeFor(8000);
-      showLoading('正在保存考勤数据...');
+      _suppressRealtimeFor(30000);
+      showLoading('正在保存考勤数据…');
       const ok=await saveAttendanceWeekOnly(weekKey);
       hideLoading();
-      if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请重试');}
+      _suppressRealtimeFor(0);
+      if(ok){toast(msg);renderAttWeek();}else{toast('⚠️ 保存失败，请检查网络后重试');}
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
     e.target.value='';
   };
