@@ -55,12 +55,13 @@ function roster(){
 
 function wd(day){return new Date(curY,curM-1,day).getDay();}   // 0=周日 … 6=周六
 const WCN=['日','一','二','三','四','五','六'];
-function buildWeekId(){WEEKID=[];let c=0;for(let d=1;d<=DIM;d++){WEEKID[d]=c;if(wd(d)===0)c++;}}
+function buildWeekId(){WEEKID=[];}
 
 // 加载某月：localStorage 优先 → 默认月样本预填 → 空白
 function loadMonth(){
   DIM=new Date(curY,curM,0).getDate();
   buildWeekId();
+  refreshHols();
   let saved=null; try{saved=JSON.parse(localStorage.getItem(lsKey()));}catch(e){}
   const savedMap={}; if(saved&&saved.length)saved.forEach(r=>savedMap[String(r.id)]=r.days);
   const seed=(curY===SRC.year&&curM===SRC.month);   // 仅默认样本月预填
@@ -149,6 +150,37 @@ function reqHours(cat,day,loc){
   return 8;                          // 技能职：每天 8h
 }
 
+/* ---------- 墨西哥法定节假日 ---------- */
+// 返回某年某月中节假日的日期集合（Set<number>）
+function nthWeekdayOfMonth(y,m,nth,dow){ // dow: 0=日,1=一...6=六
+  const first=new Date(y,m-1,1).getDay();
+  const d=1+(dow-first+7)%7+(nth-1)*7;
+  return d<=new Date(y,m,0).getDate()?d:null;
+}
+const MEX_HOL_NAMES={
+  '1-1':'元旦','5-1':'劳动节','9-16':'独立日','12-25':'圣诞节',
+  'feb1mon':'宪法纪念日','mar3mon':'华雷斯诞辰','nov3mon':'革命纪念日',
+  'elec':'总统选举日',
+};
+function getMexHolidays(y,m){
+  const hols=new Map(); // day→name
+  const add=(hm,hd,name)=>{if(hm===m&&hd)hols.set(hd,name);};
+  // 固定节假日
+  add(1,1,'元旦'); add(5,1,'劳动节'); add(9,16,'独立日'); add(12,25,'圣诞节');
+  // 浮动节假日
+  add(2,nthWeekdayOfMonth(y,2,1,1),'宪法纪念日');
+  add(3,nthWeekdayOfMonth(y,3,3,1),'华雷斯诞辰');
+  add(11,nthWeekdayOfMonth(y,11,3,1),'革命纪念日');
+  // 总统选举日（每6年）：2018=7/1, 2024=6/2, 2030起第一个周日
+  if(y===2018)add(7,1,'总统选举日');
+  else if(y===2024)add(6,2,'总统选举日');
+  else if(y>2024&&(y-2024)%6===0)add(6,nthWeekdayOfMonth(y,6,1,0),'总统选举日');
+  return hols;
+}
+// 当月节假日（在渲染前计算一次，compute 复用）
+let _curHols=new Map();
+function refreshHols(){_curHols=getMexHolidays(curY,curM);}
+
 /* ---------- 计算引擎 ---------- */
 function compute(rec){
   const cat=rec.cat;
@@ -157,47 +189,45 @@ function compute(rec){
   let region=0,total=0;
   let bizY=0,bizW=0,skY=0,skW=0,cnY=0,cnW=0,holOT=0;
   let totHours=0;                    // 工作总时长（含加班）
-  const wkBiz={},wkReg={};
 
   rec.days.forEach((cell,i)=>{
     const day=i+1, w=wd(day), p=parse(cell);
+    const isHol=_curHols.has(day); // 是否法定节假日
     if(p.k==='ow'){
       const req=reqHours(cat,day,'ow');
       const frac=(w===0)?1:(p.h>=req?1:0.5);
       owDays+=frac; totHours+=p.h;
       if(w!==0)owActualNoSun+=frac;
       region+=frac;
-      // 加班
-      if(isMgmt(cat)){/* 管理职加班=0 */}
+      if(isHol){
+        holOT+=p.h; // 节假日出勤：全部计入节假日加班，不再计入普通延时
+      } else if(isMgmt(cat)){/* 管理职加班=0 */}
       else if(isBiz(cat)){
-        // 业务职：周日(国外周末) 单独计；周一~周六国外工时按周累计，稍后判定超 49h 部分为国外延时
-        if(w===0)bizW+=p.h; else wkBiz[WEEKID[day]]=(wkBiz[WEEKID[day]]||0)+p.h;
+        // 业务职：按天计算超出标准工时的部分为延时；周日全部计周末加班
+        if(w===0) bizW+=p.h;
+        else { const std=w===6?4:9; bizY+=Math.max(0,p.h-std); }
       }else if(isLeader(cat)){
-        if(p.h>8)skY+=p.h-8;          // 班长：每天超 8h（含周末）
+        if(w===0) skW+=p.h; else if(p.h>8)skY+=p.h-8; // 班长：每天超8h；周日计周末
       }else if(isReg(cat)){
-        if(w===0)skW+=p.h; else wkReg[WEEKID[day]]=(wkReg[WEEKID[day]]||0)+p.h;
+        if(w===0) skW+=p.h; else skY+=Math.max(0,p.h-8); // 普通：每天超8h；周日计周末
       }
     }else if(p.k==='cn'){
       const frac=p.h>=8?1:0.5;
       cnDays+=frac; totHours+=p.h;
-      if(w===0){cnW+=p.h;}                            // 周日：全部计周末加班
-      else{                                           // 周一~周六：超应出勤部分记延时
-        const reqCn=isBiz(cat)?(w===6?4:9):8;         // 业务职 周一~五9h/周六4h；技能职 周一~六8h
+      if(w===0){cnW+=p.h;}
+      else{
+        const reqCn=isBiz(cat)?(w===6?4:9):8;
         if(p.h>reqCn)cnY+=p.h-reqCn;
       }
     }else if(p.k==='travel'){ owDays+=1; region+=1; owActualNoSun+=(w===0?0:1); }
     else if(p.k==='chai'){ owDays+=1; region+=1; owActualNoSun+=(w===0?0:1); }
-    else if(p.k==='hl'){ owDays+=1; hl++; region+=1; }      // 国外法定节假日算国外出勤
-    else if(p.k==='ldoff'){ ld++; region+=1; }              // 国外周末计入地区补贴
+    else if(p.k==='hl'){ owDays+=1; hl++; region+=1; }
+    else if(p.k==='ldoff'){ ld++; region+=1; }
     else if(p.k==='qj'){ qj++; }
     else if(p.k==='sj'){ sj++; }
     else if(p.k==='bing'){ bing++; }
     else if(p.k==='hun'||p.k==='sang'||p.k==='pei'){ paid++; }
   });
-  // 周度阈值
-  // 业务职：周一~周六国外工时按周累计，每周超过 49 小时的部分计为国外延时(owY)
-  if(isBiz(cat)&&!isMgmt(cat)){for(const k in wkBiz)bizY+=Math.max(0,wkBiz[k]-49);}
-  if(isReg(cat)){for(const k in wkReg)skY+=Math.max(0,wkReg[k]-48);}
 
   total=owDays+cnDays;
   const owY = isBiz(cat)?bizY:skY;        // 国外延时
@@ -254,7 +284,11 @@ window.cnRenderGrid=function(){
   const list=RECS.filter(r=>(!dep||r.dept===dep)&&(!q||r.name.toLowerCase().includes(q)||String(r.id).includes(q)));
   // 表头
   let head='<th class="cn-fix cn-fix1">工号</th><th class="cn-fix cn-fix2">姓名</th><th class="cn-fix cn-fix3">部门</th><th>职类</th>';
-  for(let d=1;d<=DIM;d++){const w=wd(d);head+=`<th class="${w===0?'cn-sun':w===6?'cn-sat':''}">${d}<br><span style="font-weight:400;font-size:9px">${WCN[w]}</span></th>`;}
+  for(let d=1;d<=DIM;d++){
+    const w=wd(d),isHol=_curHols.has(d),holName=_curHols.get(d)||'';
+    const cls=(w===0?'cn-sun':w===6?'cn-sat':'')+(isHol?' cn-hol-head':'');
+    head+=`<th class="${cls}" title="${isHol?holName:''}">${d}${isHol?'<span style="font-size:8px;display:block;color:#b45309">🇲🇽</span>':'<br>'}<span style="font-weight:400;font-size:9px">${WCN[w]}</span></th>`;
+  }
   $('cn-grid-head').innerHTML=head;
   const idxBase=RECS; // for editing reference
   $('cn-grid-body').innerHTML=list.map(r=>{

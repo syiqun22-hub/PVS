@@ -242,6 +242,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .cn-grid th{position:sticky;top:0;z-index:3;background:var(--color-background-secondary);padding:5px 3px;text-align:center;font-size:10px;font-weight:600;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);border-right:0.5px solid var(--color-border-tertiary)}
 .cn-grid th.cn-sun{background:#fee2e2;color:#991b1b}
 .cn-grid th.cn-sat{background:#fff3cd;color:#856404}
+.cn-grid th.cn-hol-head{background:#fef9c3;color:#854d0e;outline:1.5px solid #f59e0b;outline-offset:-1px}
 .cn-grid td{padding:0;border-bottom:0.5px solid var(--color-border-tertiary);border-right:0.5px solid var(--color-border-tertiary);text-align:center}
 .cn-grid .cn-fix{position:sticky;background:var(--color-background-primary);z-index:2;padding:5px 8px;text-align:left}
 .cn-grid th.cn-fix{z-index:4}
@@ -1939,9 +1940,13 @@ async function saveAttendanceWeekOnly(weekKey) {
       [{ id: 'att_' + weekKey, value: wk }], { onConflict: 'id' }
     );
     if (error) { console.error('saveAttWeekOnly error:', error); toast('⚠️ 写入失败：' + error.message); return false; }
+    // 同步保存 expectedDays（应出勤天数，防止导入后切换页面丢失）
+    const { error: edErr } = await _sbClient.from('pvs_config').upsert(
+      [{ id: 'expectedDays', value: expectedDays }], { onConflict: 'id' }
+    );
+    if (edErr) console.error('saveAttWeekOnly expectedDays error', edErr);
     // 同步保存 lateData
     if (Object.keys(lateData).length) {
-      showLoading('正在保存迟到数据…');
       const { error: ldErr } = await _sbClient.from('pvs_config').upsert(
         [{ id: 'lateData', value: lateData }], { onConflict: 'id' }
       );
