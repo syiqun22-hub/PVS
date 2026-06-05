@@ -607,8 +607,10 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <!-- 岗位排名面板 -->
   <div id="q-panel-rank" style="display:none">
     <div class="card" style="padding:12px 16px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div class="month-sel" style="justify-content:space-between;min-width:160px"><button class="month-btn" onclick="chQM(-1)">‹</button><div class="month-lbl" id="qr-month" style="flex:1;text-align:center"></div><button class="month-btn" onclick="chQM(1)">›</button></div>
+        <select id="qr-pos-f" onchange="renderQRank()" style="min-width:160px"><option value="">全部岗位</option></select>
+        <button id="qr-sort-btn" class="btn btn-sm" onclick="toggleQRankSort()" title="切换岗位排序方式"><i class="ti ti-arrows-sort"></i> <span id="qr-sort-lbl">均分↓</span></button>
         <button id="qr-scroll-btn" class="btn" onclick="toggleLinkedScroll('rank')" title="每10秒滚屏，到底后自动切换到逐日明细"><i class="ti ti-player-play" id="qr-scroll-icon"></i> 滚动播放</button>
         <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:4px"><i class="ti ti-info-circle"></i> 按岗位分组，当月已过天数内各指标及总分均值排名</span>
       </div>
@@ -2711,10 +2713,28 @@ function exportQDailyOverview(){
 }
 
 // ══════════ 岗位排名 ══════════
+let _qrSortMode='score-desc'; // score-desc | score-asc
+function toggleQRankSort(){
+  _qrSortMode=_qrSortMode==='score-desc'?'score-asc':'score-desc';
+  const lbl=$('qr-sort-lbl');if(lbl)lbl.textContent=_qrSortMode==='score-desc'?'均分↓':'均分↑';
+  renderQRank();
+}
+function fillQRankPosFilter(){
+  const sel=$('qr-pos-f');if(!sel)return;
+  const dF=$('qr-dept')?$('qr-dept').value:'';
+  let base=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
+  base=base.filter(e=>empNat(e)!=='中国'&&empStatus(e)!=='resigned');
+  const positions=new Set(base.map(e=>e.position||'').filter(Boolean));
+  const prev=sel.value;
+  sel.innerHTML='<option value="">全部岗位</option>'+[...positions].sort().map(p=>`<option value="${p}">${p}</option>`).join('');
+  if(prev&&positions.has(prev))sel.value=prev;
+}
 function initQRankFilters(){
   const sel=$('qr-dept');if(!sel)return;
   if(sel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});
-  if(currentUser&&currentUser.role!=='admin'){sel.value=currentUser.dept;sel.disabled=true;}else sel.disabled=false;  if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
+  if(currentUser&&currentUser.role!=='admin'){sel.value=currentUser.dept;sel.disabled=true;}else sel.disabled=false;
+  fillQRankPosFilter();
+  if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
 }
 // 当月已过天数（当月则到今天，过去月份则全月）
 function pastDaysInMonth(){
@@ -2810,11 +2830,16 @@ function renderQRank(){
   if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
   const wrap=$('qr-content');if(!wrap)return;
   const dF=$('qr-dept')?$('qr-dept').value:'';
+  const posF=($('qr-pos-f')&&$('qr-pos-f').value)||'';
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   list=list.filter(e=>empNat(e)!=='中国'&&empStatus(e)!=='resigned');
+  if(posF)list=list.filter(e=>(e.position||'')=== posF);
   const scored=list.map(e=>{const adj=calcAdjustedMonthScore(e.id);return{e,adj,avg:adj.score,kpiN:getEmpKPIs(e).length};});
   const posMap={};scored.forEach(r=>{const pos=r.e.position||'（未设置岗位）';if(!posMap[pos])posMap[pos]=[];posMap[pos].push(r);});
-  const posList=Object.entries(posMap).sort(([,a],[,b])=>{const avgA=a.reduce((s,x)=>s+x.avg,0)/a.length;const avgB=b.reduce((s,x)=>s+x.avg,0)/b.length;return avgB-avgA;});
+  const posList=Object.entries(posMap).sort(([posA,a],[posB,b])=>{
+    const avgA=a.reduce((s,x)=>s+x.avg,0)/a.length;const avgB=b.reduce((s,x)=>s+x.avg,0)/b.length;
+    return _qrSortMode==='score-asc'?avgA-avgB:avgB-avgA;
+  });
   const pastD=pastDaysInMonth();const today=new Date();const isNow=(qY===today.getFullYear()&&qM===(today.getMonth()+1));
   const subtitle=isNow?`${mLabel(qY,qM)} · 已过 ${pastD} 天`:`${mLabel(qY,qM)} · 全月 ${pastD} 天`;
   let html='';_qrPosData=[];
