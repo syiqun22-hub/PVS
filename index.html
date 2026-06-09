@@ -843,21 +843,37 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 </div>
 <!-- ATT SUMMARY -->
 <div id="page-att-summary" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div class="page-title" style="margin-bottom:0" data-i18n="nav_att_summary">月度考勤汇总</div>
-    <button class="btn" onclick="exportAttSum()"><i class="ti ti-download"></i> 导出Excel</button>
+    <button class="btn" onclick="exportAttSumActive()"><i class="ti ti-download"></i> 导出Excel</button>
   </div>
-  <div class="toolbar">
-    <div class="month-sel"><button class="month-btn" onclick="chSumM(-1)">‹</button><div class="month-lbl" id="sum-month"></div><button class="month-btn" onclick="chSumM(1)">›</button></div>
-    <select id="sum-dept" onchange="renderSummary()" style="width:140px"><option value="">全部部门</option></select>
+  <div class="tabs" style="margin-bottom:14px">
+    <button class="tab active" id="sum-tab-summary" onclick="switchSumTab('summary',this)">汇总统计</button>
+    <button class="tab" id="sum-tab-detail" onclick="switchSumTab('detail',this)">逐日明细</button>
   </div>
-  <div class="stat-grid" id="sum-stat-cards"></div>
-  <div class="card" style="padding:0;overflow-x:auto">
-    <table class="sum-tbl"><thead><tr>
-      <th>工号</th><th>工资编码</th><th>姓名</th><th>部门</th>
-      <th class="s-FI">FI</th><th class="s-A">A</th><th class="s-D">D</th><th class="s-F">F</th>
-      <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th>合计</th>
-    </tr></thead><tbody id="sum-body"></tbody></table>
+  <!-- 汇总统计面板 -->
+  <div id="sum-panel-summary">
+    <div class="toolbar">
+      <div class="month-sel"><button class="month-btn" onclick="chSumM(-1)">‹</button><div class="month-lbl" id="sum-month"></div><button class="month-btn" onclick="chSumM(1)">›</button></div>
+      <select id="sum-dept" onchange="renderSummary()" style="width:140px"><option value="">全部部门</option></select>
+    </div>
+    <div class="stat-grid" id="sum-stat-cards"></div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="sum-tbl"><thead><tr>
+        <th>工号</th><th>工资编码</th><th>姓名</th><th>部门</th>
+        <th class="s-FI">FI</th><th class="s-A">A</th><th class="s-D">D</th><th class="s-F">F</th>
+        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th>合计</th>
+      </tr></thead><tbody id="sum-body"></tbody></table>
+    </div>
+  </div>
+  <!-- 逐日明细面板 -->
+  <div id="sum-panel-detail" style="display:none">
+    <div class="toolbar">
+      <div class="month-sel"><button class="month-btn" onclick="chSumM(-1);renderSumDetail()">‹</button><div class="month-lbl" id="sum-detail-month"></div><button class="month-btn" onclick="chSumM(1);renderSumDetail()">›</button></div>
+      <select id="sum-detail-dept" onchange="renderSumDetail()" style="width:140px"><option value="">全部部门</option></select>
+      <input id="sum-detail-search" placeholder="搜索工号 / 姓名" oninput="renderSumDetail()" style="width:170px">
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto"><table class="att-tbl" id="sum-detail-tbl"><thead><tr id="sum-detail-head"></tr></thead><tbody id="sum-detail-body"></tbody></table></div>
   </div>
 </div>
 <!-- ATT ANALYSIS -->
@@ -1062,7 +1078,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       ⏰ 待考核 <span id="ledger-tab-count-pending" class="badge badge-info" style="margin-left:6px">0</span>
     </button>
     <button id="ledger-tab-btn-week" class="ledger-tab-btn" onclick="switchLedgerTab('week')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
-      📅 当周调薪 <span id="ledger-tab-week-range" style="font-size:11px;font-weight:400;color:var(--color-text-tertiary);margin-left:4px"></span><span id="ledger-tab-count-week" class="badge" style="margin-left:6px;background:#dcfce7;color:#166534">0</span>
+      📅 当周调薪 <span id="ledger-tab-count-week" class="badge" style="margin-left:6px;background:#dcfce7;color:#166534">0</span>
     </button>
     <button id="ledger-tab-btn-past" class="ledger-tab-btn" onclick="switchLedgerTab('past')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
       ✅ 已过调薪节点 <span id="ledger-tab-count-past" class="badge" style="margin-left:6px;background:#f3f4f6;color:#374151">0</span>
@@ -3779,6 +3795,70 @@ function renderSummary(){
   $('sum-body').innerHTML=emps.map(e=>{const c=counts[e.id]||{};const total=STATUSES.reduce((s,st)=>s+(c[st]||0),0);return`<tr><td>${e.id}</td><td style="font-family:monospace;font-size:11px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong></td><td style="color:var(--color-text-secondary)">${e.dept}</td>${STATUSES.map(s=>`<td style="font-weight:${c[s]>0?'600':'400'};color:${c[s]>0?'var(--color-text-primary)':'var(--color-text-tertiary)'}">${c[s]||0}</td>`).join('')}<td><strong>${total}</strong></td></tr>`;}).join('');
 }
 function exportAttSum(){const dF=$('sum-dept').value;let emps=mxEmps();if(dF)emps=emps.filter(e=>e.dept===dF);const counts=getMonthCounts(emps,sumY,sumM);const ws=XLSX.utils.aoa_to_sheet([['工号','姓名','部门',...STATUSES,'合计'],...emps.map(e=>{const c=counts[e.id]||{};return[e.id,e.name,e.dept,...STATUSES.map(s=>c[s]||0),STATUSES.reduce((s,st)=>s+(c[st]||0),0)];})]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,mLabel(sumY,sumM));XLSX.writeFile(wb,`考勤汇总_${mKey(sumY,sumM)}.xlsx`);toast('导出成功');}
+let _sumActiveTab='summary';
+function switchSumTab(tab,el){
+  _sumActiveTab=tab;
+  document.querySelectorAll('#page-att-summary .tab').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  $('sum-panel-summary').style.display=tab==='summary'?'block':'none';
+  $('sum-panel-detail').style.display=tab==='detail'?'block':'none';
+  if(tab==='detail')renderSumDetail();else renderSummary();
+}
+function exportAttSumActive(){if(_sumActiveTab==='detail')exportSumDetail();else exportAttSum();}
+function renderSumDetail(){
+  if($('sum-detail-month'))$('sum-detail-month').textContent=mLabel(sumY,sumM);
+  const deptSel=$('sum-detail-dept');
+  if(deptSel&&deptSel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;deptSel.appendChild(o);});
+  const dF=deptSel?deptSel.value:'';
+  const q=(($('sum-detail-search')&&$('sum-detail-search').value)||'').toLowerCase().trim();
+  let emps=mxEmps();
+  if(dF)emps=emps.filter(e=>e.dept===dF);
+  if(q)emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.id||'').toLowerCase().includes(q)||String(e.salaryCode||'').toLowerCase().includes(q));
+  const n=daysInMonth(sumY,sumM);
+  // Build day→status lookup from attendanceData
+  function getDay(empId,d){
+    const ds=`${sumY}-${String(sumM).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    for(const wk of Object.keys(attendanceData)){
+      if(!(attendanceData[wk][empId]))continue;
+      const v=attendanceData[wk][empId][ds];
+      if(v)return v;
+    }
+    return '';
+  }
+  // Header
+  const dayThs=[];
+  for(let d=1;d<=n;d++){
+    const dow=new Date(sumY,sumM-1,d).getDay();
+    const wk=(dow===0||dow===6);
+    dayThs.push(`<th style="min-width:36px;font-size:10px;padding:3px 1px;text-align:center;${wk?'background:var(--color-background-secondary)':''}">${d}<div style="font-size:8px;font-weight:400;color:var(--color-text-tertiary)">${DAYS_CN[dow===0?6:dow-1]}</div></th>`);
+  }
+  $('sum-detail-head').innerHTML=`<th style="text-align:left;padding-left:8px;min-width:76px;position:sticky;left:0;background:var(--color-background-secondary);z-index:3">工号</th><th style="text-align:left;min-width:90px;position:sticky;left:76px;background:var(--color-background-secondary);z-index:3">姓名</th><th style="text-align:left;min-width:70px;position:sticky;left:166px;background:var(--color-background-secondary);z-index:3;box-shadow:1px 0 0 var(--color-border-tertiary)">部门</th>${dayThs.join('')}<th style="min-width:50px;text-align:center;background:var(--color-background-secondary)">FI</th><th style="min-width:40px;text-align:center;background:var(--color-background-secondary)">A</th>`;
+  $('sum-detail-body').innerHTML=emps.map(e=>{
+    let fiCnt=0,aCnt=0;
+    const cells=[];
+    for(let d=1;d<=n;d++){
+      const dow=new Date(sumY,sumM-1,d).getDay();const wk=(dow===0||dow===6);
+      const s=getDay(e.id,d);
+      if(s==='FI')fiCnt++;if(s==='A')aCnt++;
+      const cls=s?STATUS_CLS[s]:'';
+      cells.push(`<td style="padding:2px 1px;text-align:center;${wk?'background:var(--color-background-secondary)':''}">${s?`<span class="badge ${cls}" style="font-size:9px;padding:1px 3px">${s}</span>`:'<span style="color:var(--color-border-secondary)">·</span>'}</td>`);
+    }
+    return`<tr><td style="font-family:monospace;font-size:11px;padding:5px 8px;position:sticky;left:0;background:var(--color-background-primary);z-index:2">${e.id}</td><td style="font-weight:500;padding:5px 6px;position:sticky;left:76px;background:var(--color-background-primary);z-index:2">${e.name}</td><td style="font-size:12px;color:var(--color-text-secondary);padding:5px 6px;position:sticky;left:166px;background:var(--color-background-primary);z-index:2;box-shadow:1px 0 0 var(--color-border-tertiary)">${e.dept}</td>${cells.join('')}<td style="text-align:center;font-weight:600;color:${fiCnt>0?'#dc3545':'var(--color-text-tertiary)'}">${fiCnt||'—'}</td><td style="text-align:center;font-weight:600;color:${aCnt>0?'#1f8a5b':'var(--color-text-tertiary)'}">${aCnt||'—'}</td></tr>`;
+  }).join('')||`<tr><td colspan="${n+5}" style="text-align:center;padding:30px;color:var(--color-text-tertiary)">无符合条件的员工</td></tr>`;
+}
+function exportSumDetail(){
+  const dF=($('sum-detail-dept')&&$('sum-detail-dept').value)||'';
+  const q=(($('sum-detail-search')&&$('sum-detail-search').value)||'').toLowerCase().trim();
+  let emps=mxEmps();if(dF)emps=emps.filter(e=>e.dept===dF);if(q)emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.id||'').toLowerCase().includes(q));
+  const n=daysInMonth(sumY,sumM);
+  function getDay(empId,d){const ds=`${sumY}-${String(sumM).padStart(2,'0')}-${String(d).padStart(2,'0')}`;for(const wk of Object.keys(attendanceData)){if(!attendanceData[wk][empId])continue;const v=attendanceData[wk][empId][ds];if(v)return v;}return'';}
+  const days=Array.from({length:n},(_,i)=>i+1);
+  const header=['工号','工资编码','姓名','部门',...days.map(d=>d+'日'),'FI天','A天'];
+  const data=emps.map(e=>{const row=[e.id,e.salaryCode||'',e.name,e.dept];let fi=0,a=0;days.forEach(d=>{const s=getDay(e.id,d);row.push(s);if(s==='FI')fi++;if(s==='A')a++;});row.push(fi,a);return row;});
+  const ws=XLSX.utils.aoa_to_sheet([header,...data]);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,mLabel(sumY,sumM)+'明细');
+  XLSX.writeFile(wb,`考勤逐日明细_${mKey(sumY,sumM)}.xlsx`);toast('导出成功');
+}
 // ATT ANALYSIS
 let anaWeekOff=0,anaGrp='dept',anaExclBlank=true;
 function chAnaWk(d){anaWeekOff+=d;renderAttAnalysis();}
@@ -4259,13 +4339,10 @@ function renderLedger(){
   if(!el)return;
 
   const today=new Date(); today.setHours(0,0,0,0);
-  // Current week Monday
+  // Current week: Monday to Sunday
   const dayOfWeek=today.getDay()===0?6:today.getDay()-1; // 0=Mon
   const weekMon=new Date(today); weekMon.setDate(today.getDate()-dayOfWeek);
   const weekSun=new Date(weekMon); weekSun.setDate(weekMon.getDate()+6);
-  // "当周调薪" = 上周调薪日（本周发上周工资）
-  const prevWeekMon=new Date(weekMon); prevWeekMon.setDate(weekMon.getDate()-7);
-  const prevWeekSun=new Date(weekSun); prevWeekSun.setDate(weekSun.getDate()-7);
 
   // Build all rows
   const allRows=[];
@@ -4298,9 +4375,12 @@ function renderLedger(){
       // Categorize
       let tabCat;
       if(daysUntil>15) return; // too far future, not shown
-      if(salaryDate>=prevWeekMon&&salaryDate<=prevWeekSun) tabCat='week'; // 上周调薪日 → 本周发薪
-      else if(daysUntil>=0&&daysUntil<=15) tabCat='pending'; // 未来15天内
-      else tabCat='past'; // 已过且不在上周范围
+      if(daysUntil>=0&&daysUntil<=15) tabCat='pending'; // upcoming within 15 days
+      else if(salaryDate>=weekMon&&salaryDate<=weekSun) tabCat='week'; // salary date in current week (past part)
+      else tabCat='past'; // already past
+
+      // Also mark as 'week' if salary date falls in current week regardless of pending
+      if(daysUntil>=0&&salaryDate>=weekMon&&salaryDate<=weekSun) tabCat='week';
 
       allRows.push({emp,pos,node,salaryDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted,tabCat});
     });
@@ -4314,8 +4394,6 @@ function renderLedger(){
   setCnt('ledger-tab-count-pending',countPending);
   setCnt('ledger-tab-count-week',countWeek);
   setCnt('ledger-tab-count-past',countPast);
-  const rangeEl=document.getElementById('ledger-tab-week-range');
-  if(rangeEl){const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;rangeEl.textContent=`(${fmt(prevWeekMon)}–${fmt(prevWeekSun)})`;}
 
   const rows=allRows.filter(r=>r.tabCat===_ledgerActiveTab);
 
@@ -6550,7 +6628,46 @@ const ES_DICT={
 '按岗位分组':'Agrupado por puesto',
 '项指标':'indicadores',
 '岗位均分':'Promedio del puesto',
-'已过天数':'días transcurridos'
+'已过天数':'días transcurridos',
+// ── 月度汇总逐日明细 ──
+'汇总统计':'Resumen estadístico',
+'逐日明细':'Detalle diario',
+'搜索工号 / 姓名':'Buscar ID / nombre',
+'无符合条件的员工':'Sin empleados que cumplan los criterios',
+// ── 调薪台账 ──
+'待考核':'Pendiente de evaluación',
+'当周调薪':'Ajuste salarial (semana anterior)',
+'已过调薪节点':'Nodo salarial vencido',
+// ── 绩效页面重命名 ──
+'中方绩效评价':'Evaluación de desempeño (China)',
+'墨方绩效评价':'Evaluación de desempeño (México)',
+// ── 考勤填报 ──
+'FI排序':'Ordenar por FI',
+'按FI数量排序':'Ordenar por cantidad de FI',
+'按科室筛选':'Filtrar por sección',
+'搜索岗位…':'Buscar puesto…',
+'均分↓':'Prom. ↓',
+'均分↑':'Prom. ↑',
+// ── 岗位排名 ──
+'岗位排名新增岗位筛选':'Filtro de puesto en ranking',
+// ── 中方考勤 ──
+'休假台账':'Registro de permisos',
+'探亲假':'Permiso familiar',
+'管理职':'Gerencial',
+'技术职':'Técnico',
+'技能职班长':'Jefe de turno',
+'节假日加班':'HE en feriados',
+'延时加班':'HE por extensión',
+'周末加班':'HE fin de semana',
+// ── 考勤符号说明 ──
+'法定节假日加班':'Horas extra en feriados oficiales',
+'出勤（含加班）':'Asistencia (incl. HE)',
+// ── 通用 ──
+'搜索岗位':'Buscar puesto',
+'全部岗位':'Todos los puestos',
+'全部班组':'Todos los equipos',
+'班组':'Equipo',
+'逐日明细Tab':'Pestaña de detalle diario'
 };
 const KEYS=Object.keys(ES_DICT).sort((a,b)=>b.length-a.length);
 function translateStr(s){
