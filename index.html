@@ -326,8 +326,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div class="nav-item" data-role="admin" onclick="showPage('kpilib',this)"><i class="ti ti-list-check"></i>指标库</div>
     <div class="nav-sec">绩效管理</div>
     <div class="nav-item" data-role="admin" onclick="showPage('dashboard',this)"><i class="ti ti-dashboard"></i>数据总览</div>
-    <div class="nav-item active" onclick="showPage('emp-eval',this)"><i class="ti ti-edit"></i>中方绩效评价</div>
-    <div class="nav-item" onclick="showPage('query',this)"><i class="ti ti-chart-bar"></i>墨方绩效评价</div>
+    <div class="nav-item active" onclick="showPage('emp-eval',this)"><i class="ti ti-edit"></i>员工绩效评价</div>
+    <div class="nav-item" onclick="showPage('query',this)"><i class="ti ti-chart-bar"></i>绩效汇总查询</div>
     <div class="nav-item" data-role="admin" onclick="showPage('perf-analysis',this)"><i class="ti ti-device-analytics"></i>绩效分析</div>
     <div class="nav-sec">考勤管理 · 墨方</div>
     <div class="nav-item" onclick="showPage('attendance',this)"><i class="ti ti-calendar-check"></i>墨方考勤填报</div>
@@ -495,7 +495,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 <!-- EMP EVAL PAGE -->
 <div id="page-emp-eval" class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-    <div class="page-title" style="margin-bottom:0">中方绩效评价 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅中国员工</span></div>
+    <div class="page-title" style="margin-bottom:0">员工绩效评价 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅中国员工</span></div>
     <div style="display:flex;gap:8px;align-items:center">
       <div class="month-sel"><button class="month-btn" onclick="chEvalM(-1)">‹</button><div class="month-lbl" id="eval-month-lbl" style="min-width:90px;text-align:center"></div><button class="month-btn" onclick="chEvalM(1)">›</button></div>
       <button class="btn" onclick="downloadImportTemplate()"><i class="ti ti-table-import"></i> 下载导入模板</button>
@@ -520,7 +520,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 
 <div id="page-query" class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <div class="page-title" style="margin-bottom:0">墨方绩效评价 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅墨西哥员工</span></div>
+    <div class="page-title" style="margin-bottom:0">绩效汇总查询 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅墨西哥员工</span></div>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="exportQuery()"><i class="ti ti-download"></i> 导出当前结果</button>
     </div>
@@ -586,11 +586,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <!-- 逐日明细面板（按天录入指标 & 绩效总分） -->
   <div id="q-panel-daily" style="display:none">
     <div class="card" style="padding:14px 16px;margin-bottom:14px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr) 1.5fr 1fr auto;gap:10px;align-items:end">
-        <div class="fg"><label class="fl">部门</label><select id="qd-dept" onchange="_qdAllLimit=12;fillQDailySubFilters();renderQDaily()"><option value="">全部部门</option></select></div>
-        <div class="fg"><label class="fl">科室</label><select id="qd-sec" onchange="_qdAllLimit=12;fillQDailyTeamPos();renderQDaily()"><option value="">全部科室</option></select></div>
-        <div class="fg"><label class="fl">班组</label><select id="qd-team" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部班组</option></select></div>
-        <div class="fg"><label class="fl">岗位</label><select id="qd-pos" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部岗位</option></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr auto;gap:10px;align-items:end">
+        <div class="fg"><label class="fl">部门</label><select id="qd-dept" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部部门</option></select></div>
         <div class="fg"><label class="fl">搜索员工（工号 / 姓名）</label><input id="qd-search" placeholder="输入工号或姓名…" oninput="_qdAllLimit=12;renderQDaily()"></div>
         <div class="fg"><label class="fl">月份</label>
           <div class="month-sel" style="width:100%;justify-content:space-between"><button class="month-btn" onclick="chQM(-1)">‹</button><div class="month-lbl" id="qd-month" style="flex:1;text-align:center"></div><button class="month-btn" onclick="chQM(1)">›</button></div>
@@ -607,10 +604,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <!-- 岗位排名面板 -->
   <div id="q-panel-rank" style="display:none">
     <div class="card" style="padding:12px 16px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div class="month-sel" style="justify-content:space-between;min-width:160px"><button class="month-btn" onclick="chQM(-1)">‹</button><div class="month-lbl" id="qr-month" style="flex:1;text-align:center"></div><button class="month-btn" onclick="chQM(1)">›</button></div>
-        <input id="qr-pos-f" placeholder="搜索岗位…" oninput="renderQRank()" style="width:180px">
-        <button id="qr-sort-btn" class="btn btn-sm" onclick="toggleQRankSort()" title="切换岗位排序方式"><i class="ti ti-arrows-sort"></i> <span id="qr-sort-lbl">均分↓</span></button>
         <button id="qr-scroll-btn" class="btn" onclick="toggleLinkedScroll('rank')" title="每10秒滚屏，到底后自动切换到逐日明细"><i class="ti ti-player-play" id="qr-scroll-icon"></i> 滚动播放</button>
         <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:4px"><i class="ti ti-info-circle"></i> 按岗位分组，当月已过天数内各指标及总分均值排名</span>
       </div>
@@ -803,7 +798,6 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <button class="btn" onclick="document.getElementById('att-file').click()" title="导入 Excel 考勤数据"><i class="ti ti-upload"></i> 导入Excel</button>
         <button class="btn btn-sm" onclick="dlAttTpl()" title="下载考勤导入模板"><i class="ti ti-download"></i> 模板</button>
         <input type="file" id="att-file" accept=".xlsx,.xls" style="display:none" onchange="handleAttFile(event)">
-        <button class="btn btn-sm" id="att-sort-fi-btn" onclick="toggleAttSortFI()" title="按FI数量排序"><i class="ti ti-arrows-sort"></i> FI排序</button>
         <button class="btn btn-p" onclick="saveAtt()"><i class="ti ti-check"></i><span data-i18n="btn_save_att">保存考勤</span></button>
       </div>
     </div>
@@ -1068,7 +1062,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       ⏰ 待考核 <span id="ledger-tab-count-pending" class="badge badge-info" style="margin-left:6px">0</span>
     </button>
     <button id="ledger-tab-btn-week" class="ledger-tab-btn" onclick="switchLedgerTab('week')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
-      📅 当周调薪 <span id="ledger-tab-count-week" class="badge" style="margin-left:6px;background:#dcfce7;color:#166534">0</span>
+      📅 当周调薪 <span id="ledger-tab-week-range" style="font-size:11px;font-weight:400;color:var(--color-text-tertiary);margin-left:4px"></span><span id="ledger-tab-count-week" class="badge" style="margin-left:6px;background:#dcfce7;color:#166534">0</span>
     </button>
     <button id="ledger-tab-btn-past" class="ledger-tab-btn" onclick="switchLedgerTab('past')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
       ✅ 已过调薪节点 <span id="ledger-tab-count-past" class="badge" style="margin-left:6px;background:#f3f4f6;color:#374151">0</span>
@@ -2465,27 +2459,12 @@ function exportQuery(){
 // ══════════ 逐日明细（按天录入指标 & 绩效总分） ══════════
 function dsOf(y,m,d){return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 function qdCanEdit(emp){return canEdit()||empInScope(emp);}
-function _qdFiltered(dF,secF){return employees.filter(e=>(!dF||e.dept===dF)&&(!secF||e.section===secF));}
-function fillQDailyTeamPos(){
-  const dF=$('qd-dept')?$('qd-dept').value:'';
-  const secF=$('qd-sec')?$('qd-sec').value:'';
-  const base=_qdFiltered(dF,secF);
-  const tsel=$('qd-team');const psel=$('qd-pos');
-  if(tsel){const teams=new Set(base.map(e=>e.team||e.section2||'').filter(Boolean));const pt=tsel.value;tsel.innerHTML='<option value="">全部班组</option>'+[...teams].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(pt&&teams.has(pt))tsel.value=pt;}
-  if(psel){const pos=new Set(base.map(e=>e.position||'').filter(Boolean));const pp=psel.value;psel.innerHTML='<option value="">全部岗位</option>'+[...pos].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(pp&&pos.has(pp))psel.value=pp;}
-}
-function fillQDailySubFilters(){
-  const dF=$('qd-dept')?$('qd-dept').value:'';
-  const sel=$('qd-sec');if(sel){const secs=new Set(employees.filter(e=>!dF||e.dept===dF).map(e=>e.section||'').filter(Boolean));const prev=sel.value;sel.innerHTML='<option value="">全部科室</option>'+[...secs].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(prev&&secs.has(prev))sel.value=prev;else if(sel.value)sel.value='';}
-  fillQDailyTeamPos();
-}
 function initQDailyFilters(){
   const dsel=$('qd-dept');
   if(dsel&&dsel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;dsel.appendChild(o);});
   if(currentUser&&currentUser.role!=='admin'){dsel.value=currentUser.dept;dsel.disabled=true;
-    if(currentUser.section){_qdAllLimit=9999;const sel=$('qd-sec');if(sel){sel.value=currentUser.section;sel.disabled=true;}}
+    if(currentUser.section){_qdAllLimit=9999;}
   }else{dsel.disabled=false;}
-  fillQDailySubFilters();
   if($('qd-month'))$('qd-month').textContent=mLabel(qY,qM);
 }
 function fillQDailyEmps(){
@@ -2621,14 +2600,8 @@ let _qdAllLimit=12;
 function renderQDailyOverview(){
   const wrap=$('qd-content');if(!wrap)return;
   const dF=$('qd-dept')?$('qd-dept').value:'';
-  const secF=($('qd-sec')&&$('qd-sec').value)||'';
-  const teamF=($('qd-team')&&$('qd-team').value)||'';
-  const posF=($('qd-pos')&&$('qd-pos').value)||'';
   const sq=(($('qd-search')&&$('qd-search').value)||'').toLowerCase().trim();
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
-  if(secF)list=list.filter(e=>e.section===secF);
-  if(teamF)list=list.filter(e=>(e.team||e.section2||'')===teamF);
-  if(posF)list=list.filter(e=>(e.position||'')===posF);
   list=list.filter(e=>empNat(e)!=='中国');
   list=list.filter(e=>getEmpKPIs(e).length>0&&(empStatus(e)!=='resigned'||qdMonthVals(e.id).length>0));
   if(sq)list=list.filter(e=>e.id.toLowerCase().includes(sq)||e.name.toLowerCase().includes(sq));
@@ -2713,17 +2686,10 @@ function exportQDailyOverview(){
 }
 
 // ══════════ 岗位排名 ══════════
-let _qrSortMode='score-desc'; // score-desc | score-asc
-function toggleQRankSort(){
-  _qrSortMode=_qrSortMode==='score-desc'?'score-asc':'score-desc';
-  const lbl=$('qr-sort-lbl');if(lbl)lbl.textContent=_qrSortMode==='score-desc'?'均分↓':'均分↑';
-  renderQRank();
-}
 function initQRankFilters(){
   const sel=$('qr-dept');if(!sel)return;
   if(sel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});
-  if(currentUser&&currentUser.role!=='admin'){sel.value=currentUser.dept;sel.disabled=true;}else sel.disabled=false;
-  if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
+  if(currentUser&&currentUser.role!=='admin'){sel.value=currentUser.dept;sel.disabled=true;}else sel.disabled=false;  if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
 }
 // 当月已过天数（当月则到今天，过去月份则全月）
 function pastDaysInMonth(){
@@ -2819,16 +2785,11 @@ function renderQRank(){
   if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
   const wrap=$('qr-content');if(!wrap)return;
   const dF=$('qr-dept')?$('qr-dept').value:'';
-  const posF=(($('qr-pos-f')&&$('qr-pos-f').value)||'').toLowerCase().trim();
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   list=list.filter(e=>empNat(e)!=='中国'&&empStatus(e)!=='resigned');
-  if(posF)list=list.filter(e=>(e.position||'').toLowerCase().includes(posF));
   const scored=list.map(e=>{const adj=calcAdjustedMonthScore(e.id);return{e,adj,avg:adj.score,kpiN:getEmpKPIs(e).length};});
   const posMap={};scored.forEach(r=>{const pos=r.e.position||'（未设置岗位）';if(!posMap[pos])posMap[pos]=[];posMap[pos].push(r);});
-  const posList=Object.entries(posMap).sort(([posA,a],[posB,b])=>{
-    const avgA=a.reduce((s,x)=>s+x.avg,0)/a.length;const avgB=b.reduce((s,x)=>s+x.avg,0)/b.length;
-    return _qrSortMode==='score-asc'?avgA-avgB:avgB-avgA;
-  });
+  const posList=Object.entries(posMap).sort(([,a],[,b])=>{const avgA=a.reduce((s,x)=>s+x.avg,0)/a.length;const avgB=b.reduce((s,x)=>s+x.avg,0)/b.length;return avgB-avgA;});
   const pastD=pastDaysInMonth();const today=new Date();const isNow=(qY===today.getFullYear()&&qM===(today.getMonth()+1));
   const subtitle=isNow?`${mLabel(qY,qM)} · 已过 ${pastD} 天`:`${mLabel(qY,qM)} · 全月 ${pastD} 天`;
   let html='';_qrPosData=[];
@@ -3662,8 +3623,6 @@ function fillAttSecFilter(){
   sel.value=names.includes(cur)?cur:'';
 }
 function onAttDeptChange(){fillAttSecFilter();renderAttWeek();}
-let _attSortFI=false;
-function toggleAttSortFI(){_attSortFI=!_attSortFI;const btn=$('att-sort-fi-btn');if(btn){btn.style.background=_attSortFI?'var(--color-text-primary)':'';btn.style.color=_attSortFI?'var(--color-background-primary)':'';btn.style.borderColor=_attSortFI?'var(--color-text-primary)':'';}renderAttWeek();}
 function renderAttWeek(){
   const dates=getWeekDates(weekOff),wk=wKey(weekOff);
   if(!attendanceData[wk])attendanceData[wk]={};
@@ -3674,7 +3633,6 @@ function renderAttWeek(){
   const q=($('att-search')?$('att-search').value:'').trim().toLowerCase();
   if(q)emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.id||'').toLowerCase().includes(q)||String(e.salaryCode||'').toLowerCase().includes(q));
   const clr=$('att-search-clear');if(clr)clr.style.display=q?'inline-flex':'none';
-  if(_attSortFI){emps=emps.slice().sort((a,b)=>{const fa=dates.filter(d=>(attendanceData[wk][a.id]||{})[dStr(d)]==='FI').length;const fb=dates.filter(d=>(attendanceData[wk][b.id]||{})[dStr(d)]==='FI').length;return fb-fa;});}
   $('att-week-head').innerHTML=`<th style="text-align:left;padding-left:8px;min-width:76px">工号</th><th style="text-align:left;min-width:90px">工资编码</th><th style="text-align:left;min-width:72px">姓名</th><th style="text-align:left;min-width:70px">部门</th><th style="min-width:76px;background:#fef3c7;color:#92400e">应出勤<br><span style="font-size:10px;font-weight:400">天数</span></th>`+dates.map((d,i)=>`<th style="min-width:68px">周${DAYS_CN[i]}<br><span style="font-size:10px;font-weight:400">${d.getMonth()+1}/${d.getDate()}</span></th>`).join('')+`<th style="min-width:50px">FI天</th><th style="min-width:60px;background:#dbeafe;color:#1e40af">加班<br><span style="font-size:10px;font-weight:400">总时长</span></th><th style="min-width:60px;background:#fef3c7;color:#92400e">迟到<br><span style="font-size:10px;font-weight:400">时长(h)</span></th><th style="min-width:84px;background:#fef2f2;color:#b91c1c">休息核验<br><span style="font-size:10px;font-weight:400">D≥2</span></th>`;
   let dFail=0;
   $('att-week-body').innerHTML=emps.map(e=>{
@@ -4301,10 +4259,13 @@ function renderLedger(){
   if(!el)return;
 
   const today=new Date(); today.setHours(0,0,0,0);
-  // Current week: Monday to Sunday
+  // Current week Monday
   const dayOfWeek=today.getDay()===0?6:today.getDay()-1; // 0=Mon
   const weekMon=new Date(today); weekMon.setDate(today.getDate()-dayOfWeek);
   const weekSun=new Date(weekMon); weekSun.setDate(weekMon.getDate()+6);
+  // "当周调薪" = 上周调薪日（本周发上周工资）
+  const prevWeekMon=new Date(weekMon); prevWeekMon.setDate(weekMon.getDate()-7);
+  const prevWeekSun=new Date(weekSun); prevWeekSun.setDate(weekSun.getDate()-7);
 
   // Build all rows
   const allRows=[];
@@ -4337,12 +4298,9 @@ function renderLedger(){
       // Categorize
       let tabCat;
       if(daysUntil>15) return; // too far future, not shown
-      if(daysUntil>=0&&daysUntil<=15) tabCat='pending'; // upcoming within 15 days
-      else if(salaryDate>=weekMon&&salaryDate<=weekSun) tabCat='week'; // salary date in current week (past part)
-      else tabCat='past'; // already past
-
-      // Also mark as 'week' if salary date falls in current week regardless of pending
-      if(daysUntil>=0&&salaryDate>=weekMon&&salaryDate<=weekSun) tabCat='week';
+      if(salaryDate>=prevWeekMon&&salaryDate<=prevWeekSun) tabCat='week'; // 上周调薪日 → 本周发薪
+      else if(daysUntil>=0&&daysUntil<=15) tabCat='pending'; // 未来15天内
+      else tabCat='past'; // 已过且不在上周范围
 
       allRows.push({emp,pos,node,salaryDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted,tabCat});
     });
@@ -4356,6 +4314,8 @@ function renderLedger(){
   setCnt('ledger-tab-count-pending',countPending);
   setCnt('ledger-tab-count-week',countWeek);
   setCnt('ledger-tab-count-past',countPast);
+  const rangeEl=document.getElementById('ledger-tab-week-range');
+  if(rangeEl){const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;rangeEl.textContent=`(${fmt(prevWeekMon)}–${fmt(prevWeekSun)})`;}
 
   const rows=allRows.filter(r=>r.tabCat===_ledgerActiveTab);
 
@@ -5375,8 +5335,8 @@ function doExport(){let wb=XLSX.utils.book_new();if(selExpNum===1){const ws=XLSX
 // ACCOUNTS
 const GRANTABLE_MODULES=[
   {id:'dashboard',label:'数据总览'},
-  {id:'emp-eval',label:'中方绩效评价'},
-  {id:'query',label:'墨方绩效评价'},
+  {id:'emp-eval',label:'员工绩效评价'},
+  {id:'query',label:'绩效汇总查询'},
   {id:'perf-analysis',label:'绩效分析'},
   {id:'attendance',label:'墨方考勤填报'},
   {id:'att-analysis',label:'考勤分析'},
