@@ -3707,7 +3707,8 @@ function updateKPIPreview(){
   if(err){$('kp-res').style.display='none';$('kp-err').style.display='block';$('kp-err').textContent='⚠ '+err;$('kp-explain').style.display='none';return;}
   $('kp-err').style.display='none';$('kp-res').style.display='block';
   const bonusOn=$('kb-enabled')&&$('kb-enabled').checked;
-  let bonusPts=0;if(bonusOn&&actual>target){const mockKpi={rule:{bonusEnabled:true,bonusMode,bonusStep:$('kb-step')?parseFloat($('kb-step').value)||null:null,bonusPerStep:$('kb-per-step')?parseFloat($('kb-per-step').value)||null:null,bonusCap:bonusMode==='step'?($('kb-cap')&&$('kb-cap').value!==''?parseFloat($('kb-cap').value):null):($('kb-cap-fml')&&$('kb-cap-fml').value!==''?parseFloat($('kb-cap-fml').value):null),bonusFormula:bonusMode==='fml'?($('kb-fml')&&$('kb-fml').value.trim()||null):null},target};try{bonusPts=calcBonusPoints(actual,mockKpi);}catch{bonusPts=0;}}
+  const _isCtrl=(kd||'achieve')==='control';
+  let bonusPts=0;if(bonusOn&&(_isCtrl?actual<target:actual>target)){const mockKpi={rule:{bonusEnabled:true,kd:kd,bonusMode,bonusStep:$('kb-step')?parseFloat($('kb-step').value)||null:null,bonusPerStep:$('kb-per-step')?parseFloat($('kb-per-step').value)||null:null,bonusCap:bonusMode==='step'?($('kb-cap')&&$('kb-cap').value!==''?parseFloat($('kb-cap').value):null):($('kb-cap-fml')&&$('kb-cap-fml').value!==''?parseFloat($('kb-cap-fml').value):null),bonusFormula:bonusMode==='fml'?($('kb-fml')&&$('kb-fml').value.trim()||null):null},target};try{bonusPts=calcBonusPoints(actual,mockKpi);}catch{bonusPts=0;}}
   const totalDisplay=score+(bonusPts>0?` + ${bonusPts}分超额加分 = ${Math.round((score+bonusPts)*10)/10}`:'');
   $('kp-res-val').textContent=`${(rate*100).toFixed(1)}% → ${totalDisplay}分`;
   $('kp-explain').style.display='block';
