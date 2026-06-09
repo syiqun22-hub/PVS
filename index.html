@@ -6792,7 +6792,17 @@ const ES_DICT={
 '入职日期':'Fecha de ingreso',
 '离职日期':'Fecha de baja',
 '国籍':'Nacionalidad',
-'班组':'Equipo/Turno'
+'班组':'Equipo/Turno',
+'各科室离职率（本月）':'Tasa de rotación por sección (mes actual)',
+'各离职类型人数':'N.º por tipo de baja',
+'离职人员工龄分布（本月）':'Distribución de antigüedad — bajas (mes actual)',
+'科室近 6 个月离职率趋势':'Tendencia rotación por sección (6 meses)',
+'离职人数':'N.º de bajas',
+'本月暂无数据':'Sin datos este mes',
+'本月':'mes actual',
+'部门汇总':'Total departamento',
+'部门直属':'Directo dto.',
+'数据加载中...':'Cargando datos...'
 };
 const KEYS=Object.keys(ES_DICT).sort((a,b)=>b.length-a.length);
 function translateStr(s){
@@ -6886,6 +6896,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   }
   function mLbl(y,m){try{if(typeof mLabel==='function')return mLabel(y,m);}catch(_){}return y+'年'+m+'月';}
   function pYMD(s){try{return parseYMD(s);}catch(_){return null;}}
+  function tr(s){try{return(typeof translateStr==='function')?translateStr(s):s;}catch(_){return s;}}
 
   // 墨西哥工厂全部员工（含离职），按角色可见
   function mxAll(){
@@ -7044,7 +7055,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     if(tc.unknown){labels.push('未分类');data.push(tc.unknown);cols.push('#ced4da');}
     const te=$('to-chart-type');
     if(te){if(_typeChart)_typeChart.destroy();
-      _typeChart=new Chart(te.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:translateStr('离职人数'),data,backgroundColor:cols,borderRadius:4}]},options:{indexAxis:'y',animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:translateStr('各离职类型人数'),font:{size:12}}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+      _typeChart=new Chart(te.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:tr('离职人数'),data,backgroundColor:cols,borderRadius:4}]},options:{indexAxis:'y',animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:tr('各离职类型人数'),font:{size:12}}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
     }
   }
 
