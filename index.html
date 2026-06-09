@@ -2376,8 +2376,8 @@ function renderQRadar(empId){
   _qRadarCharts[empId]=new Chart(ctx,{
     type:'radar',
     data:{labels,datasets:[
-      {label:translateStr('实际得分'),data:scores,backgroundColor:'#2563eb33',borderColor:'#2563eb',borderWidth:2,pointBackgroundColor:'#2563eb',pointRadius:3.5,pointHoverRadius:5},
-      {label:translateStr('满分基线 (100)'),data:kpis.map(()=>100),backgroundColor:'transparent',borderColor:'#cbd5e1',borderWidth:1,borderDash:[4,4],pointRadius:0}
+      {label:'实际得分',data:scores,backgroundColor:'#2563eb33',borderColor:'#2563eb',borderWidth:2,pointBackgroundColor:'#2563eb',pointRadius:3.5,pointHoverRadius:5},
+      {label:'满分基线 (100)',data:kpis.map(()=>100),backgroundColor:'transparent',borderColor:'#cbd5e1',borderWidth:1,borderDash:[4,4],pointRadius:0}
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{labels:{font:{size:11},boxWidth:14},position:'bottom'}},
@@ -3026,10 +3026,10 @@ function qdAttDonut(empId,sz=100){
   const counts=getMonthCounts([employees.find(e=>e.id===empId)].filter(Boolean),qY,qM);
   const c=counts[empId]||{};
   const groups=[
-    {label:translateStr('出勤'),keys:['A'],color:'#22c55e'},
-    {label:translateStr('休息/节假'),keys:['D','F'],color:'#94a3b8'},
-    {label:translateStr('请假'),keys:['PSG','PCG','VAC','INC','FJ'],color:'#3b82f6'},
-    {label:translateStr('旷工'),keys:['FI'],color:'#ef4444'},
+    {label:'出勤',keys:['A'],color:'#22c55e'},
+    {label:'休息/节假',keys:['D','F'],color:'#94a3b8'},
+    {label:'请假',keys:['PSG','PCG','VAC','INC','FJ'],color:'#3b82f6'},
+    {label:'旷工',keys:['FI'],color:'#ef4444'},
   ];
   const vals=groups.map(g=>({...g,v:g.keys.reduce((s,k)=>s+(c[k]||0),0)})).filter(g=>g.v>0);
   const total=vals.reduce((s,g)=>s+g.v,0);
@@ -3326,7 +3326,7 @@ function renderDepts(){
     $('dept-table').innerHTML=stats.map(d=>{const pct=d._emp?Math.round(d._done/d._emp*100):0;return`<tr style="cursor:pointer" onclick="document.getElementById('dept-filter').value='${d.name}';renderDepts()"><td><strong>${d.name}</strong></td><td>${d.head||'-'}</td><td>${d._emp}</td><td>${d._done}</td><td style="color:${scoreColor(d._avg||0)}"><strong>${d._avg||'-'}</strong></td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:${pct}%;background:${pct>=80?'#28a745':pct>=50?'#ffc107':'#dc3545'}"></div></div><span style="font-size:12px">${pct}%</span></div></td>${canEdit()?`<td>${d.name?`<button class="btn-del btn btn-sm" onclick="event.stopPropagation();delDept(${d.id})"><i class="ti ti-trash"></i></button>`:''}</td>`:''}</tr>`;}).join('');
   }
   // charts
-  const ctx2=$('deptCompChart').getContext('2d');if(charts.dc)charts.dc.destroy();charts.dc=new Chart(ctx2,{type:'bar',data:{labels:stats.map(d=>d.name),datasets:[{label:translateStr('平均分'),data:stats.map(d=>d._avg||0),backgroundColor:stats.map(d=>filterDept&&d.name===filterDept?'#dc3545':'#198754'),borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:160}}}});
+  const ctx2=$('deptCompChart').getContext('2d');if(charts.dc)charts.dc.destroy();charts.dc=new Chart(ctx2,{type:'bar',data:{labels:stats.map(d=>d.name),datasets:[{label:'平均分',data:stats.map(d=>d._avg||0),backgroundColor:stats.map(d=>filterDept&&d.name===filterDept?'#dc3545':'#198754'),borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:160}}}});
   const bins=[0,0,0,0];stats.forEach(d=>{const p=d._emp?Math.round(d._done/d._emp*100):0;if(p<25)bins[0]++;else if(p<50)bins[1]++;else if(p<75)bins[2]++;else bins[3]++;});
   const ctx3=$('completionChart').getContext('2d');if(charts.comp)charts.comp.destroy();charts.comp=new Chart(ctx3,{type:'doughnut',data:{labels:['0-25%','25-50%','50-75%','75-100%'],datasets:[{data:bins,backgroundColor:['#dc3545','#ffc107','#0d6efd','#28a745'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:12}}}}}});
 }
@@ -3968,20 +3968,20 @@ function drawAnaCharts(rows){
   const baseOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'%'}},x:{ticks:{font:{size:11}}}}};
   // chart1: attendance rate
   const c1=$('anaChart1').getContext('2d');if(charts.ana1)charts.ana1.destroy();
-  charts.ana1=new Chart(c1,{type:'bar',data:{labels,datasets:[{label:translateStr('出勤率'),data:attData,backgroundColor:attData.map(v=>v>=95?'#22c55e':v>=85?'#3b82f6':v>=70?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,scales:{...baseOpts.scales,y:{...baseOpts.scales.y,suggestedMax:100}},plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>translateStr('出勤率：')+ctx.parsed.y+'%'}}}}});
+  charts.ana1=new Chart(c1,{type:'bar',data:{labels,datasets:[{label:'出勤率',data:attData,backgroundColor:attData.map(v=>v>=95?'#22c55e':v>=85?'#3b82f6':v>=70?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,scales:{...baseOpts.scales,y:{...baseOpts.scales.y,suggestedMax:100}},plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>'出勤率：'+ctx.parsed.y+'%'}}}}});
   // chart2: FI rate
   const c2=$('anaChart2').getContext('2d');if(charts.ana2)charts.ana2.destroy();
-  charts.ana2=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:translateStr('旷工占比'),data:fiData,backgroundColor:fiData.map(v=>v<=1?'#22c55e':v<=3?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>translateStr('旷工占比：')+ctx.parsed.y+'%'}}}}});
+  charts.ana2=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:'旷工占比',data:fiData,backgroundColor:fiData.map(v=>v<=1?'#22c55e':v<=3?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>'旷工占比：'+ctx.parsed.y+'%'}}}}});
   // chart3: last 6 weeks combo (factory-wide)
   const visAll=mxEmps().filter(isSkillPos);
   const last6=[];for(let i=5;i>=0;i--){const off=anaWeekOff-i;const ds=getWeekDates(off);const lbl=`${ds[0].getMonth()+1}/${ds[0].getDate()}~${ds[6].getMonth()+1}/${ds[6].getDate()}`;const st=computeWeekStats(visAll,off);last6.push({lbl,att:+st.attRate.toFixed(2),fi:+st.fiRate.toFixed(2)});}
   const c3=$('anaChart3').getContext('2d');if(charts.ana3)charts.ana3.destroy();
   charts.ana3=new Chart(c3,{data:{labels:last6.map(x=>x.lbl),datasets:[
-    {type:'bar',label:translateStr('出勤率'),data:last6.map(x=>x.att),backgroundColor:'#3b82f6',borderRadius:4,yAxisID:'y',order:2},
-    {type:'line',label:translateStr('旷工占比'),data:last6.map(x=>x.fi),borderColor:'#dc3545',backgroundColor:'#dc3545',borderWidth:2,pointRadius:4,pointBackgroundColor:'#dc3545',tension:.3,yAxisID:'y1',order:1}
+    {type:'bar',label:'出勤率',data:last6.map(x=>x.att),backgroundColor:'#3b82f6',borderRadius:4,yAxisID:'y',order:2},
+    {type:'line',label:'旷工占比',data:last6.map(x=>x.fi),borderColor:'#dc3545',backgroundColor:'#dc3545',borderWidth:2,pointRadius:4,pointBackgroundColor:'#dc3545',tension:.3,yAxisID:'y1',order:1}
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+'：'+ctx.parsed.y+'%'}}},scales:{
-    y:{type:'linear',position:'left',beginAtZero:true,suggestedMax:100,title:{display:true,text:translateStr('出勤率 (%)'),font:{size:11}},ticks:{callback:v=>v+'%'}},
-    y1:{type:'linear',position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:translateStr('旷工占比 (%)'),font:{size:11}},ticks:{callback:v=>v+'%'}}
+    y:{type:'linear',position:'left',beginAtZero:true,suggestedMax:100,title:{display:true,text:'出勤率 (%)',font:{size:11}},ticks:{callback:v=>v+'%'}},
+    y1:{type:'linear',position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'旷工占比 (%)',font:{size:11}},ticks:{callback:v=>v+'%'}}
   }}});
 }
 /* ===== 通用 PDF 报表导出（基于浏览器原生打印，离线可用，无需外部库） ===== */
@@ -4859,7 +4859,7 @@ function renderPAEmployee(allScores,months,emps){
     });
     const momChange=momData.map((v,i)=>i===0||momData[i-1]===null||v===null?null:+(v-momData[i-1]).toFixed(1));
     _paCharts['pa-mom-chart']=new Chart(ctx7,{type:'line',data:{labels:months.map(m=>m.label),datasets:[
-      {label:translateStr('均分'),data:momData,borderColor:'#2563eb',backgroundColor:'#2563eb11',fill:true,tension:.3,yAxisID:'y',pointRadius:4},
+      {label:'均分',data:momData,borderColor:'#2563eb',backgroundColor:'#2563eb11',fill:true,tension:.3,yAxisID:'y',pointRadius:4},
       {label:'环比变动',data:momChange,borderColor:'#16a34a',borderDash:[4,4],fill:false,tension:.3,yAxisID:'y1',pointRadius:3},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{y:{position:'left',min:0,max:100},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{callback:v=>(v>0?'+':'')+v}}}}});
   }
