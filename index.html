@@ -2636,6 +2636,9 @@ function buildEmpDailyBlock(emp){
 }
 let _qdAllLimit=12;
 function renderQDailyOverview(){
+  try{_renderQDailyOverview();}catch(err){console.error('renderQDailyOverview error',err);const wrap=$('qd-content');if(wrap)wrap.innerHTML=`<div class="card" style="padding:20px;color:#dc3545">逐日明细渲染失败：${err.message}<br><small>${err.stack||''}</small></div>`;}
+}
+function _renderQDailyOverview(){
   const wrap=$('qd-content');if(!wrap)return;
   const dF=$('qd-dept')?$('qd-dept').value:'';
   const secF=($('qd-sec')&&$('qd-sec').value)||'';
@@ -2652,7 +2655,7 @@ function renderQDailyOverview(){
   list.sort((a,b)=>{const va=qdMonthVals(a.id),vb=qdMonthVals(b.id);const aa=va.length?va.reduce((s,x)=>s+x.v,0)/va.length:-1;const ab=vb.length?vb.reduce((s,x)=>s+x.v,0)/vb.length:-1;return ab-aa;});
   const total=list.length;
   const shown=Math.min(_qdAllLimit,total);
-  let blocks=list.slice(0,shown).map(e=>buildEmpDailyBlock(e)).join('');
+  let blocks=list.slice(0,shown).map(e=>{try{return buildEmpDailyBlock(e);}catch(err){console.error('buildEmpDailyBlock error',e.id,err);return`<div class="card" style="padding:14px 18px;margin-bottom:12px;color:#dc3545;font-size:12px"><b>${e.name}</b> 渲染失败：${err.message}</div>`;}}).join('');
   if(!total)blocks=`<div class="card" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px">${sq?'未找到匹配的员工。':'该范围内暂无已配置指标的员工。'}</div>`;
   const more=total>shown?`<div style="text-align:center;margin:6px 0 18px"><button class="btn" onclick="_qdAllLimit+=12;renderQDailyOverview()"><i class="ti ti-chevron-down"></i> 显示更多员工（还有 ${total-shown} 人）</button></div>`:''
   wrap.innerHTML=blocks+more;
@@ -2833,6 +2836,9 @@ function getEmpKpiAvgScore(empId,kpi,adj){
   return{score:sc!=null?Math.round(sc*10)/10:null,zeroed:false};
 }
 function renderQRank(){
+  try{_renderQRank();}catch(err){console.error('renderQRank error',err);const wrap=$('qr-content');if(wrap)wrap.innerHTML=`<div class="card" style="padding:20px;color:#dc3545">岗位排名渲染失败：${err.message}<br><small>${err.stack||''}</small></div>`;}
+}
+function _renderQRank(){
   if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);
   const wrap=$('qr-content');if(!wrap)return;
   const dF=$('qr-dept')?$('qr-dept').value:'';
@@ -6504,6 +6510,9 @@ const ES_DICT={
 '通过':'Aprobado',
 '取消':'Cancelar',
 '刷新':'Actualizar',
+'刷新数据':'Actualizar datos',
+'加载中...':'Cargando...',
+'数据已刷新':'Datos actualizados',
 '文件':'Archivo',
 '警告':'Advertencia',
 '邮箱':'Correo',
