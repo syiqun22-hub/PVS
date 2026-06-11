@@ -1957,10 +1957,9 @@ async function saveAll() {
   try {
     if (!_sbWriteAllowed()) return true;
 
-    const cfgOk = await saveConfig();
-    if (!cfgOk) { toast('⚠️ 保存失败，请检查网络连接'); return false; }
+    let ok = true;
 
-    // pvs_daily
+    // pvs_daily（优先保存：逐日录入是最高频的用户操作，不应被其他表的失败阻塞）
     const dailyUpserts = [];
     for (const empId of Object.keys(dailyScores)) {
       for (const date of Object.keys(dailyScores[empId])) {
@@ -1969,8 +1968,11 @@ async function saveAll() {
     }
     if (dailyUpserts.length) {
       const { error } = await _sbClient.from('pvs_daily').upsert(dailyUpserts, { onConflict: 'emp_id,date' });
-      if (error) { console.error('saveAll daily error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败，请检查网络连接'); ok = false; }
     }
+
+    const cfgOk = await saveConfig();
+    if (!cfgOk) { toast('⚠️ 配置数据保存失败，请检查网络连接'); ok = false; }
 
     // pvs_attendance — 通过 pvs_config 保存（每周一条记录）
     const attWeekUpserts = Object.keys(attendanceData).map(wk => ({ id: 'att_' + wk, value: attendanceData[wk] }));
@@ -1978,7 +1980,7 @@ async function saveAll() {
       const CHUNK = 50;
       for (let i = 0; i < attWeekUpserts.length; i += CHUNK) {
         const { error } = await _sbClient.from('pvs_config').upsert(attWeekUpserts.slice(i, i + CHUNK), { onConflict: 'id' });
-        if (error) { console.error('saveAll attendance error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+        if (error) { console.error('saveAll attendance error', error); toast('⚠️ 考勤数据保存失败，请检查网络连接'); ok = false; }
       }
     }
 
@@ -1986,7 +1988,7 @@ async function saveAll() {
     const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
     if (srUpserts.length) {
       const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
-      if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 调薪数据保存失败，请检查网络连接'); ok = false; }
     }
 
     // pvs_overtime  (结构: overtimeData[period][empId][date] = hours)
@@ -1999,11 +2001,11 @@ async function saveAll() {
     }
     if (otUpserts.length) {
       const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
-      if (error) { console.error('saveAll overtime error', error); toast('⚠️ 保存失败，请检查网络连接'); return false; }
+      if (error) { console.error('saveAll overtime error', error); toast('⚠️ 加班数据保存失败，请检查网络连接'); ok = false; }
     }
 
-    _lastSavedAt = Date.now();
-    return true;
+    if (ok) _lastSavedAt = Date.now();
+    return ok;
   } catch(e) { console.error('saveAll error', e); toast('⚠️ 保存失败：'+e.message); return false; }
 }
 
@@ -2141,7 +2143,7 @@ async function doLogin(){
   applyRoleUI();applyI18n();updateMonthLabels();initSidebarState();setTimeout(()=>renderDashboard(),50);
 }
 function doLogout(){currentUser=null;$('main-app').style.display='none';$('login-screen').style.display='flex';$('login-user').value='';$('login-pass').value='';}
-async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}if(_qDailySaveT){clearTimeout(_qDailySaveT);_qDailySaveT=null;await saveAll();_lastSavedAt=Date.now();}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
+async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}if(_qDailySaveT){clearTimeout(_qDailySaveT);_qDailySaveT=null;const ok=await saveAll();_lastSavedAt=Date.now();if(ok===false){if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}toast('⚠️ 有未保存的修改写入失败，已取消刷新，请检查网络后重试');return;}}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
 function applyRoleUI(){
   const isA=currentUser.role==='admin';
   $('user-avatar').textContent=currentUser.displayName.slice(0,2);
