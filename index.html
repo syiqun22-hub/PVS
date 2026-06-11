@@ -7493,7 +7493,7 @@ function entityNameList(){
   return list.sort((a,b)=>b.name.length-a.name.length);
 }
 function translateStr(s){
-  if(!s||!/[\u4e00-\u9fff]/.test(s))return s;
+  if(!s||lang!=='es'||!/[\u4e00-\u9fff]/.test(s))return s;
   let out=s;
   const tokens=[];
   entityNameList().forEach(o=>{
