@@ -1878,8 +1878,8 @@ const _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, 
 });
 
 function _sbWriteAllowed() {
-  if (window.location.protocol === 'file:') {
-    console.warn('[SB] file: 协议，跳过写入');
+  if (window.__EMBEDDED_SNAPSHOT) {
+    console.warn('[SB] 离线快照模式，跳过写入');
     return false;
   }
   return true;
@@ -2090,7 +2090,10 @@ async function saveAttendanceWeekOnly(weekKey) {
 async function loadAll(){
   showLoading('正在加载...');
   try{
-    if(SUPABASE_URL.includes('你的项目ID')){
+    if(window.__EMBEDDED_SNAPSHOT){
+      const snap=window.__EMBEDDED_SNAPSHOT;
+      employees=snap.employees||defEmployees();departments=snap.departments||defDepts();sections=snap.sections||defSections();kpiTemplates=snap.kpiTemplates||defKPIs();positions=snap.positions||defPositions();accounts=snap.accounts||defAccounts();monthlyScores=snap.monthlyScores||{};attendanceData=snap.attendanceData||{};salaryReviews=snap.salaryReviews||{};overtimeData=snap.overtimeData||{};dailyScores=snap.dailyScores||{};expectedDays=snap.expectedDays||{};lateData=snap.lateData||{};
+    } else if(SUPABASE_URL.includes('你的项目ID')){
       hideLoading();
       document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa"><div style="background:#162145;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)"><div style="font-size:32px;margin-bottom:12px">⚙️</div><div style="font-size:18px;font-weight:600;margin-bottom:10px">请先配置 Supabase</div><div style="font-size:13px;color:#666;line-height:1.7">打开 index.html 文件，找到顶部的<br><code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_URL</code> 和 <code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_ANON_KEY</code><br>填入你的 Supabase 项目信息后重新上传。</div></div></div>`;
       return;
