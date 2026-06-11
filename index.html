@@ -537,7 +537,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <!-- 当月查询面板 -->
   <div id="q-panel-month">
   <div class="card" style="padding:14px 16px;margin-bottom:14px">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr) repeat(3,1fr) auto;gap:10px;align-items:end">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr) repeat(4,1fr) auto;gap:10px;align-items:end">
       <div class="fg"><label class="fl" data-i18n="filter_month">月份</label>
         <div class="month-sel" style="width:100%;justify-content:space-between"><button class="month-btn" onclick="chQM(-1)">‹</button><div class="month-lbl" id="q-month" style="flex:1;text-align:center"></div><button class="month-btn" onclick="chQM(1)">›</button></div>
       </div>
@@ -547,6 +547,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="fg"><label class="fl">岗位</label><select id="q-pos" onchange="renderQuery()"><option value="">全部岗位</option></select></div>
       <div class="fg"><label class="fl" data-i18n="filter_grade">等级</label>
         <select id="q-grade" onchange="renderQuery()"><option value="">全部等级</option><option value="S">S 优秀(&gt;95)</option><option value="A">A 良好(85-95)</option><option value="B">B 合格(70-85)</option><option value="C">C 待改进(60-70)</option><option value="D">D 不合格(&lt;60)</option></select>
+      </div>
+      <div class="fg"><label class="fl">员工状态</label>
+        <select id="q-evalstatus" onchange="renderQuery()"><option value="">全部</option><option value="正常">正常（参与评价）</option><option value="试用">试用（待执行）</option></select>
       </div>
       <div class="fg"><label class="fl" data-i18n="filter_search">搜索</label><input id="q-search" oninput="renderQuery()"></div>
       <button class="btn" onclick="resetQuery()"><i class="ti ti-refresh"></i></button>
@@ -563,7 +566,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <th data-i18n="th_position">岗位</th><th>入职日期</th><th>员工状态</th>
     </tr></thead><tbody id="q-pending-table"></tbody></table>
   </div>
-  <div class="card" style="padding:0">
+  <div class="card" id="q-results-card" style="padding:0">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:0.5px solid var(--color-border-tertiary)">
       <div style="font-size:13px;font-weight:500" data-i18n="query_results">查询结果 <span style="font-size:11px;color:var(--color-text-tertiary);font-weight:400;margin-left:6px">（点击行展开指标雷达图）</span></div>
       <div style="font-size:12px;color:var(--color-text-secondary)" id="q-count"></div>
@@ -648,6 +651,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <button class="btn btn-p" id="btn-add-emp" onclick="openAddEmp()"><i class="ti ti-plus"></i> 新增员工</button>
     <button class="btn" id="btn-import-emp" onclick="openImport()"><i class="ti ti-upload"></i> 导入</button>
     <button class="btn" onclick="openExport()"><i class="ti ti-download"></i> 导出</button>
+    <button class="btn" onclick="exportAllEmployees()"><i class="ti ti-file-export"></i> 导出员工信息</button>
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table><thead><tr><th data-i18n="th_emp_id">工号</th><th>工资系统编码</th><th data-i18n="th_name">姓名</th><th data-i18n="th_dept">部门</th><th data-i18n="th_section">科室</th><th>班组</th><th data-i18n="th_position">岗位</th><th data-i18n="th_join_date">入职日期</th><th>国籍</th><th>状态</th><th>薪资等级</th><th data-i18n="th_action">操作</th></tr></thead>
@@ -2479,19 +2483,26 @@ function initQFilters(){const sel=$('q-dept');if(sel.options.length<=1){departme
 function renderQuery(){
   const dF=$('q-dept').value,gF=$('q-grade').value,s=($('q-search').value||'').toLowerCase();
   const secF=($('q-sec')&&$('q-sec').value)||'',teamF=($('q-team')&&$('q-team').value)||'',posF=($('q-pos')&&$('q-pos').value)||'';
+  const evalF=($('q-evalstatus')&&$('q-evalstatus').value)||'';
   let list=(canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope)).filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&isEvalEligible(e));
   if(secF)list=list.filter(e=>e.section===secF);
   if(teamF)list=list.filter(e=>e.team===teamF);
   if(posF)list=list.filter(e=>e.position===posF);
   if(s)list=list.filter(e=>e.name.toLowerCase().includes(s)||e.id.toLowerCase().includes(s));
-  // 待执行名单：入职未满3个月的墨西哥员工，暂不参与本月评估
+  // 待执行名单：员工状态为"试用"，暂不参与本月评估
   let pending=(canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope)).filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&!isEvalEligible(e));
   if(secF)pending=pending.filter(e=>e.section===secF);
   if(teamF)pending=pending.filter(e=>e.team===teamF);
   if(posF)pending=pending.filter(e=>e.position===posF);
   if(s)pending=pending.filter(e=>e.name.toLowerCase().includes(s)||e.id.toLowerCase().includes(s));
   pending.sort((a,b)=>(a.joinDate||'').localeCompare(b.joinDate||''));
-  $('q-pending-card').style.display=pending.length?'block':'none';
+  // 员工状态筛选："试用"=仅显示待执行名单；"正常"=仅显示已参与评价名单；"全部"=两者都显示
+  const showPending=evalF!=='正常';
+  const showMain=evalF!=='试用';
+  if(evalF==='试用')list=[];
+  $('q-pending-card').style.display=(showPending&&pending.length)?'block':'none';
+  $('q-grade-stats').style.display=showMain?'':'none';
+  $('q-results-card').style.display=showMain?'':'none';
   $('q-pending-count').textContent=`共 ${pending.length} 人`;
   $('q-pending-table').innerHTML=pending.map(e=>`<tr><td style="font-family:monospace;font-size:12px">${e.id}</td><td><strong>${e.name}</strong></td><td>${getDeptLabel(e.dept)}</td><td>${getPosLabel(e.position)||'-'}</td><td style="color:var(--color-text-secondary)">${e.joinDate||'-'}</td><td><span class="badge" style="background:#fef3c7;color:#92400e">试用</span></td></tr>`).join('');
   // 同步逐日明细到月度，确保当月查询与逐日明细一致
@@ -2646,7 +2657,7 @@ function renderQueryTrend(){
   });
 }
 function toggleSort(f){if(sortField===f)sortAsc=!sortAsc;else{sortField=f;sortAsc=false;}['s','g'].forEach(x=>{const e=$(x==='s'?'si-s':'si-g');if(e)e.textContent=(f===(x==='s'?'score':'grade'))?(sortAsc?'↑':'↓'):'↕';});renderQuery();}
-function resetQuery(){$('q-dept').value='';$('q-grade').value='';$('q-search').value='';if($('q-sec'))$('q-sec').value='';if($('q-team'))$('q-team').value='';if($('q-pos'))$('q-pos').value='';sortField=null;sortAsc=true;['si-s','si-g'].forEach(id=>{const e=$(id);if(e)e.textContent='↕';});renderQuery();}
+function resetQuery(){$('q-dept').value='';$('q-grade').value='';$('q-search').value='';if($('q-sec'))$('q-sec').value='';if($('q-team'))$('q-team').value='';if($('q-pos'))$('q-pos').value='';if($('q-evalstatus'))$('q-evalstatus').value='';sortField=null;sortAsc=true;['si-s','si-g'].forEach(id=>{const e=$(id);if(e)e.textContent='↕';});renderQuery();}
 function exportQuery(){
   const list=canEdit()?employees:employees.filter(empInScope);
   const rows=[['工号','姓名','部门','岗位','月份','状态','总分','等级','指标达成明细']];
@@ -5662,7 +5673,9 @@ function exportSR(){
   const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'员工考核档案');XLSX.writeFile(wb,'员工考核档案.xlsx');toast('导出成功');
 }
 // IMPORT/EXPORT
-const COL_MAP={id:['工号','ID Empleado','ID'],salaryCode:['工资系统编码','工资编码','Salary Code'],name:['姓名','Nombre'],dept:['部门','Departamento'],section:['科室','Sección'],position:['岗位','Puesto'],joinDate:['入职日期','Fecha de Ingreso'],nationality:['国籍','Nacionalidad'],status:['在职状态','Estado'],resignDate:['离职日期','Fecha de Baja'],resignType:['离职类型','Tipo de Baja']};
+const COL_MAP={id:['工号','ID Empleado','ID'],salaryCode:['工资系统编码','工资编码','Salary Code'],name:['姓名','Nombre'],dept:['部门','Departamento'],section:['科室','Sección'],team:['班组','Equipo','Turno'],position:['岗位','Puesto'],joinDate:['入职日期','Fecha de Ingreso'],nationality:['国籍','Nacionalidad'],status:['在职状态','Estado'],resignDate:['离职日期','Fecha de Baja'],resignType:['离职类型','Tipo de Baja'],evalStatus:['员工状态','Estado del Empleado'],regularDate:['转正日期','Fecha de Regularización']};
+// 员工状态归一化：试用/probation -> 试用，其余 -> 正常
+function normEvalStatus(v){const s=String(v==null?'':v).trim();if(/试用|prob/i.test(s))return '试用';return '正常';}
 function openImport(){$('import-preview').style.display='none';$('file-input').value='';importRows=[];$('modal-import').classList.add('open');}
 function _pad2(n){return String(n).padStart(2,'0');}
 // \u56fd\u7c4d\u5f52\u4e00\u5316\uff1a\u4e2d\u6587/\u897f\u8bed\u591a\u79cd\u5199\u6cd5\u2192\u300c\u4e2d\u56fd\u300d/\u300c\u58a8\u897f\u54e5\u300d
@@ -5684,29 +5697,39 @@ function normJoinDate(v){
   if(m)return m[1]+'/'+m[2]+'/'+m[3];
   return s;
 }
-function handleFile(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];const data=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});importRows=data.map(row=>{const o={};Object.entries(COL_MAP).forEach(([k,aliases])=>{for(const a of aliases){if(row[a]!==undefined){o[k]=k==='joinDate'?normJoinDate(row[a]):k==='nationality'?normNat(row[a]):String(row[a]).trim();break;}}});return o;}).filter(r=>r.id&&(r.name||r.nationality));$('preview-count').textContent=`共 ${importRows.length} 条`;$('preview-tbody').innerHTML=importRows.slice(0,15).map(r=>`<tr><td>${r.id}</td><td>${r.salaryCode||'-'}</td><td>${r.name}</td><td>${r.dept||'-'}</td><td>${r.section||'-'}</td><td>${r.position||'-'}</td><td>${r.joinDate||'-'}</td><td>${r.nationality||'墨西哥'}</td></tr>`).join('');$('import-preview').style.display='block';}catch{toast('解析失败');}};r.readAsArrayBuffer(f);}
+function handleFile(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];const data=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});importRows=data.map(row=>{const o={};Object.entries(COL_MAP).forEach(([k,aliases])=>{for(const a of aliases){if(row[a]!==undefined){o[k]=(k==='joinDate'||k==='regularDate')?normJoinDate(row[a]):k==='nationality'?normNat(row[a]):k==='evalStatus'?normEvalStatus(row[a]):String(row[a]).trim();break;}}});return o;}).filter(r=>r.id&&(r.name||r.nationality));$('preview-count').textContent=`共 ${importRows.length} 条`;$('preview-tbody').innerHTML=importRows.slice(0,15).map(r=>`<tr><td>${r.id}</td><td>${r.salaryCode||'-'}</td><td>${r.name}</td><td>${r.dept||'-'}</td><td>${r.section||'-'}</td><td>${r.position||'-'}</td><td>${r.joinDate||'-'}</td><td>${r.nationality||'墨西哥'}</td></tr>`).join('');$('import-preview').style.display='block';}catch{toast('解析失败');}};r.readAsArrayBuffer(f);}
 document.getElementById('import-zone').addEventListener('dragover',e=>e.preventDefault());document.getElementById('import-zone').addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)handleFile({target:{files:[f]}});});
-async function confirmImport(){let a=0,u=0,sk=0;importRows.forEach(r=>{const ex=employees.find(e=>e.id===r.id);const statusVal=r.status==='resigned'||r.status==='离职'?'resigned':'active';const rdv=r.resignDate||'';const rtv=r.resignType||'';if(ex){Object.assign(ex,r);applyEmpStatus(ex,statusVal,rdv,rtv);u++;}else if(r.name){const ob={id:r.id,salaryCode:r.salaryCode||'',name:r.name,dept:r.dept||'',section:r.section||'',position:r.position||'',joinDate:r.joinDate||'',nationality:r.nationality||'墨西哥'};applyEmpStatus(ob,statusVal,rdv,rtv);employees.push(ob);a++;}else{sk++;}if(r.dept&&!departments.find(d=>d.name===r.dept))departments.push({id:Date.now()+Math.random(),name:r.dept,head:''});});closeM('modal-import');await saveAndToast(`导入：新增${a}人，更新${u}人${sk?`，跳过${sk}条（无姓名且工号不存在）`:''}`);filterEmp();}
+async function confirmImport(){let a=0,u=0,sk=0;importRows.forEach(r=>{const ex=employees.find(e=>e.id===r.id);const statusVal=r.status==='resigned'||r.status==='离职'?'resigned':'active';const rdv=r.resignDate||'';const rtv=r.resignType||'';if(ex){Object.assign(ex,r);applyEmpStatus(ex,statusVal,rdv,rtv);u++;}else if(r.name){const ob={id:r.id,salaryCode:r.salaryCode||'',name:r.name,dept:r.dept||'',section:r.section||'',team:r.team||'',position:r.position||'',joinDate:r.joinDate||'',nationality:r.nationality||'墨西哥',evalStatus:r.evalStatus||'正常',regularDate:r.regularDate||''};applyEmpStatus(ob,statusVal,rdv,rtv);employees.push(ob);a++;}else{sk++;}if(r.dept&&!departments.find(d=>d.name===r.dept))departments.push({id:Date.now()+Math.random(),name:r.dept,head:''});});closeM('modal-import');await saveAndToast(`导入：新增${a}人，更新${u}人${sk?`，跳过${sk}条（无姓名且工号不存在）`:''}`);filterEmp();}
 function dlTpl(l){
   const zh=l==='zh';
   const h=zh
-    ?['工号','工资系统编码','姓名','部门','科室','岗位','入职日期','国籍','在职状态','离职日期','离职类型']
-    :['ID Empleado','Salary Code','Nombre','Departamento','Sección','Puesto','Fecha de Ingreso','Nacionalidad','Estado','Fecha de Baja','Tipo de Baja'];
+    ?['工号','工资系统编码','姓名','部门','科室','班组','岗位','入职日期','国籍','在职状态','离职日期','离职类型','员工状态','转正日期']
+    :['ID Empleado','Salary Code','Nombre','Departamento','Sección','Equipo','Puesto','Fecha de Ingreso','Nacionalidad','Estado','Fecha de Baja','Tipo de Baja','Estado del Empleado','Fecha de Regularización'];
   const note=zh
-    ?['','','','','','','','','在职=active / 离职=resigned','YYYY/MM/DD（离职时填）','旷工离职/辞职/退休/死亡/公司解除/试用期不通过/人员优化']
-    :['','','','','','','','','En servicio=active / Baja=resigned','YYYY/MM/DD (si es baja)','Abandono/Renuncia/Jubilación/Fallecimiento/Despido/No superó prueba/Optimización'];
+    ?['','','','','','','','','','在职=active / 离职=resigned','YYYY/MM/DD（离职时填）','旷工离职/辞职/退休/死亡/公司解除/试用期不通过/人员优化','试用/正常（不参与/参与绩效评价）','YYYY/MM/DD（当月转正时填，影响绩效兑现天数）']
+    :['','','','','','','','','','En servicio=active / Baja=resigned','YYYY/MM/DD (si es baja)','Abandono/Renuncia/Jubilación/Fallecimiento/Despido/No superó prueba/Optimización','试用/正常 (no participa/participa en evaluación)','YYYY/MM/DD (si se regulariza en el mes)'];
   const s1=zh
-    ?['205471','MX001','张三','轮胎制造部','炼胶生产科','炼胶操作工','2024/03/15','墨西哥','active','','']
-    :['205471','MX001','Juan Pérez','Producción','Mezclado','Operador','2024/03/15','Mexicano','active','',''];
+    ?['205471','MX001','张三','轮胎制造部','炼胶生产科','一班','炼胶操作工','2024/03/15','墨西哥','active','','','正常','']
+    :['205471','MX001','Juan Pérez','Producción','Mezclado','Turno 1','Operador','2024/03/15','Mexicano','active','','','正常',''];
   const s2=zh
-    ?['205472','MX002','李四','轮胎制造部','炼胶生产科','炼胶操作工','2023/06/01','墨西哥','resigned','2025/05/10','辞职']
-    :['205472','MX002','María López','Producción','Mezclado','Operador','2023/06/01','Mexicano','resigned','2025/05/10','Renuncia'];
+    ?['205472','MX002','李四','轮胎制造部','炼胶生产科','二班','炼胶操作工','2023/06/01','墨西哥','resigned','2025/05/10','辞职','正常','']
+    :['205472','MX002','María López','Producción','Mezclado','Turno 2','Operador','2023/06/01','Mexicano','resigned','2025/05/10','Renuncia','正常',''];
   const ws=XLSX.utils.aoa_to_sheet([h,note,s1,s2]);
-  ws['!cols']=h.map((_,i)=>({wch:i>=8?22:i>=6?14:16}));
+  ws['!cols']=h.map((_,i)=>({wch:i>=10?22:i>=6?14:16}));
   // 说明行斜体灰色
   h.forEach((_,i)=>{const c=XLSX.utils.encode_cell({r:1,c:i});if(ws[c])ws[c].s={font:{italic:true,color:{rgb:'888888'}}}; });
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
   XLSX.writeFile(wb,zh?'员工导入模板.xlsx':'plantilla_empleados.xlsx');
+}
+// 导出全体员工现有信息（花名册）
+function exportAllEmployees(){
+  const h=['工号','工资系统编码','姓名','部门','科室','班组','岗位','入职日期','国籍','在职状态','离职日期','离职类型','员工状态','转正日期'];
+  const rows=employees.map(e=>[e.id,e.salaryCode||'',e.name,e.dept||'',e.section||'',e.team||'',e.position||'',e.joinDate||'',e.nationality||'墨西哥',empStatus(e),e.resignDate||'',e.resignType||'',empEvalStatus(e),e.regularDate||'']);
+  const ws=XLSX.utils.aoa_to_sheet([h,...rows]);
+  ws['!cols']=h.map((_,i)=>({wch:i>=10?22:i>=6?14:16}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'员工信息');
+  XLSX.writeFile(wb,`员工信息_${mKey(curY,curM)}.xlsx`);
+  toast('导出成功');
 }
 function openExport(){selExpNum=1;updateExpParams();$('modal-export').classList.add('open');}
 function selExp(n){selExpNum=n;[1,2,3,4].forEach(i=>{const e=$('eo-'+i);if(e)e.classList.toggle('sel',i===n);});updateExpParams();}
@@ -7158,6 +7181,7 @@ function translateStr(s){
   return out;
 }
 function tLabel(s){try{return translateStr(s);}catch(_){return s;}}
+window.tLabel=tLabel;window.translateStr=translateStr;
 const origText=new Map();
 const origAttr=new Map();
 let busy=false;
