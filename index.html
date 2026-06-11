@@ -1885,6 +1885,22 @@ function _sbWriteAllowed() {
   return true;
 }
 
+// 分页读取整张表（PostgREST 默认每次最多返回 1000 行，行数较多时需翻页，
+// 否则逐日数据等会被截断，刷新/切换页签后看起来"恢复成之前的样子"）
+async function _fetchAllRows(table, columns) {
+  const PAGE = 1000;
+  let from = 0, all = [];
+  while (true) {
+    const { data, error } = await _sbClient.from(table).select(columns).range(from, from + PAGE - 1);
+    if (error) { console.error(`_fetchAllRows ${table} error`, error); break; }
+    if (!data || !data.length) break;
+    all = all.concat(data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
 // ---- 颗粒化存储函数 ----
 
 async function saveConfig() {
@@ -1977,12 +1993,18 @@ async function saveAll() {
       }
     }
     if (dailyUpserts.length) {
-      const { data: savedRows, error } = await _sbClient.from('pvs_daily').upsert(dailyUpserts, { onConflict: 'emp_id,date' }).select('emp_id,date');
-      if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败：'+error.message); ok = false; }
-      else if (!savedRows || savedRows.length !== dailyUpserts.length) {
-        console.error('saveAll daily verify mismatch', { expected: dailyUpserts.length, got: savedRows && savedRows.length });
-        toast('⚠️ 逐日数据写入未确认（可能是数据库权限问题），请联系管理员检查 pvs_daily 表的写入权限');
-        ok = false;
+      // 分批写入：单次请求行数过多时，PostgREST 默认只返回前 1000 行，
+      // 会导致下面的写入校验误判为"未确认"，从而把本来已成功写入的数据标记为失败
+      const CHUNK = 500;
+      for (let i = 0; i < dailyUpserts.length; i += CHUNK) {
+        const chunk = dailyUpserts.slice(i, i + CHUNK);
+        const { data: savedRows, error } = await _sbClient.from('pvs_daily').upsert(chunk, { onConflict: 'emp_id,date' }).select('emp_id,date');
+        if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败：'+error.message); ok = false; break; }
+        else if (!savedRows || savedRows.length !== chunk.length) {
+          console.error('saveAll daily verify mismatch', { expected: chunk.length, got: savedRows && savedRows.length });
+          toast('⚠️ 逐日数据写入未确认（可能是数据库权限问题），请联系管理员检查 pvs_daily 表的写入权限');
+          ok = false; break;
+        }
       }
     }
 
@@ -2076,7 +2098,7 @@ async function loadAll(){
       var eR,dR,secR,kR,pR,aR,sR,attR,srR,otR,edR,dsdR,ldR;
 
       // 从 pvs_config 加载配置
-      const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
+      const cfgRows = await _fetchAllRows('pvs_config', 'id,value');
       if (cfgRows && cfgRows.length) {
         const cfg = {};
         cfgRows.forEach(r => { cfg[r.id] = r.value; });
@@ -2085,7 +2107,7 @@ async function loadAll(){
       }
 
       // 从 pvs_daily 加载逐日得分
-      const { data: dailyRows } = await _sbClient.from('pvs_daily').select('emp_id,date,data');
+      const dailyRows = await _fetchAllRows('pvs_daily', 'emp_id,date,data');
       dsdR = {};
       if (dailyRows) { dailyRows.forEach(r => { if(!dsdR[r.emp_id])dsdR[r.emp_id]={}; dsdR[r.emp_id][r.date]=r.data; }); }
 
@@ -2101,12 +2123,12 @@ async function loadAll(){
       }
 
       // 从 pvs_salary_reviews 加载调薪记录
-      const { data: srRows } = await _sbClient.from('pvs_salary_reviews').select('emp_id,data');
+      const srRows = await _fetchAllRows('pvs_salary_reviews', 'emp_id,data');
       srR = {};
       if (srRows) { srRows.forEach(r => { srR[r.emp_id]=r.data; }); }
 
       // 从 pvs_overtime 加载加班数据
-      const { data: otRows } = await _sbClient.from('pvs_overtime').select('emp_id,period,data');
+      const otRows = await _fetchAllRows('pvs_overtime', 'emp_id,period,data');
       otR = {};
       if (otRows) { otRows.forEach(r => { if(!otR[r.period])otR[r.period]={}; otR[r.period][r.emp_id]=r.data; }); }
 
