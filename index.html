@@ -755,6 +755,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <button class="btn btn-p" onclick="openAddPos()"><i class="ti ti-plus"></i>新增岗位</button>
       <button class="btn" onclick="document.getElementById('pos-import-file').click()"><i class="ti ti-upload"></i>批量导入</button>
       <button class="btn btn-sm" onclick="dlPosTpl()"><i class="ti ti-download"></i>模板</button>
+      <button class="btn" onclick="exportAllPositions()"><i class="ti ti-file-export"></i> 导出岗位信息</button>
       <input type="file" id="pos-import-file" accept=".xlsx,.xls" style="display:none" onchange="handlePosFile(event)">
       <div style="margin-left:auto;font-size:12px;color:var(--color-text-secondary)" id="org-pos-count"></div>
     </div>
@@ -3688,11 +3689,21 @@ async function saveNewPos(){
 }
 async function delPos(id){const p=positions.find(x=>x.id===id);if(!p)return;const usedBy=employees.filter(e=>e.position===p.name).length;if(usedBy>0){toast(`无法删除：仍有 ${usedBy} 名员工属于该岗位`);return;}if(!confirm(`确定删除岗位「${p.name}」？`))return;positions=positions.filter(x=>x.id!==id);_posExpanded.delete(id);await saveAndToast('已删除');renderOrgPosition();}
 function dlPosTpl(){
-  const h=['岗位编码','岗位名称','归属部门','归属科室','岗位类型','工资类别','岗位等级'];
-  const sample=[['HR','HR专员','人力资源部','','1069-职能职','P','B'],['ENG','工艺工程师','品质技术部','品质技术部','1068-技术职','T',''],['OPS','炼胶操作工','轮胎制造部','炼胶生产科','1067-技能职','O','']];
+  const h=['岗位编码','岗位名称','岗位名称（西语）','归属部门','归属科室','岗位类型','工资类别','岗位等级'];
+  const sample=[['HR','HR专员','Especialista de RH','人力资源部','','1069-职能职','P','B'],['ENG','工艺工程师','Ingeniero de Procesos','品质技术部','品质技术部','1068-技术职','T',''],['OPS','炼胶操作工','Operador de Mezclado','轮胎制造部','炼胶生产科','1067-技能职','O','']];
   const ws=XLSX.utils.aoa_to_sheet([h,...sample]);
+  ws['!cols']=h.map((_,i)=>({wch:i===1||i===2?20:14}));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'岗位');
   XLSX.writeFile(wb,'岗位导入模板.xlsx');
+}
+function exportAllPositions(){
+  const h=['岗位编码','岗位名称','岗位名称（西语）','归属部门','归属科室','岗位类型','工资类别','岗位等级'];
+  const rows=positions.map(p=>[p.code||'',p.name||'',p.nameEs||'',p.deptName||'',p.sectionName||'',p.posType||'',p.category||'',p.level||'']);
+  const ws=XLSX.utils.aoa_to_sheet([h,...rows]);
+  ws['!cols']=h.map((_,i)=>({wch:i===1||i===2?20:14}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'岗位信息');
+  XLSX.writeFile(wb,'岗位信息.xlsx');
+  toast('导出成功');
 }
 function handlePosFile(e){
   const f=e.target.files[0];if(!f)return;
@@ -3707,6 +3718,7 @@ function handlePosFile(e){
         const code=String(row['岗位编码']||row['编码']||row['Code']||'').trim().toUpperCase();
         const name=String(row['岗位名称']||row['名称']||row['Name']||'').trim();
         if(!code||!name){skipped++;return;}
+        const nameEs=String(row['岗位名称（西语）']||row['岗位名称(西语)']||row['西语翻译']||row['Nombre (Español)']||'').trim();
         const deptName=String(row['归属部门']||row['部门']||'').trim();
         if(!deptName){skipped++;return;}
         const sectionName=String(row['归属科室']||row['科室']||'').trim();
@@ -3714,8 +3726,8 @@ function handlePosFile(e){
         const category=String(row['工资类别']||row['岗位类别']||'').trim();
         const level=String(row['岗位等级']||'').trim();
         const ex=positions.find(p=>p.code===code||p.name===name);
-        if(ex){const oldName=ex.name;Object.assign(ex,{code,name,deptName,sectionName,posType,category,level});if(oldName!==name)employees.forEach(emp=>{if(emp.position===oldName)emp.position=name;});updated++;}
-        else{positions.push({id:uid('P'),code,name,deptName,sectionName,posType,category,level,kpiRefs:[]});added++;}
+        if(ex){const oldName=ex.name;Object.assign(ex,{code,name,nameEs:nameEs||ex.nameEs,deptName,sectionName,posType,category,level});if(oldName!==name)employees.forEach(emp=>{if(emp.position===oldName)emp.position=name;});updated++;}
+        else{positions.push({id:uid('P'),code,name,nameEs,deptName,sectionName,posType,category,level,kpiRefs:[]});added++;}
       });
       await saveAndToast(`导入完成：新增 ${added}，更新 ${updated}${skipped?`，跳过 ${skipped}`:''}`);renderOrgPosition();
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
@@ -6524,6 +6536,8 @@ const ES_DICT={
 '保存评估':'Guardar evaluación',
 '导出备份':'Exportar respaldo',
 '员工信息':'Información del empleado',
+'岗位信息':'Información del puesto',
+'岗位名称（西语）':'Nombre del puesto (Español)',
 '账号信息':'Información de la cuenta',
 '恢复备份':'Restaurar respaldo',
 '无法撤销':'No se puede deshacer',
@@ -7471,10 +7485,27 @@ const ES_DICT={
 '驻外':'Destino extranjero'
 };
 const KEYS=Object.keys(ES_DICT).sort((a,b)=>b.length-a.length);
+function entityNameList(){
+  const list=[];
+  [departments,sections,positions,kpiTemplates].forEach(arr=>{
+    (arr||[]).forEach(o=>{if(o&&o.name&&o.name.length>=2)list.push(o);});
+  });
+  return list.sort((a,b)=>b.name.length-a.name.length);
+}
 function translateStr(s){
   if(!s||!/[\u4e00-\u9fff]/.test(s))return s;
   let out=s;
+  const tokens=[];
+  entityNameList().forEach(o=>{
+    if(out.indexOf(o.name)!==-1){
+      const label=o.nameEs||o.name;
+      const token='\u0001TKN'+tokens.length+'\u0001';
+      out=out.split(o.name).join(token);
+      tokens.push(label);
+    }
+  });
   for(let i=0;i<KEYS.length;i++){const k=KEYS[i];if(out.indexOf(k)!==-1)out=out.split(k).join(ES_DICT[k]);}
+  tokens.forEach((label,i)=>{out=out.split('\u0001TKN'+i+'\u0001').join(label);});
   return out;
 }
 function tLabel(s){try{return translateStr(s);}catch(_){return s;}}
