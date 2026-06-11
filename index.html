@@ -1986,26 +1986,47 @@ async function saveAll() {
     let ok = true;
 
     // pvs_daily（优先保存：逐日录入是最高频的用户操作，不应被其他表的失败阻塞）
+    // 只写入"脏"记录（_dirtyDaily），而不是每次都重新写入全部历史记录：
+    // 全量重写会导致每条记录的 updated_at 都变化，从而触发大量 realtime
+    // 变更通知；当通知量过大/延迟较高时，可能在用户刚编辑完之后、本次
+    // 保存真正落库之前，被自己之前保存的旧数据"回放"覆盖掉内存中的最新
+    // 编辑，最终把旧数据当作"最新数据"存回数据库——表现为保存提示成功，
+    // 但刷新/切换页签后又变回了之前的样子。
+    const dirtyKeys = [..._dirtyDaily];
     const dailyUpserts = [];
-    for (const empId of Object.keys(dailyScores)) {
-      for (const date of Object.keys(dailyScores[empId])) {
-        dailyUpserts.push({ emp_id: empId, date, data: dailyScores[empId][date], updated_at: new Date().toISOString() });
-      }
+    const dailyDeletes = [];
+    for (const key of dirtyKeys) {
+      const sep = key.indexOf('|');
+      const empId = key.slice(0, sep), date = key.slice(sep + 1);
+      const rec = dailyScores[empId] && dailyScores[empId][date];
+      if (rec) dailyUpserts.push({ emp_id: empId, date, data: rec, updated_at: new Date().toISOString() });
+      else dailyDeletes.push({ empId, date });
     }
-    if (dailyUpserts.length) {
-      // 分批写入：单次请求行数过多时，PostgREST 默认只返回前 1000 行，
-      // 会导致下面的写入校验误判为"未确认"，从而把本来已成功写入的数据标记为失败
-      const CHUNK = 500;
-      for (let i = 0; i < dailyUpserts.length; i += CHUNK) {
-        const chunk = dailyUpserts.slice(i, i + CHUNK);
-        const { data: savedRows, error } = await _sbClient.from('pvs_daily').upsert(chunk, { onConflict: 'emp_id,date' }).select('emp_id,date');
-        if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败：'+error.message); ok = false; break; }
-        else if (!savedRows || savedRows.length !== chunk.length) {
-          console.error('saveAll daily verify mismatch', { expected: chunk.length, got: savedRows && savedRows.length });
-          toast('⚠️ 逐日数据写入未确认（可能是数据库权限问题），请联系管理员检查 pvs_daily 表的写入权限');
-          ok = false; break;
+    if (dailyUpserts.length || dailyDeletes.length) {
+      let dailyOk = true;
+      if (dailyUpserts.length) {
+        // 分批写入：单次请求行数过多时，PostgREST 默认只返回前 1000 行，
+        // 会导致下面的写入校验误判为"未确认"，从而把本来已成功写入的数据标记为失败
+        const CHUNK = 500;
+        for (let i = 0; i < dailyUpserts.length; i += CHUNK) {
+          const chunk = dailyUpserts.slice(i, i + CHUNK);
+          const { data: savedRows, error } = await _sbClient.from('pvs_daily').upsert(chunk, { onConflict: 'emp_id,date' }).select('emp_id,date');
+          if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败：'+error.message); ok = false; dailyOk = false; break; }
+          else if (!savedRows || savedRows.length !== chunk.length) {
+            console.error('saveAll daily verify mismatch', { expected: chunk.length, got: savedRows && savedRows.length });
+            toast('⚠️ 逐日数据写入未确认（可能是数据库权限问题），请联系管理员检查 pvs_daily 表的写入权限');
+            ok = false; dailyOk = false; break;
+          }
         }
       }
+      if (dailyOk) {
+        for (const { empId, date } of dailyDeletes) {
+          const { error } = await _sbClient.from('pvs_daily').delete().eq('emp_id', empId).eq('date', date);
+          if (error) { console.error('saveAll daily delete error', error); toast('⚠️ 逐日数据删除失败：'+error.message); ok = false; dailyOk = false; break; }
+        }
+      }
+      // 写入成功的记录从脏集合中移除；失败的保留，下次保存时重试
+      if (dailyOk) dirtyKeys.forEach(k => _dirtyDaily.delete(k));
     }
 
     const cfgOk = await saveConfig();
@@ -2052,6 +2073,8 @@ async function saveAndToast(m) {
   if(ok !== false){ _lastSavedAt = Date.now(); toast(m); }
 }
 let _lastSavedAt = 0;
+// 待写入数据库的逐日记录（"empId|date" 集合），由 saveDailyCell/saveDailyFraction 标记
+let _dirtyDaily = new Set();
 
 let _suppressRealtime = false, _suppressTimer = null;
 function _suppressRealtimeFor(ms) {
@@ -2792,6 +2815,7 @@ function saveDailyCell(empId,ds,kpiId,val){
   if(tot==null&&Object.keys(rec.scores).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
   // 同步到月度评估
   syncDailyToMonthly(empId);
+  _dirtyDaily.add(empId+'|'+ds);
   const totEl=document.getElementById('qd-tot-'+empId+'-'+ds)||document.getElementById('qd-tot-'+ds);
   if(totEl){totEl.textContent=tot!=null?Math.round(tot):'·';totEl.style.color=tot!=null?scoreColor(tot):'var(--color-border-secondary)';}
   updateQDailySummary(empId);
@@ -2811,6 +2835,7 @@ function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
   const tot=recalcDayTotal(empId,ds,emp);
   if(tot==null&&Object.keys(rec.scores).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
   syncDailyToMonthly(empId);
+  _dirtyDaily.add(empId+'|'+ds);
   const totEl=document.getElementById('qd-tot-'+empId+'-'+ds);
   if(totEl){totEl.textContent=tot!=null?Math.round(tot):'·';totEl.style.color=tot!=null?scoreColor(tot):'var(--color-border-secondary)';}
   updateQDailySummary(empId);
@@ -5892,6 +5917,8 @@ loadAll().then(()=>{
         try {
           const r = payload.new || {};
           if (r.emp_id && r.date) {
+            // 跳过本地仍有未保存编辑的记录，避免被旧的 realtime 回放覆盖
+            if (_dirtyDaily.has(r.emp_id + '|' + r.date)) return;
             if (!dailyScores[r.emp_id]) dailyScores[r.emp_id] = {};
             dailyScores[r.emp_id][r.date] = r.data;
             _reloadActivePage();
