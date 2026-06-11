@@ -5808,6 +5808,7 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_config_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_config' }, async () => {
         if (!currentUser) return;
+        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
         try {
           const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
           if (cfgRows && cfgRows.length) {
@@ -5836,6 +5837,7 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_daily_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_daily' }, payload => {
         if (!currentUser) return;
+        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.emp_id && r.date) {
@@ -5849,6 +5851,7 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_attendance_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_attendance' }, payload => {
         if (!currentUser) return;
+        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.week_key && r.emp_id && r.date) {
@@ -5863,6 +5866,7 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_salary_reviews_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_salary_reviews' }, payload => {
         if (!currentUser) return;
+        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.emp_id) { salaryReviews[r.emp_id] = r.data; _reloadActivePage(); }
@@ -5872,6 +5876,7 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_overtime_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_overtime' }, payload => {
         if (!currentUser) return;
+        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.emp_id && r.period) {
