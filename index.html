@@ -928,7 +928,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <button class="month-btn" onclick="chAnaWk(1)">›</button>
       <button class="btn btn-sm" style="margin-left:6px" onclick="anaWeekOff=0;renderAttAnalysis()">本周</button>
     </div>
-    <select id="ana-dept-f" onchange="renderAttAnalysis()" style="width:140px"><option value="">全部部门</option></select>
+    <select id="ana-dept-f" onchange="renderAttAnalysis()" style="width:140px"><option value="">全部科室</option></select>
     <label id="ana-excl-wrap" title="在职但本周无任何考勤记录的员工，视为尚未填报，不计入出勤率与旷工占比" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:5px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md)">
       <input type="checkbox" id="ana-excl-blank" checked="" onchange="anaExclBlank=this.checked;renderAttAnalysis()" style="cursor:pointer;margin:0">
       排除无考勤记录员工
@@ -4179,10 +4179,10 @@ function computeWeekStats(emps,wkOff){
   return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate};
 }
 function renderAttAnalysis(){
-  const dfSel=$('ana-dept-f');if(dfSel&&dfSel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;dfSel.appendChild(o);});
+  const dfSel=$('ana-dept-f');if(dfSel&&dfSel.options.length<=1){const allSecs=new Set();mxEmps().filter(isSkillPos).forEach(e=>{if(e.section)allSecs.add(e.section);});[...allSecs].sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;dfSel.appendChild(o);});}
   $('ana-week-lbl').textContent=wLabel(anaWeekOff);
-  const dF=$('ana-dept-f').value;
-  let emps=mxEmps().filter(isSkillPos);if(dF)emps=emps.filter(e=>e.dept===dF);
+  const secF=$('ana-dept-f').value;
+  let emps=mxEmps().filter(isSkillPos);if(secF)emps=emps.filter(e=>e.section===secF);
   // 按部门→科室分组
   const byDept={};
   emps.forEach(e=>{
@@ -4206,18 +4206,9 @@ function renderAttAnalysis(){
     {l:'旷工占比',v:all.fiRate.toFixed(2)+'%',s:`旷工 ${all.fiDays} 天`,c:'#842029'},
   ].map(x=>`<div class="stat-mini"><div class="stat-mini-lbl">${x.l}</div><div class="stat-mini-val" style="color:${x.c}">${x.v}</div><div class="stat-mini-sub">${x.s}</div></div>`).join('');
   $('ana-tbl-title').textContent='部门 / 科室考勤分析 — '+wLabel(anaWeekOff);
-  // 若已选择具体部门且该部门下有科室划分，图表改为按科室对比；否则按部门对比
-  let chartRows=deptSummary,chartBySec=false;
-  if(dF&&byDept[dF]){
-    const secs=byDept[dF].secs;
-    if(Object.keys(secs).some(k=>k!=='__none__')){
-      chartBySec=true;
-      chartRows=Object.keys(secs).map(k=>({name:k==='__none__'?'（部门直属）':k,...computeWeekStats(secs[k],anaWeekOff)}))
-        .filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
-    }
-  }
-  $('ana-ch1-title').textContent=chartBySec?'各科室出勤率对比':'各部门出勤率对比';
-  $('ana-ch2-title').textContent=chartBySec?'各科室旷工占比对比':'各部门旷工占比对比';
+  let chartRows=deptSummary;
+  $('ana-ch1-title').textContent='各部门出勤率对比';
+  $('ana-ch2-title').textContent='各部门旷工占比对比';
   // 构建表格 HTML
   function rowCls(v,hi,mid,lo){return v>=hi?'badge-success':v>=mid?'badge-info':v>=lo?'badge-warning':'badge-danger';}
   function fiCls(v){return v<=1?'badge-success':v<=3?'badge-warning':'badge-danger';}
@@ -4361,7 +4352,7 @@ window.chartToImg=function(chart,caption){if(!chart)return null;try{return{src:c
 
 function exportAttAnalysisPDF(){
   const E=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const dF=$('ana-dept-f').value;let emps=mxEmps().filter(isSkillPos);if(dF)emps=emps.filter(e=>e.dept===dF);
+  const secF=$('ana-dept-f').value;let emps=mxEmps().filter(isSkillPos);if(secF)emps=emps.filter(e=>e.section===secF);
   const groups={};
   if(anaGrp==='dept'){emps.forEach(e=>{const k=e.dept||'未分配';(groups[k]=groups[k]||[]).push(e);});}
   else{emps.forEach(e=>{const k=e.section||'未分科室';(groups[k]=groups[k]||[]).push(e);});}
@@ -4375,7 +4366,7 @@ function exportAttAnalysisPDF(){
   html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td>${tot.emp}</td><td>${tot.aDays}</td><td>${tot.expTotal}</td><td>${attRate.toFixed(1)}%</td><td>${tot.absDays}</td><td>${tot.fiDays}</td><td>${fiRate.toFixed(2)}%</td></tr></tbody></table>`;
   buildPDFReport({
     title:'考勤分析报表',
-    meta:`统计周期：${wLabel(anaWeekOff)}　·　分组：按${grpLbl}${dF?'　·　部门：'+dF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
+    meta:`统计周期：${wLabel(anaWeekOff)}　·　分组：按${grpLbl}${secF?'　·　科室：'+secF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
     sections:[
       {kind:'kpi',cards:[
         {label:'统计人数',value:tot.emp+' 人'},
@@ -4391,7 +4382,7 @@ function exportAttAnalysisPDF(){
   toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
 }
 function exportAttAnalysis(){
-  const dF=$('ana-dept-f').value;let emps=mxEmps().filter(isSkillPos);if(dF)emps=emps.filter(e=>e.dept===dF);
+  const secF=$('ana-dept-f').value;let emps=mxEmps().filter(isSkillPos);if(secF)emps=emps.filter(e=>e.section===secF);
   const groups={};
   if(anaGrp==='dept'){emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});}
   else{emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]=[];groups[k].push(e);});}
