@@ -2362,7 +2362,7 @@ function renderDashboard(){
   const top10=[...vis].map(e=>({...e,ts:getMS(e.id).totalScore})).filter(e=>e.ts!==null).sort((a,b)=>b.ts-a.ts).slice(0,10);
   $('rank-table').innerHTML=top10.map((e,i)=>`<tr><td><span class="rank-num ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">${i+1}</span></td><td>${e.name}</td><td>${getDeptLabel(e.dept)}</td><td><strong>${e.ts}</strong></td></tr>`).join('');
   try{const ctx=$('deptChart').getContext('2d');if(charts.dept)charts.dept.destroy();
-  charts.dept=new Chart(ctx,{type:'bar',data:{labels:ds.map(d=>d.name),datasets:[{label:t('m_avg'),data:ds.map(d=>d._avg||0),backgroundColor:'#0d6efd',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:160}}}});}catch(e){console.warn('Chart not ready',e);}
+  charts.dept=new Chart(ctx,{type:'bar',data:{labels:ds.map(d=>tLabel(d.name)),datasets:[{label:t('m_avg'),data:ds.map(d=>d._avg||0),backgroundColor:'#0d6efd',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:160}}}});}catch(e){console.warn('Chart not ready',e);}
 }
 // QUERY
 let _qActiveTab='month';
@@ -3557,7 +3557,7 @@ function renderDepts(){
     $('dept-table').innerHTML=stats.map(d=>{const pct=d._emp?Math.round(d._done/d._emp*100):0;return`<tr style="cursor:pointer" onclick="document.getElementById('dept-filter').value='${d.name}';renderDepts()"><td><strong>${d.name}</strong></td><td>${d.head||'-'}</td><td>${d._emp}</td><td>${d._done}</td><td style="color:${scoreColor(d._avg||0)}"><strong>${d._avg||'-'}</strong></td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:${pct}%;background:${pct>=80?'#28a745':pct>=50?'#ffc107':'#dc3545'}"></div></div><span style="font-size:12px">${pct}%</span></div></td>${canEdit()?`<td>${d.name?`<button class="btn-del btn btn-sm" onclick="event.stopPropagation();delDept(${d.id})"><i class="ti ti-trash"></i></button>`:''}</td>`:''}</tr>`;}).join('');
   }
   // charts
-  const ctx2=$('deptCompChart').getContext('2d');if(charts.dc)charts.dc.destroy();charts.dc=new Chart(ctx2,{type:'bar',data:{labels:stats.map(d=>d.name),datasets:[{label:'平均分',data:stats.map(d=>d._avg||0),backgroundColor:stats.map(d=>filterDept&&d.name===filterDept?'#dc3545':'#198754'),borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:160}}}});
+  const ctx2=$('deptCompChart').getContext('2d');if(charts.dc)charts.dc.destroy();charts.dc=new Chart(ctx2,{type:'bar',data:{labels:stats.map(d=>tLabel(d.name)),datasets:[{label:tLabel('平均分'),data:stats.map(d=>d._avg||0),backgroundColor:stats.map(d=>filterDept&&d.name===filterDept?'#dc3545':'#198754'),borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:160}}}});
   const bins=[0,0,0,0];stats.forEach(d=>{const p=d._emp?Math.round(d._done/d._emp*100):0;if(p<25)bins[0]++;else if(p<50)bins[1]++;else if(p<75)bins[2]++;else bins[3]++;});
   const ctx3=$('completionChart').getContext('2d');if(charts.comp)charts.comp.destroy();charts.comp=new Chart(ctx3,{type:'doughnut',data:{labels:['0-25%','25-50%','50-75%','75-100%'],datasets:[{data:bins,backgroundColor:['#dc3545','#ffc107','#0d6efd','#28a745'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:12}}}}}});
 }
@@ -4286,7 +4286,7 @@ function drawAnaCharts(rows){
     });
     return;
   }
-  const labels=rows.map(r=>r.name);
+  const labels=rows.map(r=>tLabel(r.name));
   const attData=rows.map(r=>+r.attRate.toFixed(2));
   const fiData=rows.map(r=>+r.fiRate.toFixed(2));
   const baseOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'%'}},x:{ticks:{font:{size:11}}}}};
@@ -5099,14 +5099,14 @@ function renderPADept(allScores,months,emps,deptF){
   const ctx4=document.getElementById('pa-dept-score-chart')?.getContext('2d');
   if(ctx4&&deptData.length){
     const sorted=[...deptData].sort((a,b)=>b.avg-a.avg);
-    _paCharts['pa-dept-score-chart']=new Chart(ctx4,{type:'bar',data:{labels:sorted.map(d=>d.dept),datasets:[{data:sorted.map(d=>d.avg),backgroundColor:sorted.map(d=>d.avg>=85?'#16a34a':d.avg>=70?'#2563eb':'#dc2626')}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:100}}}});
+    _paCharts['pa-dept-score-chart']=new Chart(ctx4,{type:'bar',data:{labels:sorted.map(d=>tLabel(d.dept)),datasets:[{data:sorted.map(d=>d.avg),backgroundColor:sorted.map(d=>d.avg>=85?'#16a34a':d.avg>=70?'#2563eb':'#dc2626')}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:100}}}});
   }
 
   // Dept completion rate
   destroyPAChart('pa-dept-completion-chart');
   const ctx5=document.getElementById('pa-dept-completion-chart')?.getContext('2d');
   if(ctx5&&deptData.length){
-    _paCharts['pa-dept-completion-chart']=new Chart(ctx5,{type:'bar',data:{labels:deptData.map(d=>d.dept),datasets:[{label:tLabel('完成率%'),data:deptData.map(d=>d.completion),backgroundColor:'#7c3aed44',borderColor:'#7c3aed',borderWidth:1.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}}}});
+    _paCharts['pa-dept-completion-chart']=new Chart(ctx5,{type:'bar',data:{labels:deptData.map(d=>tLabel(d.dept)),datasets:[{label:tLabel('完成率%'),data:deptData.map(d=>d.completion),backgroundColor:'#7c3aed44',borderColor:'#7c3aed',borderWidth:1.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}}}});
   }
 
   // Dept × salary grade table
@@ -7784,10 +7784,10 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     const palette=['#2a6fdb','#c0392b','#1f8a5b','#b9770e','#7d3cb5','#0e8a8a','#d6336c','#5a6b7b'];
     const ranked=Object.values(groups).map(g=>({g,hc:monthStat(g.emps,toY,toM).start})).sort((a,b)=>b.hc-a.hc);
     const top=ranked.slice(0,8).map(x=>x.g);
-    const datasets=top.map((g,i)=>{const col=palette[i%palette.length];const lbl=g.sec==='—'?g.dept:g.sec;return {label:lbl,data:months.map(([y,m])=>{const st=monthStat(g.emps,y,m);return st.rate==null?null:+st.rate.toFixed(1);}),borderColor:col,backgroundColor:col,tension:.3,spanGaps:true,pointRadius:3,borderWidth:2};});
+    const datasets=top.map((g,i)=>{const col=palette[i%palette.length];const lbl=tLabel(g.sec==='—'?g.dept:g.sec);return {label:lbl,data:months.map(([y,m])=>{const st=monthStat(g.emps,y,m);return st.rate==null?null:+st.rate.toFixed(1);}),borderColor:col,backgroundColor:col,tension:.3,spanGaps:true,pointRadius:3,borderWidth:2};});
     // 全厂总览线
     const allE=Object.values(groups).reduce((a,g)=>a.concat(g.emps),[]);
-    datasets.unshift({label:'全厂',data:months.map(([y,m])=>{const st=monthStat(allE,y,m);return st.rate==null?null:+st.rate.toFixed(1);}),borderColor:'#212529',backgroundColor:'#212529',borderWidth:2.5,borderDash:[5,3],pointRadius:0,tension:.3,spanGaps:true});
+    datasets.unshift({label:tLabel('全厂'),data:months.map(([y,m])=>{const st=monthStat(allE,y,m);return st.rate==null?null:+st.rate.toFixed(1);}),borderColor:'#212529',backgroundColor:'#212529',borderWidth:2.5,borderDash:[5,3],pointRadius:0,tension:.3,spanGaps:true});
     const tcanv=$('to-chart-trend');if(!tcanv)return;
     const ctx=tcanv.getContext('2d');
     if(_trendChart)_trendChart.destroy();
