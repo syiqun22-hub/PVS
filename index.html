@@ -1896,8 +1896,12 @@ async function saveConfig() {
       { id: 'lateData', value: lateData },
       { id: 'monthlyScores', value: monthlyScores },
     ];
-    const { error } = await _sbClient.from('pvs_config').upsert(items, { onConflict: 'id' });
+    const { data: savedRows, error } = await _sbClient.from('pvs_config').upsert(items, { onConflict: 'id' }).select('id');
     if (error) { console.error('saveConfig error', error); return false; }
+    if (!savedRows || savedRows.length !== items.length) {
+      console.error('saveConfig verify mismatch', { expected: items.length, got: savedRows && savedRows.length });
+      return false;
+    }
     return true;
   } catch(e) { console.error('saveConfig error', e); return false; }
 }
@@ -1968,8 +1972,13 @@ async function saveAll() {
       }
     }
     if (dailyUpserts.length) {
-      const { error } = await _sbClient.from('pvs_daily').upsert(dailyUpserts, { onConflict: 'emp_id,date' });
-      if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败，请检查网络连接'); ok = false; }
+      const { data: savedRows, error } = await _sbClient.from('pvs_daily').upsert(dailyUpserts, { onConflict: 'emp_id,date' }).select('emp_id,date');
+      if (error) { console.error('saveAll daily error', error); toast('⚠️ 逐日数据保存失败：'+error.message); ok = false; }
+      else if (!savedRows || savedRows.length !== dailyUpserts.length) {
+        console.error('saveAll daily verify mismatch', { expected: dailyUpserts.length, got: savedRows && savedRows.length });
+        toast('⚠️ 逐日数据写入未确认（可能是数据库权限问题），请联系管理员检查 pvs_daily 表的写入权限');
+        ok = false;
+      }
     }
 
     const cfgOk = await saveConfig();
@@ -2152,7 +2161,6 @@ async function doManualSave(){
   _lastSavedAt=Date.now();
   if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-device-floppy"></i>保存数据';}
   if(ok!==false)toast('✅ 数据已保存');
-  else toast('⚠️ 保存失败，请检查网络连接后重试');
 }
 async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}if(_qDailySaveT){clearTimeout(_qDailySaveT);_qDailySaveT=null;const ok=await saveAll();_lastSavedAt=Date.now();if(ok===false){if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}toast('⚠️ 有未保存的修改写入失败，已取消刷新，请检查网络后重试');return;}}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
 function applyRoleUI(){
