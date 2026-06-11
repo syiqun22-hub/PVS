@@ -4206,8 +4206,18 @@ function renderAttAnalysis(){
     {l:'旷工占比',v:all.fiRate.toFixed(2)+'%',s:`旷工 ${all.fiDays} 天`,c:'#842029'},
   ].map(x=>`<div class="stat-mini"><div class="stat-mini-lbl">${x.l}</div><div class="stat-mini-val" style="color:${x.c}">${x.v}</div><div class="stat-mini-sub">${x.s}</div></div>`).join('');
   $('ana-tbl-title').textContent='部门 / 科室考勤分析 — '+wLabel(anaWeekOff);
-  $('ana-ch1-title').textContent='各部门出勤率对比';
-  $('ana-ch2-title').textContent='各部门旷工占比对比';
+  // 若已选择具体部门且该部门下有科室划分，图表改为按科室对比；否则按部门对比
+  let chartRows=deptSummary,chartBySec=false;
+  if(dF&&byDept[dF]){
+    const secs=byDept[dF].secs;
+    if(Object.keys(secs).some(k=>k!=='__none__')){
+      chartBySec=true;
+      chartRows=Object.keys(secs).map(k=>({name:k==='__none__'?'（部门直属）':k,...computeWeekStats(secs[k],anaWeekOff)}))
+        .filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+    }
+  }
+  $('ana-ch1-title').textContent=chartBySec?'各科室出勤率对比':'各部门出勤率对比';
+  $('ana-ch2-title').textContent=chartBySec?'各科室旷工占比对比':'各部门旷工占比对比';
   // 构建表格 HTML
   function rowCls(v,hi,mid,lo){return v>=hi?'badge-success':v>=mid?'badge-info':v>=lo?'badge-warning':'badge-danger';}
   function fiCls(v){return v<=1?'badge-success':v<=3?'badge-warning':'badge-danger';}
@@ -4251,7 +4261,7 @@ function renderAttAnalysis(){
     }
   });
   $('ana-tbl-body').innerHTML=html||'<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';
-  drawAnaCharts(deptSummary);
+  drawAnaCharts(chartRows);
 }
 function drawAnaCharts(rows){
   try{
