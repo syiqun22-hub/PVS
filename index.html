@@ -350,6 +350,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div><div style="font-size:13px;font-weight:500;max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="user-name"></div><div style="font-size:11px;color:var(--color-text-tertiary)" id="user-role"></div></div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button class="btn btn-sm btn-primary" style="flex:1;justify-content:center" id="save-btn" onclick="doManualSave()"><i class="ti ti-device-floppy"></i>保存数据</button>
       <button class="btn btn-sm" style="flex:1;justify-content:center" id="refresh-btn" onclick="doRefresh()"><i class="ti ti-refresh"></i>刷新数据</button>
     </div>
     <button class="btn btn-sm" style="width:100%;justify-content:center" onclick="doLogout()"><i class="ti ti-logout"></i><span data-i18n="btn_logout">退出登录</span></button>
@@ -2143,6 +2144,16 @@ async function doLogin(){
   applyRoleUI();applyI18n();updateMonthLabels();initSidebarState();setTimeout(()=>renderDashboard(),50);
 }
 function doLogout(){currentUser=null;$('main-app').style.display='none';$('login-screen').style.display='flex';$('login-user').value='';$('login-pass').value='';}
+async function doManualSave(){
+  const btn=$('save-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>保存中...';}
+  if(_qDailySaveT){clearTimeout(_qDailySaveT);_qDailySaveT=null;}
+  let ok=true;
+  try{ok=await saveAll();}catch(e){console.error('doManualSave error',e);ok=false;}
+  _lastSavedAt=Date.now();
+  if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-device-floppy"></i>保存数据';}
+  if(ok!==false)toast('✅ 数据已保存');
+  else toast('⚠️ 保存失败，请检查网络连接后重试');
+}
 async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}if(_qDailySaveT){clearTimeout(_qDailySaveT);_qDailySaveT=null;const ok=await saveAll();_lastSavedAt=Date.now();if(ok===false){if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}toast('⚠️ 有未保存的修改写入失败，已取消刷新，请检查网络后重试');return;}}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
 function applyRoleUI(){
   const isA=currentUser.role==='admin';
@@ -6662,6 +6673,8 @@ const ES_DICT={
 '取消':'Cancelar',
 '刷新':'Actualizar',
 '刷新数据':'Actualizar datos',
+'保存数据':'Guardar datos',
+'保存中...':'Guardando...',
 '加载中...':'Cargando...',
 '数据已刷新':'Datos actualizados',
 '文件':'Archivo',
@@ -6986,6 +6999,8 @@ const ES_DICT={
 '数据已刷新':'Datos actualizados',
 '加载中...':'Cargando...',
 '刷新数据':'Actualizar datos',
+'保存数据':'Guardar datos',
+'保存中...':'Guardando...',
 '出勤率':'Asistencia',
 '出勤率 (%)':'Asistencia (%)',
 '旷工占比':'Ausentismo',
