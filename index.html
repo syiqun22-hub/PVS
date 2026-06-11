@@ -1870,7 +1870,12 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 */
 
 // Supabase JS SDK 客户端
-const _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// 自定义 fetch：禁用浏览器/CDN 对 GET 请求的缓存，避免"刷新数据"读取到过期数据
+const _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: {
+    fetch: (url, options = {}) => fetch(url, { ...options, cache: 'no-store' })
+  }
+});
 
 function _sbWriteAllowed() {
   if (window.location.protocol === 'file:') {
