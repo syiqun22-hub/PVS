@@ -1396,7 +1396,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div id="kpi-cfg-fml" style="display:none;margin-top:8px">
       <div class="info" style="margin-bottom:8px;font-size:11px">变量：<code style="background:var(--color-background-secondary);padding:1px 5px;border-radius:3px">actual</code> 实际达成 · <code style="background:var(--color-background-secondary);padding:1px 5px;border-radius:3px">target</code> 目标值 · <code style="background:var(--color-background-secondary);padding:1px 5px;border-radius:3px">rate</code> 完成率(0~1.5)</div>
       <div style="position:relative">
-        <textarea id="kf-fml" rows="3" placeholder="例：IF(rate &gt;= 1, MIN(150, 100+(rate-1)*100), MAX(0, 100-(1-rate)*200))" oninput="onKFI()"></textarea>
+        <textarea id="kf-fml" rows="3" placeholder="例：IF(rate &gt;= 1, MIN(150, 100+(rate-1)*100), MAX(0, 100-(1-rate)*200))" oninput="onKFI();updateKPIPreview()"></textarea>
         <span id="kf-st" style="position:absolute;top:8px;right:10px;font-size:11px;font-weight:500"></span>
       </div>
       <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin:8px 0 5px">💡 参考模板</div>
@@ -1752,6 +1752,9 @@ const nv=(id,def=0)=>{const n=parseFloat($(id).value);return isNaN(n)?def:n;};
 // 全局唯一ID生成器：自增序列 + 时间戳 + 随机，保证同一毫秒批量创建也不重复
 let _idSeq=0;
 function uid(prefix){return prefix+Date.now().toString(36)+'-'+(_idSeq++).toString(36)+'-'+Math.floor(Math.random()*1e6).toString(36);}
+// 用于把字符串/数字安全地嵌入到 onclick="..." 这类双引号 HTML 属性里
+// （JSON.stringify 后的字符串本身带双引号，会提前截断属性，导致按钮点击无效）
+function jsArg(v){return JSON.stringify(v).replace(/"/g,'&quot;');}
 // 修复历史数据中重复的ID（保留首个，其余重新分配唯一ID）。返回是否有改动。
 function dedupeIds(arr,prefix){let changed=false;const seen=new Set();arr.forEach(o=>{if(o.id==null||o.id===''||seen.has(o.id)){o.id=uid(prefix);changed=true;}seen.add(o.id);});return changed;}
 function toast(m){const e=$('toast-el');e.textContent=m;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2400);}
@@ -3668,7 +3671,7 @@ function renderPKLib(){
   const s=(($('pk-search')&&$('pk-search').value)||'').toLowerCase();
   const used=new Set(_pkRefs.map(r=>r.kpiId));
   const list=kpiTemplates.filter(k=>!used.has(k.id)).filter(k=>!s||k.name.toLowerCase().includes(s)||(k.code||'').toLowerCase().includes(s));
-  $('pk-lib').innerHTML=list.length?list.map(k=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);margin-bottom:6px"><span style="font-family:monospace;font-size:10px;color:var(--color-text-secondary)">${k.code||'K'+k.id}</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getName(k)}</div><div style="font-size:10px;color:var(--color-text-secondary)">${k.type} · 目标 ${k.target}${k.unit||''}</div></div><button class="btn btn-sm btn-p" onclick="addRefToPos(${JSON.stringify(k.id)})"><i class="ti ti-plus"></i></button></div>`).join(''):'<div style="text-align:center;padding:30px;color:var(--color-text-tertiary);font-size:12px">无可添加指标</div>';
+  $('pk-lib').innerHTML=list.length?list.map(k=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);margin-bottom:6px"><span style="font-family:monospace;font-size:10px;color:var(--color-text-secondary)">${k.code||'K'+k.id}</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getName(k)}</div><div style="font-size:10px;color:var(--color-text-secondary)">${k.type} · 目标 ${k.target}${k.unit||''}</div></div><button class="btn btn-sm btn-p" onclick="addRefToPos(${jsArg(k.id)})"><i class="ti ti-plus"></i></button></div>`).join(''):'<div style="text-align:center;padding:30px;color:var(--color-text-tertiary);font-size:12px">无可添加指标</div>';
 }
 function renderPKSelected(){
   if(!_pkRefs.length){$('pk-selected').innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--color-text-tertiary);font-size:12px">从左侧指标库选取指标，设置权重</div>';$('pk-weight-total').textContent='';return;}
@@ -3692,7 +3695,7 @@ function renderKpiLib(){
   const ML={rate:'完成率=兑现系数',r11:'奖一罚一',r12:'设定公式',r21:'设定公式',fml:'设定公式'};
   $('kl-tbody').innerHTML=list.length?list.map(k=>{
     const usedByPos=positions.filter(p=>(p.kpiRefs||[]).find(r=>r.kpiId===k.id));
-    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td><strong>${getName(k)}</strong>${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${JSON.stringify(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${JSON.stringify(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
+    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td><strong>${getName(k)}</strong>${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
   }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
 }
 function openAddKpiLib(){editingKPIId=null;$('klm-title').textContent='新增指标';$('ki-code').value='K'+String(Math.max(0,...kpiTemplates.map(k=>parseInt((k.code||'').replace(/\D/g,''))||0))+1).padStart(3,'0');resetKPIModal();if($('ki-name-es'))$('ki-name-es').value='';$('modal-add-kpilib').classList.add('open');}
@@ -3784,7 +3787,7 @@ function applyKModes(){
   else{fStr=target===0?'达成类，目标=0：实际=0→100%，实际>0→150%':`达成类：完成率 = MIN(实际 ÷ ${target}, 150%)`;}
   if(km==='rate')fStr+='\n得分 = 100 × 完成率，上限'+($('kr-cap').value||150)+'分';
   $('kpi-rate-fml').textContent=fStr;
-  if(km!=='rate'){const tpls=KPI_TPLS[km]||[];$('kpi-tpls').innerHTML=tpls.map(tp=>`<div class="tpl" onclick="kfSetAndPreview(${JSON.stringify(tp.c)})"><div class="tpl-name">${tp.n}</div><div class="tpl-code">${tp.c}</div></div>`).join('');}
+  if(km!=='rate'){const tpls=KPI_TPLS[km]||[];$('kpi-tpls').innerHTML=tpls.map(tp=>`<div class="tpl" onclick="kfSetAndPreview(${jsArg(tp.c)})"><div class="tpl-name">${tp.n}</div><div class="tpl-code">${tp.c}</div></div>`).join('');}
 }
 function kfSetAndPreview(c){$('kf-fml').value=c;onKFI();updateKPIPreview();}
 function kfIns(fn){const ta=$('kf-fml');const s=ta.selectionStart,e=ta.selectionEnd,v=ta.value;ta.value=v.slice(0,s)+fn+v.slice(e);ta.focus();ta.selectionStart=ta.selectionEnd=s+fn.length;onKFI();updateKPIPreview();}
@@ -4202,7 +4205,7 @@ function drawAnaCharts(rows){
   const visAll=mxEmps().filter(isSkillPos);
   const last6=[];for(let i=5;i>=0;i--){const off=anaWeekOff-i;const ds=getWeekDates(off);const lbl=`${ds[0].getMonth()+1}/${ds[0].getDate()}~${ds[6].getMonth()+1}/${ds[6].getDate()}`;const st=computeWeekStats(visAll,off);last6.push({lbl,att:+st.attRate.toFixed(2),fi:+st.fiRate.toFixed(2)});}
   const c3=$('anaChart3').getContext('2d');if(charts.ana3)charts.ana3.destroy();
-  charts.ana3=new Chart(c3,{data:{labels:last6.map(x=>x.lbl),datasets:[
+  charts.ana3=new Chart(c3,{type:'bar',data:{labels:last6.map(x=>x.lbl),datasets:[
     {type:'bar',label:tLabel('出勤率'),data:last6.map(x=>x.att),backgroundColor:'#3b82f6',borderRadius:4,yAxisID:'y',order:2},
     {type:'line',label:tLabel('旷工占比'),data:last6.map(x=>x.fi),borderColor:'#dc3545',backgroundColor:'#dc3545',borderWidth:2,pointRadius:4,pointBackgroundColor:'#dc3545',tension:.3,yAxisID:'y1',order:1}
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+'：'+ctx.parsed.y+'%'}}},scales:{
