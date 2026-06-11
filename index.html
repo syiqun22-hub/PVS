@@ -2141,7 +2141,7 @@ async function doLogin(){
   applyRoleUI();applyI18n();updateMonthLabels();initSidebarState();setTimeout(()=>renderDashboard(),50);
 }
 function doLogout(){currentUser=null;$('main-app').style.display='none';$('login-screen').style.display='flex';$('login-user').value='';$('login-pass').value='';}
-async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
+async function doRefresh(){const btn=$('refresh-btn');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>加载中...';}if(_qDailySaveT){clearTimeout(_qDailySaveT);_qDailySaveT=null;await saveAll();_lastSavedAt=Date.now();}await loadAll();if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>刷新数据';}const ap=document.querySelector('.page.active');if(ap){const id=ap.id.replace('page-','');const ni=document.querySelector('.nav-item.active');showPage(id,ni||document.querySelector('.nav-item'));}toast('数据已刷新');}
 function applyRoleUI(){
   const isA=currentUser.role==='admin';
   $('user-avatar').textContent=currentUser.displayName.slice(0,2);
