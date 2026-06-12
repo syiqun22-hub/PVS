@@ -2417,6 +2417,7 @@ function syncDailyToMonthly(empId){
   const kpis=getEmpKPIs(emp);const n=pastDaysInMonth();
   const ms=getMS(empId,qY,qM);
   // 同步各指标逐日得分（%指标按累积分子/分母计算，其余取平均）
+  let anyData=false;
   kpis.forEach(k=>{
     const isPct=(k.unit||'').trim()==='%';
     if(isPct){
@@ -2433,17 +2434,25 @@ function syncDailyToMonthly(empId){
         const cumActual=Math.round(totalNum/totalDen*10000)/100;
         ms.scores[k.id]=cumActual;
         ms.fractions[k.id]={num:Math.round(totalNum*100)/100,den:Math.round(totalDen*100)/100};
+        anyData=true;
+      } else {
+        delete ms.scores[k.id];
+        delete ms.fractions[k.id];
       }
     } else {
       const actual=calcMonthlyKpiActual(empId,k,adj,n);
       if(actual!==null){
         ms.scores[k.id]=Math.round(actual*100)/100;
         ms.fractions[k.id]={num:Math.round(actual*100)/100,den:k.target};
+        anyData=true;
+      } else {
+        delete ms.scores[k.id];
+        delete ms.fractions[k.id];
       }
     }
   });
-  // 同步总分（考勤规则已折算）
-  ms.totalScore=adj.zeroed?0:(Object.keys(ms.scores).length?adj.score:null);
+  // 同步总分（考勤规则已折算）；若所有指标均无逐日数据，则视为未录入
+  ms.totalScore=adj.zeroed?0:(anyData?adj.score:null);
   ms.done=ms.totalScore!==null;
 }
 let _qDailyEmpId=null;
