@@ -4511,17 +4511,19 @@ function drawAnaCharts(rows){
 /* ===== 通用 PDF 报表导出（基于浏览器原生打印，离线可用，无需外部库） ===== */
 window.buildPDFReport=function(opts){
   const o=opts||{},E=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const title=o.title||'报表',meta=o.meta||'',sections=o.sections||[];
-  let body=`<div class="rpt-head"><div class="rpt-brand">墨方 · 绩效管理系统</div><div class="rpt-title">${E(title)}</div>${meta?`<div class="rpt-meta">${E(meta)}</div>`:''}</div>`;
+  const T=s=>{try{return(typeof translateStr==='function')?translateStr(s):s;}catch(_){return s;}};
+  const title=T(o.title||'报表'),meta=T(o.meta||''),sections=o.sections||[];
+  const docLang=(typeof lang!=='undefined'&&lang==='es')?'es':'zh';
+  let body=`<div class="rpt-head"><div class="rpt-brand">${E(T('墨方 · 绩效管理系统'))}</div><div class="rpt-title">${E(title)}</div>${meta?`<div class="rpt-meta">${E(meta)}</div>`:''}</div>`;
   sections.forEach(sec=>{
-    if(sec.title)body+=`<div class="rpt-sec">${E(sec.title)}</div>`;
+    if(sec.title)body+=`<div class="rpt-sec">${E(T(sec.title))}</div>`;
     if(sec.kind==='kpi'){
-      body+='<div class="kpi-row">'+sec.cards.map(c=>`<div class="kpi"><div class="kl">${E(c.label)}</div><div class="kv" style="color:${c.color||'#1e293b'}">${E(c.value)}</div></div>`).join('')+'</div>';
+      body+='<div class="kpi-row">'+sec.cards.map(c=>`<div class="kpi"><div class="kl">${E(T(c.label))}</div><div class="kv" style="color:${c.color||'#1e293b'}">${E(T(c.value))}</div></div>`).join('')+'</div>';
     }else if(sec.kind==='table'){
-      body+='<div class="rpt-tbl">'+sec.html+'</div>';
+      body+='<div class="rpt-tbl">'+T(sec.html)+'</div>';
     }else if(sec.kind==='charts'){
       const imgs=(sec.images||[]).filter(Boolean);
-      if(imgs.length)body+=`<div class="charts" style="grid-template-columns:${sec.cols===2?'1fr 1fr':'1fr'}">`+imgs.map(im=>`<figure><img src="${im.src}">${im.caption?`<figcaption>${E(im.caption)}</figcaption>`:''}</figure>`).join('')+'</div>';
+      if(imgs.length)body+=`<div class="charts" style="grid-template-columns:${sec.cols===2?'1fr 1fr':'1fr'}">`+imgs.map(im=>`<figure><img src="${im.src}">${im.caption?`<figcaption>${E(T(im.caption))}</figcaption>`:''}</figure>`).join('')+'</div>';
     }
   });
   const css=`*{box-sizing:border-box;margin:0;padding:0}
@@ -4552,7 +4554,7 @@ window.buildPDFReport=function(opts){
   document.body.appendChild(frame);
   const doc=frame.contentDocument||frame.contentWindow.document;
   doc.open();
-  doc.write(`<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>${E(title)}</title><style>${css}</style></head><body>${body}</body></html>`);
+  doc.write(`<!DOCTYPE html><html lang="${docLang}"><head><meta charset="utf-8"><title>${E(title)}</title><style>${css}</style></head><body>${body}</body></html>`);
   doc.close();
   const go=()=>{try{frame.contentWindow.focus();frame.contentWindow.print();}catch(err){console.error(err);}setTimeout(()=>{try{frame.remove();}catch(_){}},3000);};
   const imgs=Array.from(doc.images||[]);
@@ -6358,6 +6360,9 @@ const ES_DICT={
 '各部门绩效均分对比':'Comparación de promedios de desempeño por departamento',
 '第一个有评估的月份':'Primer mes con evaluación',
 '各部门旷工占比对比':'Comparación de proporción de ausencias por departamento',
+'各科室出勤率对比':'Comparación de asistencia por sección',
+'各科室旷工占比对比':'Comparación de proporción de ausencias por sección',
+'工厂近 6 周 — 出勤率 vs 旷工占比':'Últimas 6 semanas de la planta — Asistencia vs proporción de ausencias',
 '从备份文件恢复数据':'Restaurar datos desde un archivo de respaldo',
 '选择备份文件并恢复':'Seleccionar archivo de respaldo y restaurar',
 '更换电脑或浏览器前':'Antes de cambiar de equipo o navegador',
@@ -7343,6 +7348,7 @@ const ES_DICT={
 '离职人员工龄分布（本月）':'Distribución de antigüedad — bajas (mes actual)',
 '科室近 6 个月离职率趋势':'Tendencia rotación por sección (6 meses)',
 '离职人数':'N.º de bajas',
+'入职人数':'N.º de ingresos',
 '本月暂无数据':'Sin datos este mes',
 '本月':'mes actual',
 '部门汇总':'Total departamento',
@@ -7409,7 +7415,7 @@ const ES_DICT={
 '暂不参与绩效评价（逐日明细 / 岗位排名等）':'Aún no participa en la evaluación de desempeño (detalle diario / ranking de puestos, etc.)',
 '每月该指标达成最多的前N名额外加分到当月总分':'Cada mes, los primeros N con mayor logro en este indicador reciben puntos adicionales en el puntaje total del mes',
 '请输入离职日期（格式 YYYY/MM/DD）':'Ingrese la fecha de baja (formato YYYY/MM/DD)',
-'以科室为单位（无科室按部门）　·　生成时间':'por sección (sin sección, por departamento)　·　Generado el',
+'以科室为单位（无科室按部门）　·　生成时间：':'por sección (sin sección, por departamento)　·　Generado el: ',
 '名员工休息（D）不足 2 天，请核对下方':'empleados con menos de 2 días de descanso (D), verifique abajo',
 '全员视图直接展示每位员工的逐日明细（行':'La vista general muestra directamente el detalle diario de cada empleado (filas',
 '中方考勤填报只显示国籍为中国的员工）':'El registro de asistencia del personal chino solo muestra empleados de nacionalidad china)',
@@ -7430,7 +7436,7 @@ const ES_DICT={
 '统计区间：以考勤记录最近一天':'Periodo de estadística: desde el día más reciente con registro de asistencia',
 '考勤取自「考勤管理」（只读）':'La asistencia se obtiene de «Gestión de Asistencia» (solo lectura)',
 '该范围内暂无已配置指标的员工':'No hay empleados con indicadores configurados en este rango',
-'仅技能职员工　·　生成时间':'Solo personal técnico　·　Generado el',
+'仅技能职员工　·　生成时间：':'Solo personal técnico　·　Generado el: ',
 '如 2024/03/15）':'ej. 2024/03/15)',
 '当月内转正时，绩效兑现天数':'Si se regulariza dentro del mes, los días de liquidación de desempeño',
 '暂无任何考勤记录，无法统计':'No hay ningún registro de asistencia, no se puede calcular',
@@ -7582,7 +7588,7 @@ const ES_DICT={
 '关联科室':'Sección asociada',
 '其他图表':'Otros gráficos',
 '写入失败':'Error de escritura',
-'分组：按':'Agrupado por:',
+'分组：按':'Agrupado por: ',
 '前期结余':'Saldo anterior',
 '名无记录':'sin registro',
 '周度汇总':'Resumen semanal',
@@ -7612,8 +7618,11 @@ const ES_DICT={
 '离职性质':'Naturaleza de la baja',
 '纪律停职':'Suspensión disciplinaria',
 '统计区间':'Periodo de estadística',
+'统计周期：':'Periodo de estadística: ',
 '统计周期':'Periodo de estadística',
+'统计月份：':'Mes de estadística: ',
 '统计月份':'Mes de estadística',
+'生成时间：':'Generado el: ',
 '考勤明细':'Detalle de asistencia',
 '超额加分':'Bonificación por exceso',
 '转正日期':'Fecha de regularización',
