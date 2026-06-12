@@ -612,6 +612,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <div style="display:flex;gap:6px">
           <button class="btn" onclick="exportQDaily()"><i class="ti ti-download"></i> 导出</button>
           <button id="qd-scroll-btn" class="btn" onclick="toggleLinkedScroll('daily')" title="每10秒滚屏，到底后自动切换到岗位排名"><i class="ti ti-player-play"></i> 滚动播放</button>
+          <button class="btn" onclick="downloadQDailyImportTemplate()" title="下载逐日明细导入模板（%指标含分子/分母两列，其他指标只需填写实际达成列）"><i class="ti ti-table-import"></i> 逐日导入模板</button>
+          <button class="btn" onclick="document.getElementById('qd-import-file').click()"><i class="ti ti-upload"></i> 批量导入逐日</button>
+          <input type="file" id="qd-import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importQDaily(event)">
         </div>
       </div>
     </div>
@@ -3008,6 +3011,87 @@ function exportQDailyOverview(){
   XLSX.writeFile(wb,`逐日绩效全员总览_${mKey(qY,qM)}.xlsx`);toast('导出成功');
 }
 
+// ══════════ 逐日明细批量导入（支持%指标分子/分母） ══════════
+function downloadQDailyImportTemplate(){
+  const dF=$('qd-dept')?$('qd-dept').value:'';
+  let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
+  list=list.filter(e=>empNat(e)!=='中国'&&getEmpKPIs(e).length>0&&empStatus(e)!=='resigned');
+  const rows=[['工号','姓名','日期','指标ID','指标名称','单位','实际达成(分子)','目标值/分母(仅%指标需填写)']];
+  const n=daysInMonth(qY,qM);
+  list.forEach(e=>{
+    const kpis=getEmpKPIs(e);
+    for(let d=1;d<=n;d++){
+      const ds=dsOf(qY,qM,d);
+      const rec=dailyScores[e.id]&&dailyScores[e.id][ds];
+      kpis.forEach(k=>{
+        const isPct=(k.unit||'').trim()==='%';
+        const frac=rec&&rec.fractions&&rec.fractions[k.id];
+        const num=isPct?(frac&&frac.num!=null?frac.num:''):(rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:'');
+        const den=isPct?(frac&&frac.den!=null?frac.den:''):'';
+        rows.push([e.id,e.name,ds,k.id,getName(k),k.unit||'',num,den]);
+      });
+    }
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'逐日导入模板');
+  XLSX.writeFile(wb,`逐日明细导入模板_${mKey(qY,qM)}.xlsx`);
+  toast('模板已下载：单位为%的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列');
+}
+async function importQDaily(event){
+  const file=event.target.files[0];event.target.value='';
+  if(!file)return;
+  if(!canEdit()){toast('无权限');return;}
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+    if(rows.length<2){toast('文件为空或格式不对');return;}
+    const header=rows[0].map(h=>(h||'').toString().trim());
+    const idxEmpId=header.indexOf('工号');
+    const idxDate=header.indexOf('日期');
+    const idxKpiId=header.indexOf('指标ID');
+    const idxNum=header.indexOf('实际达成(分子)');
+    const idxDen=header.indexOf('目标值/分母(仅%指标需填写)');
+    if(idxEmpId<0||idxDate<0||idxKpiId<0||idxNum<0){toast('模板格式不正确，请下载最新模板');return;}
+    let count=0;const touchedEmps=new Set();const touchedCells=[];
+    rows.slice(1).forEach(row=>{
+      const empId=(row[idxEmpId]||'').toString().trim();
+      let ds=row[idxDate];
+      if(ds instanceof Date)ds=dsOf(ds.getFullYear(),ds.getMonth()+1,ds.getDate());
+      else ds=(ds||'').toString().trim();
+      const kpiIdRaw=row[idxKpiId];
+      const numVal=row[idxNum];
+      const denVal=idxDen>=0?row[idxDen]:'';
+      if(!empId||!ds||kpiIdRaw===''||kpiIdRaw==null)return;
+      if(numVal===''||numVal==null)return;
+      const emp=employees.find(e=>e.id===empId);if(!emp)return;
+      const kpi=getEmpKPIs(emp).find(k=>String(k.id)===String(kpiIdRaw).trim());if(!kpi)return;
+      const n=parseFloat(numVal);if(isNaN(n))return;
+      const rec=getDayRec(empId,ds);
+      const isPct=(kpi.unit||'').trim()==='%';
+      if(isPct){
+        const d=denVal===''||denVal==null?NaN:parseFloat(denVal);
+        if(isNaN(d)||d===0){delete rec.fractions[kpi.id];delete rec.scores[kpi.id];}
+        else{rec.fractions[kpi.id]={num:n,den:d};rec.scores[kpi.id]=Math.round(n/d*10000)/100;}
+      }else{
+        rec.scores[kpi.id]=n;
+      }
+      const tot=recalcDayTotal(empId,ds,emp);
+      if(tot==null&&Object.keys(rec.scores).length===0&&Object.keys(rec.fractions).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
+      _dirtyDaily.add(empId+'|'+ds);
+      touchedEmps.add(empId);
+      touchedCells.push({empId,ds,kpi,emp});
+      count++;
+    });
+    // 班组共享指标：将导入数据同步给同班组+同岗位的其他员工
+    touchedCells.forEach(({empId,ds,kpi,emp})=>{syncTeamSharedKPI(empId,ds,kpi.id,emp,kpi);});
+    touchedEmps.forEach(empId=>syncDailyToMonthly(empId));
+    await saveAll();
+    renderQDailyOverview();
+    toast('✅ 导入成功，共更新 '+count+' 条逐日数据');
+  }catch(e){console.error(e);toast('导入失败：'+e.message);}
+}
+
 // ══════════ 岗位排名 ══════════
 let _qrSortMode='score-desc'; // score-desc | score-asc
 function toggleQRankSort(){
@@ -3877,9 +3961,14 @@ async function delKpiLib(id){
   kpiTemplates=kpiTemplates.filter(k=>k.id!==id);await saveAndToast('已删除');renderKpiLib();
 }
 function dlKpiTpl(){
-  const h=['编码','名称','类型','方向','目标值','单位','周期','核算规则','上限','下限','公式'];
-  const sample=[['K001','示例销售达成率','KPI类','达成类',100,'%','月度','rate',150,0,''],['K002','示例投诉次数','KPI类','控制类',0,'次','月度','rate',150,0,''],['K003','示例公式指标','GS类','达成类',90,'分','月度','fml',150,0,'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))']];
-  const ws=XLSX.utils.aoa_to_sheet([h,...sample]);
+  const h=['编码','名称','类型','方向','目标值','单位','周期','核算规则','上限','下限','公式','班组共享'];
+  const KM_LABEL={rate:'完成率=兑现系数',r11:'奖一罚一',fml:'设定公式',direct:'直接得分'};
+  let rows=kpiTemplates.map(k=>{
+    const r=k.rule||{};
+    return[k.code||'K'+k.id,k.name,k.type,r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':''];
+  });
+  if(!rows.length)rows=[['K001','示例销售达成率','KPI类','达成类',100,'%','月度','完成率=兑现系数',150,0,'',''],['K002','示例投诉次数','KPI类','控制类',0,'次','月度','完成率=兑现系数',150,0,'',''],['K003','示例公式指标','GS类','达成类',90,'分','月度','设定公式',150,0,'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))','']];
+  const ws=XLSX.utils.aoa_to_sheet([h,...rows]);
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'指标库');
   XLSX.writeFile(wb,'指标库导入模板.xlsx');
 }
@@ -3892,7 +3981,7 @@ function handleKpiFile(e){
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
       let added=0,updated=0;
-      const KM_ALIAS={'完成率=兑现系数':'rate','rate':'rate','奖一罚一':'r11','r11':'r11','奖一罚二':'fml','r12':'fml','奖二罚一':'fml','r21':'fml','设定公式':'fml','fml':'fml'};
+      const KM_ALIAS={'完成率=兑现系数':'rate','rate':'rate','奖一罚一':'r11','r11':'r11','奖一罚二':'fml','r12':'fml','奖二罚一':'fml','r21':'fml','设定公式':'fml','fml':'fml','直接得分':'direct','direct':'direct'};
       rows.forEach(row=>{
         const name=String(row['名称']||row['指标名称']||row['Name']||'').trim();
         if(!name)return;
@@ -3907,10 +3996,11 @@ function handleKpiFile(e){
         const cap=parseFloat(row['上限']||row['Cap']||150)||150;
         const floor=parseFloat(row['下限']||row['Floor']||0)||0;
         const formula=String(row['公式']||row['Formula']||'').trim();
-        const rule={kd:dir.includes('控制')?'control':'achieve',km,rateCap:cap,rateFloor:floor,formula:km!=='rate'?formula:undefined};
+        const teamShared=String(row['班组共享']||row['TeamShared']||'').trim()==='是';
+        const rule={kd:dir.includes('控制')?'control':'achieve',km,rateCap:cap,rateFloor:floor,formula:(km!=='rate'&&km!=='direct')?formula:undefined};
         const ex=code?kpiTemplates.find(k=>k.code===code):null;
-        if(ex){Object.assign(ex,{name,type,target,unit,period,rule});updated++;}
-        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,type,target,unit,period,rule});added++;}
+        if(ex){Object.assign(ex,{name,type,target,unit,period,teamShared,rule:Object.assign({},ex.rule,rule)});updated++;}
+        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,type,target,unit,period,teamShared,rule});added++;}
       });
       await saveAndToast(`导入完成：新增 ${added}，更新 ${updated}`);renderKpiLib();
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
