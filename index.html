@@ -2548,6 +2548,26 @@ function toggleQRow(empId){
     renderQRadar(empId);
   }
 }
+// 将较长的指标名拆分为多行数组，避免 Chart.js 雷达图 pointLabels 过长导致绘图区域坍缩为0
+function wrapKpiLabel(s){
+  if(!s)return s;
+  const maxLen=12;
+  if(s.length<=maxLen)return s;
+  const lines=[];
+  if(s.indexOf(' ')>=0){
+    // 含空格（如西语），按单词换行
+    const words=s.split(' ');let cur='';
+    for(const w of words){
+      if((cur+' '+w).trim().length>maxLen&&cur){lines.push(cur);cur=w;}
+      else cur=(cur?cur+' ':'')+w;
+    }
+    if(cur)lines.push(cur);
+  }else{
+    // 无空格（如中文），按字符数切分
+    for(let i=0;i<s.length;i+=maxLen)lines.push(s.slice(i,i+maxLen));
+  }
+  return lines;
+}
 function renderQRadar(empId){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
   const wrap=document.getElementById('q-radar-wrap-'+empId);if(!wrap)return;
@@ -2556,7 +2576,7 @@ function renderQRadar(empId){
   const ms=getMS(empId,qY,qM);
   const kpis=getEmpKPIs(emp);
   if(!kpis.length){wrap.innerHTML='<div style="color:var(--color-text-tertiary);font-size:12px;padding:10px">该员工岗位未配置考核指标。</div>';return;}
-  const labels=kpis.map(k=>getName(k));
+  const labels=kpis.map(k=>wrapKpiLabel(getName(k)));
   const scores=kpis.map(k=>{const a=ms.scores&&ms.scores[k.id];return(a!=null)?(calcKPIScore(a,k)||0):0;});
   const hasAnyData=kpis.some(k=>ms.scores&&ms.scores[k.id]!=null);
   // Right-side legend / details table
