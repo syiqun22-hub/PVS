@@ -2384,9 +2384,14 @@ function perfDaysInMonth(emp,y,m){
 }
 // 某天的考勤状态（考勤按周存储，需定位到周一所在的周键）
 function dayAttStatus(empId,dateObj){const dow=dateObj.getDay();const diff=dow===0?-6:1-dow;const monday=new Date(dateObj.getFullYear(),dateObj.getMonth(),dateObj.getDate()+diff);const wk='week_'+dStr(monday);return(attendanceData[wk]&&attendanceData[wk][empId]&&attendanceData[wk][empId][dStr(dateObj)])||'';}
+// 单位为 %、PPM、h、‱ 的指标：按分子/分母录入，计算逻辑相同（实际达成 = 分子/分母*100）
+function isFractionUnit(unit){
+  const u=(unit||'').trim();
+  return u==='%'||u==='PPM'||u==='h'||u==='‱';
+}
 // 取某天单个KPI的实际达成值（与calcMonthlyKpiActual逻辑一致，仅取当天）
 function calcDayKpiActual(rec,kpi){
-  const isPct=(kpi.unit||'').trim()==='%';
+  const isPct=isFractionUnit(kpi.unit);
   if(isPct){
     const frac=rec.fractions&&rec.fractions[kpi.id];
     if(!frac||frac.num==null||frac.den==null||frac.den===0)return null;
@@ -2418,7 +2423,7 @@ function syncDailyToMonthly(empId){
   // 同步各指标逐日得分（%指标按累积分子/分母计算，其余取平均）
   let anyData=false;
   kpis.forEach(k=>{
-    const isPct=(k.unit||'').trim()==='%';
+    const isPct=isFractionUnit(k.unit);
     if(isPct){
       let totalNum=0,totalDen=0,cnt=0;
       for(let d=1;d<=n;d++){
@@ -2557,7 +2562,7 @@ function renderQRadar(empId){
   // Right-side legend / details table
   const _detN=pastDaysInMonth();const _detAdj=calcAdjustedMonthScore(empId);
   const detailRows=kpis.map((k,i)=>{
-    const isPct=(k.unit||'').trim()==='%';
+    const isPct=isFractionUnit(k.unit);
     let a;
     if(isPct){
       a=ms.scores&&ms.scores[k.id];
@@ -2791,7 +2796,7 @@ function buildEmpDailyBlock(emp){
   const lblStyle='position:sticky;left:0;background:var(--color-background-primary);z-index:1;font-weight:500;min-width:170px;box-shadow:1px 0 0 var(--color-border-tertiary);text-align:left';
   const adj=calcAdjustedMonthScore(empId);
   let kpiRows=kpis.map(k=>{
-    const isPct=(k.unit||'').trim()==='%';
+    const isPct=isFractionUnit(k.unit);
     let cells='';let kpiSum=0;let kpiFilled=0;let totalNum=0,totalDen=0,pctFilled=0;
     for(let d=1;d<=n;d++){
       const dow=new Date(qY,qM-1,d).getDay();const wk=(dow===0||dow===6);const ds=dsOf(qY,qM,d);
@@ -2884,7 +2889,7 @@ function syncTeamSharedKPI(empId,ds,kpiId,emp,kpi){
   if(!kpi||!kpi.teamShared)return false;
   const rec=dailyScores[empId]&&dailyScores[empId][ds];if(!rec)return false;
   if(rec.unlinked&&rec.unlinked[kpiId])return false;
-  const isPct=(kpi.unit||'').trim()==='%';
+  const isPct=isFractionUnit(kpi.unit);
   const peers=getTeamPeers(emp,kpiId);
   let changed=false;
   peers.forEach(p=>{
@@ -2911,7 +2916,7 @@ function toggleTeamLink(empId,ds,kpiId){
   if(!rec.unlinked)rec.unlinked={};
   if(rec.unlinked[kpiId]){
     delete rec.unlinked[kpiId];
-    const isPct=(kpi.unit||'').trim()==='%';
+    const isPct=isFractionUnit(kpi.unit);
     for(const p of getTeamPeers(emp,kpiId)){
       const prec=dailyScores[p.id]&&dailyScores[p.id][ds];
       if(!prec||(prec.unlinked&&prec.unlinked[kpiId]))continue;
@@ -3016,7 +3021,7 @@ function downloadQDailyImportTemplate(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   list=list.filter(e=>empNat(e)!=='中国'&&getEmpKPIs(e).length>0&&empStatus(e)!=='resigned');
-  const rows=[['工号','姓名','日期','指标ID','指标名称','单位','实际达成(分子)','目标值/分母(仅%指标需填写)']];
+  const rows=[['工号','姓名','日期','指标ID','指标名称','指标名称(ES)','单位','实际达成(分子)','目标值/分母(%、PPM、h、‱指标需填写)']];
   const n=daysInMonth(qY,qM);
   list.forEach(e=>{
     const kpis=getEmpKPIs(e);
@@ -3024,17 +3029,17 @@ function downloadQDailyImportTemplate(){
       const ds=dsOf(qY,qM,d);
       const rec=dailyScores[e.id]&&dailyScores[e.id][ds];
       kpis.forEach(k=>{
-        const isPct=(k.unit||'').trim()==='%';
+        const isPct=isFractionUnit(k.unit);
         const frac=rec&&rec.fractions&&rec.fractions[k.id];
         const num=isPct?(frac&&frac.num!=null?frac.num:''):(rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:'');
         const den=isPct?(frac&&frac.den!=null?frac.den:''):'';
-        rows.push([e.id,e.name,ds,k.id,getName(k),k.unit||'',num,den]);
+        rows.push([e.id,e.name,ds,k.id,k.name,k.nameEs||'',k.unit||'',num,den]);
       });
     }
   });
   const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'逐日导入模板');
   XLSX.writeFile(wb,`逐日明细导入模板_${mKey(qY,qM)}.xlsx`);
-  toast('模板已下载：单位为%的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列');
+  toast('模板已下载：单位为%、PPM、h、‱的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列');
 }
 async function importQDaily(event){
   const file=event.target.files[0];event.target.value='';
@@ -3051,7 +3056,7 @@ async function importQDaily(event){
     const idxDate=header.indexOf('日期');
     const idxKpiId=header.indexOf('指标ID');
     const idxNum=header.indexOf('实际达成(分子)');
-    const idxDen=header.indexOf('目标值/分母(仅%指标需填写)');
+    const idxDen=header.indexOf('目标值/分母(%、PPM、h、‱指标需填写)');
     if(idxEmpId<0||idxDate<0||idxKpiId<0||idxNum<0){toast('模板格式不正确，请下载最新模板');return;}
     let count=0;const touchedEmps=new Set();const touchedCells=[];
     rows.slice(1).forEach(row=>{
@@ -3068,7 +3073,7 @@ async function importQDaily(event){
       const kpi=getEmpKPIs(emp).find(k=>String(k.id)===String(kpiIdRaw).trim());if(!kpi)return;
       const n=parseFloat(numVal);if(isNaN(n))return;
       const rec=getDayRec(empId,ds);
-      const isPct=(kpi.unit||'').trim()==='%';
+      const isPct=isFractionUnit(kpi.unit);
       if(isPct){
         const d=denVal===''||denVal==null?NaN:parseFloat(denVal);
         if(isNaN(d)||d===0){delete rec.fractions[kpi.id];delete rec.scores[kpi.id];}
@@ -3170,8 +3175,8 @@ function calcAdjustedMonthScore(empId){
 }
 // 按月累计实际达成：%指标累积分子/分母，次数指标求和，其他指标取平均
 function calcMonthlyKpiActual(empId,kpi,adj,n){
-  const isPct=(kpi.unit||'').trim()==='%';
-  const isCnt=(kpi.unit||'').trim()==='次';
+  const isPct=isFractionUnit(kpi.unit);
+  const isCnt=(kpi.unit||'').trim().includes('次');
   if(isPct){
     let totalNum=0,totalDen=0,cnt=0;
     for(let d=1;d<=n;d++){
@@ -3609,7 +3614,7 @@ function openEval(empId,y,m){
     const actual=ms.scores[k.id]!=null?ms.scores[k.id]:null;const val=actual!==null?actual:'';
     const rate=actual!==null?calcRate(actual,k.target,k.rule&&k.rule.kd||'achieve'):null;
     const score=actual!==null?calcKPIScore(actual,k):null;
-    const isPct=(k.unit||'').trim()==='%';
+    const isPct=isFractionUnit(k.unit);
     const frac=ms.fractions&&ms.fractions[k.id]?ms.fractions[k.id]:null;
     const numV=frac&&frac.num!=null?frac.num:'';
     const denV=frac&&frac.den!=null?frac.den:'';
@@ -3637,7 +3642,7 @@ function openEval(empId,y,m){
 function updateEvalRow(kpiId){
   const kpis=getEmpKPIs(currentEvalEmp);
   const kpi=kpis.find(k=>k.id===kpiId);if(!kpi)return;
-  const isPct=(kpi.unit||'').trim()==='%';
+  const isPct=isFractionUnit(kpi.unit);
   let val=NaN;
   if(isPct){
     const nEl=$('num-'+kpiId),dEl=$('den-'+kpiId),aEl=$('actual-'+kpiId),disp=$('actual-disp-'+kpiId);
@@ -3662,7 +3667,7 @@ async function saveEval(){
   if(!ms.fractions)ms.fractions={};
   kpis.forEach(k=>{
     const el=$('actual-'+k.id);const v=el?parseFloat(el.value):NaN;ms.scores[k.id]=isNaN(v)?null:v;
-    if((k.unit||'').trim()==='%'){
+    if(isFractionUnit(k.unit)){
       const nEl=$('num-'+k.id),dEl=$('den-'+k.id);
       const n=nEl&&nEl.value!==''?parseFloat(nEl.value):NaN;
       const d=dEl&&dEl.value!==''?parseFloat(dEl.value):NaN;
