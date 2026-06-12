@@ -612,8 +612,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <div style="display:flex;gap:6px">
           <button class="btn" onclick="exportQDaily()"><i class="ti ti-download"></i> 导出</button>
           <button id="qd-scroll-btn" class="btn" onclick="toggleLinkedScroll('daily')" title="每10秒滚屏，到底后自动切换到岗位排名"><i class="ti ti-player-play"></i> 滚动播放</button>
-          <button class="btn" onclick="downloadQDailyImportTemplate()" title="下载逐日明细导入模板（%指标含分子/分母两列，其他指标只需填写实际达成列）"><i class="ti ti-table-import"></i> 逐日导入模板</button>
-          <button class="btn" onclick="document.getElementById('qd-import-file').click()"><i class="ti ti-upload"></i> 批量导入逐日</button>
+          <button class="btn" onclick="downloadQDailyImportTemplate()" title="下载逐日明细导入模板（%指标含分子/分母两列，其他指标只需填写实际达成列）"><i class="ti ti-table-import"></i> 导入模板</button>
+          <button class="btn" onclick="document.getElementById('qd-import-file').click()"><i class="ti ti-upload"></i> 批量导入</button>
           <input type="file" id="qd-import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importQDaily(event)">
         </div>
       </div>
@@ -2586,17 +2586,22 @@ function renderQRadar(empId){
     </div>
   </div>`;
   if(!hasAnyData)return;
-  const ctx=document.getElementById('q-radar-'+empId)?.getContext('2d');if(!ctx)return;
-  if(_qRadarCharts[empId])_qRadarCharts[empId].destroy();
-  _qRadarCharts[empId]=new Chart(ctx,{
-    type:'radar',
-    data:{labels,datasets:[
-      {label:'实际得分',data:scores,backgroundColor:'#2563eb33',borderColor:'#2563eb',borderWidth:2,pointBackgroundColor:'#2563eb',pointRadius:3.5,pointHoverRadius:5},
-      {label:'满分基线 (100)',data:kpis.map(()=>100),backgroundColor:'transparent',borderColor:'#cbd5e1',borderWidth:1,borderDash:[4,4],pointRadius:0}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{font:{size:11},boxWidth:14},position:'bottom'}},
-      scales:{r:{min:0,suggestedMax:Math.max(120,Math.max(...scores)+10),ticks:{font:{size:10},stepSize:25,backdropColor:'transparent'},pointLabels:{font:{size:11}},grid:{color:'#e5e7eb'},angleLines:{color:'#e5e7eb'}}}}
+  // 延迟到下一帧创建图表：等待行从 display:none 变为可见后的布局，
+  // 以及西语模式下 i18n 翻译对新插入DOM的处理都完成，
+  // 避免容器尺寸测量为0导致雷达图区域空白
+  requestAnimationFrame(()=>{
+    const ctx=document.getElementById('q-radar-'+empId)?.getContext('2d');if(!ctx)return;
+    if(_qRadarCharts[empId])_qRadarCharts[empId].destroy();
+    _qRadarCharts[empId]=new Chart(ctx,{
+      type:'radar',
+      data:{labels,datasets:[
+        {label:'实际得分',data:scores,backgroundColor:'#2563eb33',borderColor:'#2563eb',borderWidth:2,pointBackgroundColor:'#2563eb',pointRadius:3.5,pointHoverRadius:5},
+        {label:'满分基线 (100)',data:kpis.map(()=>100),backgroundColor:'transparent',borderColor:'#cbd5e1',borderWidth:1,borderDash:[4,4],pointRadius:0}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{font:{size:11},boxWidth:14},position:'bottom'}},
+        scales:{r:{min:0,suggestedMax:Math.max(120,Math.max(...scores)+10),ticks:{font:{size:10},stepSize:25,backdropColor:'transparent'},pointLabels:{font:{size:11}},grid:{color:'#e5e7eb'},angleLines:{color:'#e5e7eb'}}}}
+    });
   });
 }
 function renderQueryTrend(){
@@ -4197,7 +4202,7 @@ function renderAttWeek(){
     return`<tr${!dOk?' style="background:#fff5f5"':''}><td style="font-family:monospace;font-size:11px">${e.id}</td><td style="font-family:monospace;font-size:11px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong>${nameTag}</td><td style="font-size:12px;color:var(--color-text-secondary)">${getDeptLabel(e.dept)}</td><td><input class="exp-days" type="number" min="0" max="7" step="1" value="${expD}" onchange="setExpDays('${wk}','${e.id}',this.value)"></td>${cells}<td style="font-weight:600;color:${fiCnt>0?'#dc3545':'var(--color-text-tertiary)'}">${fiCnt}</td><td style="font-weight:600;color:${totOt>0?'#1e40af':'var(--color-text-tertiary)'};font-family:monospace">${totOt||'—'}</td>${dCell}</tr>`;
   }).join('')||`<tr><td colspan="${5+dates.length+4}" style="text-align:center;padding:26px;color:var(--color-text-tertiary)">无符合条件的员工</td></tr>`;
   const _dwarn=$('att-d-warn');
-  if(_dwarn){if(dFail>0){_dwarn.style.display='block';_dwarn.innerHTML=`⚠ 本周有 <strong>${dFail}</strong> 名员工休息（D）不足 2 天，请核对下方<strong style="color:#c0392b">红色</strong>行。`;}else{_dwarn.style.display='none';}}
+  if(_dwarn){if(dFail>0){_dwarn.style.display='block';_dwarn.innerHTML=`⚠ 本周有 <strong>${dFail}</strong> 名员工休息（D）不足 2 天，请核对下方<strong style="color:#c0392b">红色</strong>。`;}else{_dwarn.style.display='none';}}
 }
 let _pEmpId='',_pWk='',_pDs='';
 function openPicker(empId,wk,ds,event){
@@ -7364,7 +7369,7 @@ const ES_DICT={
 '设定权重%':'Peso asignado %',
 '实际得分贡献':'Contribución real',
 '次</strong> 的员工':'veces</strong> empleados',
-'红色</strong>行':'rojo</strong>',
+'红色</strong>':'rojo</strong>',
 
 '平均得分':'Puntuación media',
 '完成率%':'Tasa de cumplimiento %',
