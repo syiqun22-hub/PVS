@@ -1935,10 +1935,10 @@ async function _fetchAllRows(table, columns) {
 
 // ---- 颗粒化存储函数 ----
 
-async function saveConfig() {
+async function saveConfig(items) {
   if (!_sbWriteAllowed()) return true;
   try {
-    const items = [
+    items = items || [
       { id: 'employees', value: employees },
       { id: 'departments', value: departments },
       { id: 'sections', value: sections },
@@ -2011,7 +2011,11 @@ async function saveOvertime(empId, period) {
 }
 
 // ---- 批量保存（向后兼容，所有 saveAll() 调用处继续正常工作）----
-async function saveAll() {
+// fullConfig=false：仅用于逐日评分的防抖自动保存——只写入 pvs_daily 脏记录和
+// monthlyScores（每次编辑都会同步变化），跳过 employees/departments/...等几乎
+// 不变的配置项以及考勤/调薪/加班数据，避免每次按键后都把整份配置 JSON 重新上传，
+// 这是数据量增大后逐日录入页面卡顿的主要原因。
+async function saveAll(fullConfig = true) {
   try {
     if (!_sbWriteAllowed()) return true;
 
@@ -2052,37 +2056,39 @@ async function saveAll() {
       if (dailyOk) dirtyKeys.forEach(k => _dirtyDaily.delete(k));
     }
 
-    const cfgOk = await saveConfig();
+    const cfgOk = await saveConfig(fullConfig ? undefined : [{ id: 'monthlyScores', value: monthlyScores }]);
     if (!cfgOk) { toast('⚠️ 配置数据保存失败，请检查网络连接'); ok = false; }
 
-    // pvs_attendance — 通过 pvs_config 保存（每周一条记录）
-    const attWeekUpserts = Object.keys(attendanceData).map(wk => ({ id: 'att_' + wk, value: attendanceData[wk] }));
-    if (attWeekUpserts.length) {
-      const CHUNK = 50;
-      for (let i = 0; i < attWeekUpserts.length; i += CHUNK) {
-        const { error } = await _sbClient.from('pvs_config').upsert(attWeekUpserts.slice(i, i + CHUNK), { onConflict: 'id' });
-        if (error) { console.error('saveAll attendance error', error); toast('⚠️ 考勤数据保存失败，请检查网络连接'); ok = false; }
+    if (fullConfig) {
+      // pvs_attendance — 通过 pvs_config 保存（每周一条记录）
+      const attWeekUpserts = Object.keys(attendanceData).map(wk => ({ id: 'att_' + wk, value: attendanceData[wk] }));
+      if (attWeekUpserts.length) {
+        const CHUNK = 50;
+        for (let i = 0; i < attWeekUpserts.length; i += CHUNK) {
+          const { error } = await _sbClient.from('pvs_config').upsert(attWeekUpserts.slice(i, i + CHUNK), { onConflict: 'id' });
+          if (error) { console.error('saveAll attendance error', error); toast('⚠️ 考勤数据保存失败，请检查网络连接'); ok = false; }
+        }
       }
-    }
 
-    // pvs_salary_reviews
-    const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
-    if (srUpserts.length) {
-      const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
-      if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 调薪数据保存失败，请检查网络连接'); ok = false; }
-    }
-
-    // pvs_overtime  (结构: overtimeData[period][empId][date] = hours)
-    const otUpserts = [];
-    for (const period of Object.keys(overtimeData)) {
-      const pk = overtimeData[period];
-      for (const empId of Object.keys(pk)) {
-        otUpserts.push({ emp_id: empId, period, data: pk[empId], updated_at: new Date().toISOString() });
+      // pvs_salary_reviews
+      const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
+      if (srUpserts.length) {
+        const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
+        if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 调薪数据保存失败，请检查网络连接'); ok = false; }
       }
-    }
-    if (otUpserts.length) {
-      const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
-      if (error) { console.error('saveAll overtime error', error); toast('⚠️ 加班数据保存失败，请检查网络连接'); ok = false; }
+
+      // pvs_overtime  (结构: overtimeData[period][empId][date] = hours)
+      const otUpserts = [];
+      for (const period of Object.keys(overtimeData)) {
+        const pk = overtimeData[period];
+        for (const empId of Object.keys(pk)) {
+          otUpserts.push({ emp_id: empId, period, data: pk[empId], updated_at: new Date().toISOString() });
+        }
+      }
+      if (otUpserts.length) {
+        const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
+        if (error) { console.error('saveAll overtime error', error); toast('⚠️ 加班数据保存失败，请检查网络连接'); ok = false; }
+      }
     }
 
     if (ok) _lastSavedAt = Date.now();
@@ -2958,7 +2964,7 @@ function toggleTeamLink(empId,ds,kpiId){
   _dirtyDaily.add(empId+'|'+ds);
   if(!rec.unlinked||!rec.unlinked[kpiId])syncTeamSharedKPI(empId,ds,kpiId,emp,kpi);
   renderQDailyOverview();
-  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll();_lastSavedAt=Date.now();},800);
+  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);_lastSavedAt=Date.now();},800);
 }
 function saveDailyCell(empId,ds,kpiId,val){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
@@ -2980,7 +2986,7 @@ function saveDailyCell(empId,ds,kpiId,val){
     if(totEl){totEl.textContent=tot!=null?Math.round(tot):'·';totEl.style.color=tot!=null?scoreColor(tot):'var(--color-border-secondary)';}
     updateQDailySummary(empId);
   }
-  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll();_lastSavedAt=Date.now();},800);
+  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);_lastSavedAt=Date.now();},800);
 }
 function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
@@ -3006,7 +3012,7 @@ function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
     const sumTd=document.getElementById('qd-pct-tot-'+empId+'-'+kpiId);
     if(sumTd){let tN=0,tD=0,fcnt=0;const nm=daysInMonth(qY,qM);for(let dd=1;dd<=nm;dd++){const ds2=dsOf(qY,qM,dd);const r2=dailyScores[empId]&&dailyScores[empId][ds2];if(!r2||!r2.fractions||!r2.fractions[kpiId])continue;const{num:fn,den:fd}=r2.fractions[kpiId];if(fn!=null&&fd!=null&&fd!==0){tN+=fn;tD+=fd;fcnt++;}}if(fcnt>0){const pct=tD>0?(tN/tD*100).toFixed(1)+'%':'—';sumTd.innerHTML=`<span style="font-weight:700">${Math.round(tN*10)/10}</span><span style="font-size:9px;color:var(--color-text-tertiary)">/${Math.round(tD*10)/10}</span><div style="font-size:9px;color:var(--color-text-tertiary)">${pct}</div>`;}else sumTd.innerHTML='—';}
   }
-  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll();_lastSavedAt=Date.now();},800);
+  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);_lastSavedAt=Date.now();},800);
 }
 function exportQDaily(){
   if(_qdView==='all')return exportQDailyOverview();
