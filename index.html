@@ -772,6 +772,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <div class="toolbar">
     <input id="kl-s" placeholder="搜索指标名称/编码..." oninput="renderKpiLib()" style="width:240px">
     <select id="kl-type" onchange="renderKpiLib()" style="width:140px"><option value="">全部类型</option><option value="KPI类">KPI类</option><option value="GS类">GS类</option><option value="评估指标">评估指标</option></select>
+    <select id="kl-level" onchange="renderKpiLib()" style="width:120px"><option value="">全部级别</option><option value="中心级">中心级</option><option value="工厂级">工厂级</option><option value="部门级">部门级</option><option value="科室级">科室级</option><option value="班组级">班组级</option><option value="员工级">员工级</option></select>
     <button class="btn btn-p" id="btn-add-kpi" onclick="openAddKpiLib()"><i class="ti ti-plus"></i>新增指标</button>
     <button class="btn" id="btn-import-kpi" onclick="document.getElementById('kl-file').click()"><i class="ti ti-upload"></i>批量导入</button>
     <button class="btn btn-sm" onclick="dlKpiTpl()"><i class="ti ti-download"></i>模板</button>
@@ -780,14 +781,44 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   </div>
   <div class="info" style="margin-bottom:10px;font-size:12px">指标库为系统中所有绩效指标的统一来源。岗位可从此处选取指标，避免重复录入。</div>
   <div class="card" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>编码</th><th>指标名称</th><th>类型</th><th>方向</th><th>目标值</th><th>单位</th><th>周期</th><th>核算规则</th><th>在用岗位</th><th style="min-width:120px">操作</th></tr></thead>
+    <table><thead><tr><th>编码</th><th>指标名称</th><th>类型</th><th>级别</th><th>方向</th><th>目标值</th><th>单位</th><th>周期</th><th>核算规则</th><th>在用岗位</th><th style="min-width:120px">操作</th></tr></thead>
     <tbody id="kl-tbody"></tbody></table>
   </div>
 </div>
 <!-- KPI -->
 <div id="page-kpi" class="page">
   <div class="page-title" data-i18n="nav_kpi">KPI分析</div>
-  <div class="g3" id="kpi-cards"></div>
+  <div class="toolbar" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <select id="kpi-f-dept" onchange="onKpiDeptChange()" style="width:150px"><option value="">全部部门</option></select>
+    <select id="kpi-f-sec" onchange="onKpiSecChange()" style="width:150px"><option value="">全部科室</option></select>
+    <select id="kpi-f-team" onchange="renderKPI()" style="width:150px"><option value="">全部班组</option></select>
+    <select id="kpi-f-level" onchange="renderKPI()" style="width:120px"><option value="">全部级别</option><option value="中心级">中心级</option><option value="工厂级">工厂级</option><option value="部门级">部门级</option><option value="科室级">科室级</option><option value="班组级">班组级</option><option value="员工级">员工级</option></select>
+    <select id="kpi-f-type" onchange="renderKPI()" style="width:120px"><option value="">全部类型</option><option value="KPI类">KPI类</option><option value="GS类">GS类</option><option value="评估指标">评估指标</option></select>
+    <div class="pills" style="margin-left:auto">
+      <button class="pill" id="kpi-view-cards" onclick="setKpiView('cards')">卡片视图</button>
+      <button class="pill" id="kpi-view-compare" onclick="setKpiView('compare')">科室对比</button>
+    </div>
+  </div>
+  <div id="kpi-view-panel-cards">
+    <div class="g3" id="kpi-cards"></div>
+  </div>
+  <div id="kpi-view-panel-compare" style="display:none">
+    <div class="card" style="margin-bottom:12px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">选择指标：</div>
+        <select id="kpi-cmp-kpi" onchange="renderKpiCompare()" style="min-width:200px;max-width:320px"></select>
+        <div class="pills">
+          <button class="pill" id="kpi-cmp-by-sec" onclick="setKpiCmpBy('sec')">按科室对比</button>
+          <button class="pill" id="kpi-cmp-by-team" onclick="setKpiCmpBy('team')">按班组对比</button>
+        </div>
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-left:auto" id="kpi-cmp-hint"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="position:relative;height:300px"><canvas id="kpiCmpChart"></canvas></div>
+      <div id="kpi-cmp-table" style="margin-top:16px;overflow-x:auto"></div>
+    </div>
+  </div>
   <div class="card" id="kpi-detail" style="display:none">
     <div class="card-header"><div class="card-title" id="kpi-detail-title"></div><button class="btn btn-sm" onclick="document.getElementById('kpi-detail').style.display='none'">✕ 关闭</button></div>
     <div class="g2">
@@ -1390,6 +1421,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="fg"><label class="fl">指标名称（中文）<span style="color:#dc3545">*</span></label><input id="ki-name"></div>
       <div class="fg"><label class="fl">西语名称（可选）</label><input id="ki-name-es" placeholder="Nombre en español"></div>
       <div class="fg"><label class="fl">类型</label><select id="ki-type"><option value="KPI类">KPI类</option><option value="GS类">GS类</option><option value="评估指标">评估指标</option></select></div>
+      <div class="fg"><label class="fl">级别</label><select id="ki-level"><option value="">请选择</option><option value="中心级">中心级</option><option value="工厂级">工厂级</option><option value="部门级">部门级</option><option value="科室级">科室级</option><option value="班组级">班组级</option><option value="员工级">员工级</option></select></div>
       <div class="fg"><label class="fl">目标值</label><input id="ki-target" type="number" oninput="updateKPIPreview()"></div>
       <div class="fg"><label class="fl">单位</label><input id="ki-unit"></div>
       <div class="fg"><label class="fl">评价周期</label><select id="ki-period"><option value="月度">月度</option><option value="季度">季度</option><option value="年度">年度</option></select></div>
@@ -3951,18 +3983,22 @@ async function savePosKpis(){if(!_pkPosId)return;const p=positions.find(x=>x.id=
 function renderKpiLib(){
   const s=(($('kl-s')&&$('kl-s').value)||'').toLowerCase();
   const tf=$('kl-type').value;
+  const lf=($('kl-level')&&$('kl-level').value)||'';
   let list=kpiTemplates.filter(k=>!s||k.name.toLowerCase().includes(s)||(k.code||'').toLowerCase().includes(s));
   if(tf)list=list.filter(k=>k.type===tf);
+  if(lf)list=list.filter(k=>k.level===lf);
   $('kl-count').textContent=`共 ${kpiTemplates.length} 个指标`;
   const ML={rate:'完成率=兑现系数',r11:'奖一罚一',r12:'设定公式',r21:'设定公式',fml:'设定公式'};
+  const LEVEL_CLS={'中心级':'badge-info','工厂级':'badge-info','部门级':'badge-success','科室级':'badge-success','班组级':'badge-gray','员工级':'badge-gray'};
   $('kl-tbody').innerHTML=list.length?list.map(k=>{
     const usedByPos=positions.filter(p=>(p.kpiRefs||[]).find(r=>r.kpiId===k.id));
     const descTip=getDesc(k);
-    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td${descTip?` title="${escHtml(descTip)}"`:''}><strong>${getName(k)}</strong>${k.teamShared?' <span class="badge badge-info" style="font-size:9px" title="同班组+同岗位自动同步逐日数值">🔗班组共享</span>':''}${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}${descTip?`<div style="font-size:10px;color:var(--color-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(descTip)}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
-  }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
+    const lvl=k.level||'';
+    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td${descTip?` title="${escHtml(descTip)}"`:''}><strong>${getName(k)}</strong>${k.teamShared?' <span class="badge badge-info" style="font-size:9px" title="同班组+同岗位自动同步逐日数值">🔗班组共享</span>':''}${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}${descTip?`<div style="font-size:10px;color:var(--color-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(descTip)}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td>${lvl?`<span class="badge ${LEVEL_CLS[lvl]||'badge-gray'}" style="font-size:10px">${lvl}</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">—</span>'}</td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
+  }).join(''):'<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
 }
 function openAddKpiLib(){editingKPIId=null;$('klm-title').textContent='新增指标';$('ki-code').value='K'+String(Math.max(0,...kpiTemplates.map(k=>parseInt((k.code||'').replace(/\D/g,''))||0))+1).padStart(3,'0');resetKPIModal();if($('ki-name-es'))$('ki-name-es').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('modal-add-kpilib').classList.add('open');}
-function openEditKpiLib(id){const k=kpiTemplates.find(x=>x.id===id);if(!k)return;editingKPIId=id;$('klm-title').textContent='编辑指标';$('ki-code').value=k.code||'K'+id;$('ki-name').value=k.name;if($('ki-name-es'))$('ki-name-es').value=k.nameEs||'';if($('ki-desc'))$('ki-desc').value=k.desc||'';if($('ki-desc-es'))$('ki-desc-es').value=k.descEs||'';$('ki-type').value=k.type;$('ki-target').value=k.target;$('ki-unit').value=k.unit||'';$('ki-period').value=k.period||'月度';if($('ki-team-shared'))$('ki-team-shared').checked=!!k.teamShared;kd=k.rule&&k.rule.kd||'achieve';km=k.rule&&k.rule.km||'rate';if(km==='r12'||km==='r21')km='fml';$('kr-cap').value=k.rule&&k.rule.rateCap!=null?k.rule.rateCap:150;$('kr-floor').value=k.rule&&k.rule.rateFloor!=null?k.rule.rateFloor:0;$('kf-fml').value=k.rule&&k.rule.formula||'';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const r=k.rule;if(r&&r.bonusEnabled){$('kb-enabled').checked=true;$('kpi-bonus-body').style.display='block';setBonusMode(r.bonusMode||'step');if($('kb-step'))$('kb-step').value=r.bonusStep!=null?r.bonusStep:'';if($('kb-per-step'))$('kb-per-step').value=r.bonusPerStep!=null?r.bonusPerStep:'';if($('kb-cap'))$('kb-cap').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-fml'))$('kb-fml').value=r.bonusFormula||'';if($('kb-cap-fml'))$('kb-cap-fml').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-top-n'))$('kb-top-n').value=r.topN!=null?r.topN:'';if($('kb-top-pts'))$('kb-top-pts').value=r.topPoints!=null?r.topPoints:'';}else{$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';}applyKModes();$('modal-add-kpilib').classList.add('open');}
+function openEditKpiLib(id){const k=kpiTemplates.find(x=>x.id===id);if(!k)return;editingKPIId=id;$('klm-title').textContent='编辑指标';$('ki-code').value=k.code||'K'+id;$('ki-name').value=k.name;if($('ki-name-es'))$('ki-name-es').value=k.nameEs||'';if($('ki-desc'))$('ki-desc').value=k.desc||'';if($('ki-desc-es'))$('ki-desc-es').value=k.descEs||'';$('ki-type').value=k.type;if($('ki-level'))$('ki-level').value=k.level||'';$('ki-target').value=k.target;$('ki-unit').value=k.unit||'';$('ki-period').value=k.period||'月度';if($('ki-team-shared'))$('ki-team-shared').checked=!!k.teamShared;kd=k.rule&&k.rule.kd||'achieve';km=k.rule&&k.rule.km||'rate';if(km==='r12'||km==='r21')km='fml';$('kr-cap').value=k.rule&&k.rule.rateCap!=null?k.rule.rateCap:150;$('kr-floor').value=k.rule&&k.rule.rateFloor!=null?k.rule.rateFloor:0;$('kf-fml').value=k.rule&&k.rule.formula||'';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const r=k.rule;if(r&&r.bonusEnabled){$('kb-enabled').checked=true;$('kpi-bonus-body').style.display='block';setBonusMode(r.bonusMode||'step');if($('kb-step'))$('kb-step').value=r.bonusStep!=null?r.bonusStep:'';if($('kb-per-step'))$('kb-per-step').value=r.bonusPerStep!=null?r.bonusPerStep:'';if($('kb-cap'))$('kb-cap').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-fml'))$('kb-fml').value=r.bonusFormula||'';if($('kb-cap-fml'))$('kb-cap-fml').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-top-n'))$('kb-top-n').value=r.topN!=null?r.topN:'';if($('kb-top-pts'))$('kb-top-pts').value=r.topPoints!=null?r.topPoints:'';}else{$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';}applyKModes();$('modal-add-kpilib').classList.add('open');}
 async function saveKpiLib(){
   const name=$('ki-name').value.trim();if(!name){toast('请填写指标名称');return;}
   const code=$('ki-code').value.trim()||('K'+Date.now().toString().slice(-5));
@@ -3985,7 +4021,7 @@ async function saveKpiLib(){
   const desc=($('ki-desc')?$('ki-desc').value.trim():'')||undefined;
   const descEs=($('ki-desc-es')?$('ki-desc-es').value.trim():'')||undefined;
   const teamShared=$('ki-team-shared')?$('ki-team-shared').checked:false;
-  const kpi={id:editingKPIId||uid('K'),code,name,nameEs,desc,descEs,type:$('ki-type').value,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,teamShared,rule};
+  const level=($('ki-level')&&$('ki-level').value)||'';const kpi={id:editingKPIId||uid('K'),code,name,nameEs,desc,descEs,type:$('ki-type').value,level,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,teamShared,rule};
   if(editingKPIId){const idx=kpiTemplates.findIndex(k=>k.id===editingKPIId);if(idx>=0)kpiTemplates[idx]=kpi;}
   else{kpiTemplates.push(kpi);}
   closeM('modal-add-kpilib');await saveAndToast('指标已保存');renderKpiLib();
@@ -4044,7 +4080,7 @@ function handleKpiFile(e){
   };
   r.readAsArrayBuffer(f);
 }
-function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('ki-target').value='';$('ki-unit').value='';$('kr-cap').value=150;$('kr-floor').value=0;$('kf-fml').value='';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';$('kb-step').value='';$('kb-per-step').value='';$('kb-cap').value='';$('kb-fml').value='';$('kb-cap-fml').value='';$('kb-top-n').value='';$('kb-top-pts').value='';$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';if($('ki-team-shared'))$('ki-team-shared').checked=false;setBonusMode('step');applyKModes();}
+function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';if($('ki-level'))$('ki-level').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('ki-target').value='';$('ki-unit').value='';$('kr-cap').value=150;$('kr-floor').value=0;$('kf-fml').value='';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';$('kb-step').value='';$('kb-per-step').value='';$('kb-cap').value='';$('kb-fml').value='';$('kb-cap-fml').value='';$('kb-top-n').value='';$('kb-top-pts').value='';$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';if($('ki-team-shared'))$('ki-team-shared').checked=false;setBonusMode('step');applyKModes();}
 function setKD(v){kd=v;applyKModes();}function setKM(v){km=v;applyKModes();}
 let bonusMode='step';
 function setBonusMode(v){bonusMode=v;$('bp-step').classList.toggle('on',v==='step');$('bp-fml').classList.toggle('on',v==='fml');$('bonus-cfg-step').style.display=v==='step'?'grid':'none';$('bonus-cfg-fml').style.display=v==='fml'?'block':'none';updateKPIPreview();}
@@ -4083,9 +4119,96 @@ function updateKPIPreview(){
   $('kp-explain').textContent=`实际 ${actual} / 目标 ${target} → 完成率 ${(rate*100).toFixed(1)}% → 得分 ${score}`+(bonusPts>0?` + 超额加分 +${bonusPts}分（直接叠加到总分）`:'');
 }
 // KPI ANALYSIS
+let _kpiView='cards',_kpiCmpBy='sec';
+function kpiFilteredEmps(){
+  const dF=($('kpi-f-dept')&&$('kpi-f-dept').value)||'';
+  const sF=($('kpi-f-sec')&&$('kpi-f-sec').value)||'';
+  const tF=($('kpi-f-team')&&$('kpi-f-team').value)||'';
+  return visibleEmps().filter(e=>{
+    if(dF&&e.dept!==dF)return false;
+    if(sF&&e.section!==sF)return false;
+    if(tF&&e.team!==tF)return false;
+    return true;
+  });
+}
+function initKpiFilters(){
+  const dSel=$('kpi-f-dept');if(dSel&&dSel.options.length<=1){departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;dSel.appendChild(o);});}
+}
+function onKpiDeptChange(){
+  const dF=($('kpi-f-dept')&&$('kpi-f-dept').value)||'';
+  const secSel=$('kpi-f-sec');if(secSel){secSel.innerHTML='<option value="">全部科室</option>';const secs=new Set(visibleEmps().filter(e=>!dF||e.dept===dF).map(e=>e.section).filter(Boolean));[...secs].sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;secSel.appendChild(o);});}
+  const tSel=$('kpi-f-team');if(tSel){tSel.innerHTML='<option value="">全部班组</option>';}
+  renderKPI();
+}
+function onKpiSecChange(){
+  const dF=($('kpi-f-dept')&&$('kpi-f-dept').value)||'';
+  const sF=($('kpi-f-sec')&&$('kpi-f-sec').value)||'';
+  const tSel=$('kpi-f-team');if(tSel){tSel.innerHTML='<option value="">全部班组</option>';const teams=new Set(visibleEmps().filter(e=>(!dF||e.dept===dF)&&(!sF||e.section===sF)).map(e=>e.team).filter(Boolean));[...teams].sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;tSel.appendChild(o);});}
+  renderKPI();
+}
+function setKpiView(v){
+  _kpiView=v;
+  $('kpi-view-panel-cards').style.display=v==='cards'?'block':'none';
+  $('kpi-view-panel-compare').style.display=v==='compare'?'block':'none';
+  $('kpi-view-cards').classList.toggle('on',v==='cards');
+  $('kpi-view-compare').classList.toggle('on',v==='compare');
+  if(v==='compare')renderKpiCompare();
+  else renderKPI();
+}
+function setKpiCmpBy(by){
+  _kpiCmpBy=by;
+  $('kpi-cmp-by-sec').classList.toggle('on',by==='sec');
+  $('kpi-cmp-by-team').classList.toggle('on',by==='team');
+  renderKpiCompare();
+}
 function renderKPI(){
-  $('kpi-cards').innerHTML=kpiTemplates.map(k=>{const vis=visibleEmps();const rates=vis.filter(e=>getMS(e.id).done).map(e=>{const a=getMS(e.id).scores[k.id];return a!==null&&a!==undefined?calcRate(a,k.target,k.rule&&k.rule.kd||'achieve'):null;}).filter(x=>x!==null);const avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length*1000)/10:0;return`<div class="card" style="cursor:pointer" onclick="openKPIDetail(${k.id})"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px"><div style="font-size:13px;font-weight:500">${getName(k)}</div><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></div><div style="font-size:28px;font-weight:500;margin-bottom:4px">${avg}%</div><div style="font-size:11px;color:var(--color-text-secondary)">平均完成率 · 权重${k.weight}%</div><div style="margin-top:10px"><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(avg,100)}%;background:${avg>=100?'#28a745':avg>=80?'#ffc107':'#dc3545'}"></div></div></div></div>`;}).join('');}
-function openKPIDetail(kpiId){const kpi=kpiTemplates.find(k=>k.id===kpiId);$('kpi-detail').style.display='block';$('kpi-detail-title').textContent=getName(kpi)+' — 详细分析';const vis=visibleEmps();const top10=vis.map(e=>{const a=getMS(e.id).scores[kpiId];const rate=a!==null&&a!==undefined?calcRate(a,kpi.target,kpi.rule&&kpi.rule.kd||'achieve'):0;return{name:e.name,dept:getDeptLabel(e.dept),actual:a,rate};}).sort((a,b)=>b.rate-a.rate).slice(0,10);$('kpi-top10').innerHTML=top10.map((e,i)=>`<tr><td><span class="rank-num ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">${i+1}</span></td><td>${e.name}</td><td>${e.dept}</td><td>${e.actual!==null?e.actual:'-'} ${kpi.unit}</td><td><span class="badge ${e.rate>=1?'badge-success':'badge-warning'}">${(e.rate*100).toFixed(1)}%</span></td></tr>`).join('');const months=[];for(let i=5;i>=0;i--){let m=curM-i,y=curY;if(m<=0){m+=12;y--;}months.push(mLabel(y,m));}const trendData=months.map((_,i)=>{let m=curM-5+i,y=curY;if(m<=0){m+=12;y--;}if(m>12){m-=12;y++;}const mk=mKey(y,m);if(!monthlyScores[mk])return null;const rs=vis.map(e=>{if(!monthlyScores[mk]||!monthlyScores[mk][e.id])return null;const a=monthlyScores[mk][e.id].scores&&monthlyScores[mk][e.id].scores[kpiId];return a!==null&&a!==undefined?calcRate(a,kpi.target,kpi.rule&&kpi.rule.kd||'achieve'):null;}).filter(x=>x!==null);return rs.length?Math.round(rs.reduce((a,b)=>a+b,0)/rs.length*1000)/10:null;});const ctx=$('kpiTrendChart').getContext('2d');if(charts.kt)charts.kt.destroy();charts.kt=new Chart(ctx,{type:'line',data:{labels:months,datasets:[{label:'%',data:trendData,borderColor:'#0d6efd',backgroundColor:'rgba(13,110,253,0.1)',fill:true,tension:0.4,pointRadius:4,spanGaps:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:160,ticks:{callback:v=>v+'%'}}}}});}
+  initKpiFilters();
+  const vis=kpiFilteredEmps();
+  const lf=($('kpi-f-level')&&$('kpi-f-level').value)||'';
+  const tf=($('kpi-f-type')&&$('kpi-f-type').value)||'';
+  let kpis=kpiTemplates;
+  if(lf)kpis=kpis.filter(k=>k.level===lf);
+  if(tf)kpis=kpis.filter(k=>k.type===tf);
+  const dF=($('kpi-f-dept')&&$('kpi-f-dept').value)||'';
+  const sF=($('kpi-f-sec')&&$('kpi-f-sec').value)||'';
+  const scopeLabel=sF?`科室：${sF}`:dF?`部门：${dF}`:'全员';
+  $('kpi-cards').innerHTML=kpis.map(k=>{const rates=vis.filter(e=>getMS(e.id).done).map(e=>{const a=getMS(e.id).scores[k.id];return a!==null&&a!==undefined?calcRate(a,k.target,k.rule&&k.rule.kd||'achieve'):null;}).filter(x=>x!==null);const avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length*1000)/10:0;const lvlBadge=k.level?`<span class="badge badge-gray" style="font-size:9px">${k.level}</span>`:'';return`<div class="card" style="cursor:pointer" onclick="openKPIDetail(${jsArg(k.id)})"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div style="font-size:13px;font-weight:500">${getName(k)}</div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${lvlBadge}<span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></div></div><div style="font-size:28px;font-weight:500;margin-bottom:4px">${avg}%</div><div style="font-size:11px;color:var(--color-text-secondary)">平均完成率 · ${scopeLabel} · ${rates.length}人</div><div style="margin-top:10px"><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(avg,100)}%;background:${avg>=100?'#28a745':avg>=80?'#ffc107':'#dc3545'}"></div></div></div></div>`;}).join('')||'<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</div>';
+}
+function openKPIDetail(kpiId){const kpi=kpiTemplates.find(k=>k.id===kpiId);$('kpi-detail').style.display='block';$('kpi-detail-title').textContent=getName(kpi)+' — 详细分析';const vis=kpiFilteredEmps();const top10=vis.map(e=>{const a=getMS(e.id).scores[kpiId];const rate=a!==null&&a!==undefined?calcRate(a,kpi.target,kpi.rule&&kpi.rule.kd||'achieve'):0;return{name:e.name,dept:getDeptLabel(e.dept),actual:a,rate};}).sort((a,b)=>b.rate-a.rate).slice(0,10);$('kpi-top10').innerHTML=top10.map((e,i)=>`<tr><td><span class="rank-num ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">${i+1}</span></td><td>${e.name}</td><td>${e.dept}</td><td>${e.actual!==null?e.actual:'-'} ${kpi.unit}</td><td><span class="badge ${e.rate>=1?'badge-success':'badge-warning'}">${(e.rate*100).toFixed(1)}%</span></td></tr>`).join('');const months=[];for(let i=5;i>=0;i--){let m=curM-i,y=curY;if(m<=0){m+=12;y--;}months.push(mLabel(y,m));}const trendData=months.map((_,i)=>{let m=curM-5+i,y=curY;if(m<=0){m+=12;y--;}if(m>12){m-=12;y++;}const mk=mKey(y,m);if(!monthlyScores[mk])return null;const rs=vis.map(e=>{if(!monthlyScores[mk]||!monthlyScores[mk][e.id])return null;const a=monthlyScores[mk][e.id].scores&&monthlyScores[mk][e.id].scores[kpiId];return a!==null&&a!==undefined?calcRate(a,kpi.target,kpi.rule&&kpi.rule.kd||'achieve'):null;}).filter(x=>x!==null);return rs.length?Math.round(rs.reduce((a,b)=>a+b,0)/rs.length*1000)/10:null;});const ctx=$('kpiTrendChart').getContext('2d');if(charts.kt)charts.kt.destroy();charts.kt=new Chart(ctx,{type:'line',data:{labels:months,datasets:[{label:'%',data:trendData,borderColor:'#0d6efd',backgroundColor:'rgba(13,110,253,0.1)',fill:true,tension:0.4,pointRadius:4,spanGaps:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:160,ticks:{callback:v=>v+'%'}}}}});}
+function renderKpiCompare(){
+  const kpiSel=$('kpi-cmp-kpi');
+  if(!kpiSel)return;
+  const lf=($('kpi-f-level')&&$('kpi-f-level').value)||'';
+  const tf=($('kpi-f-type')&&$('kpi-f-type').value)||'';
+  let kpis=kpiTemplates;
+  if(lf)kpis=kpis.filter(k=>k.level===lf);
+  if(tf)kpis=kpis.filter(k=>k.type===tf);
+  if(kpiSel.options.length<=1||kpis.length!==kpiSel.options.length-1){
+    kpiSel.innerHTML='<option value="">请选择指标</option>'+kpis.map(k=>`<option value="${k.id}">${k.code?k.code+' ':''}${getName(k)}</option>`).join('');
+  }
+  const kpiId=kpiSel.value;
+  if(!kpiId){$('kpi-cmp-hint').textContent='请先选择一个指标';return;}
+  const kpi=kpiTemplates.find(k=>k.id===kpiId);if(!kpi)return;
+  const dF=($('kpi-f-dept')&&$('kpi-f-dept').value)||'';
+  const sF=($('kpi-f-sec')&&$('kpi-f-sec').value)||'';
+  const baseEmps=visibleEmps().filter(e=>!dF||e.dept===dF);
+  let groups={};
+  if(_kpiCmpBy==='sec'){
+    baseEmps.forEach(e=>{const g=e.section||'（未分配科室）';if(!groups[g])groups[g]=[];groups[g].push(e);});
+    $('kpi-cmp-hint').textContent=dF?`部门：${dF} · 各科室对比`:'全员各科室对比';
+  } else {
+    const secBase=baseEmps.filter(e=>!sF||e.section===sF);
+    secBase.forEach(e=>{const g=e.team||'（未分配班组）';if(!groups[g])groups[g]=[];groups[g].push(e);});
+    $('kpi-cmp-hint').textContent=(sF?`科室：${sF}`:(dF?`部门：${dF}`:'全员'))+' · 各班组对比';
+  }
+  const labels=Object.keys(groups).sort();
+  const data=labels.map(g=>{const emps=groups[g];const rates=emps.filter(e=>getMS(e.id).done).map(e=>{const a=getMS(e.id).scores[kpiId];return a!==null&&a!==undefined?calcRate(a,kpi.target,kpi.rule&&kpi.rule.kd||'achieve'):null;}).filter(x=>x!==null);return rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length*1000)/10:null;});
+  const counts=labels.map(g=>groups[g].filter(e=>getMS(e.id).done).length);
+  const colors=data.map(v=>v===null?'#e2e8f0':v>=100?'#22c55e':v>=80?'#f59e0b':'#ef4444');
+  const ctx=$('kpiCmpChart').getContext('2d');if(charts.kc)charts.kc.destroy();
+  charts.kc=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'平均完成率(%)',data,backgroundColor:colors,borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`完成率：${ctx.parsed.y!==null?ctx.parsed.y+'%':'无数据'}`}}},scales:{y:{min:0,suggestedMax:150,ticks:{callback:v=>v+'%'},grid:{color:'rgba(0,0,0,0.05)'}},x:{grid:{display:false}}}}});
+  $('kpi-cmp-table').innerHTML=`<table><thead><tr><th>${_kpiCmpBy==='sec'?'科室':'班组'}</th><th>平均完成率</th><th>已填报人数</th><th>状态</th></tr></thead><tbody>${labels.map((g,i)=>`<tr><td><strong>${g}</strong></td><td>${data[i]!==null?data[i]+'%':'—'}</td><td>${counts[i]}</td><td>${data[i]===null?'<span style="color:var(--color-text-tertiary)">无数据</span>':`<span class="badge ${data[i]>=100?'badge-success':data[i]>=80?'badge-warning':'badge-danger'}">${data[i]>=100?'达标':data[i]>=80?'接近':'待提升'}</span>`}</td></tr>`).join('')}</tbody></table>`;
+}
 // ATTENDANCE
 function switchAttTab(tab,el){document.querySelectorAll('#page-attendance .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');$('att-week-panel').style.display=tab==='week'?'block':'none';$('att-history-panel').style.display=tab==='history'?'block':'none';$('att-absent-panel').style.display=tab==='absent'?'block':'none';$('att-incomplete-panel').style.display=tab==='incomplete'?'block':'none';if(tab==='week')renderAttWeek();else if(tab==='history')renderAttWeekSummary();else if(tab==='absent')renderAbsentList();else renderAttIncomplete();}
 // 近30天旷工预警名单（以考勤记录最近一天往前30天，旷工FI≥阈值；仅墨方员工）
@@ -6121,7 +6244,7 @@ function showPage(id,el){
   if(id==='watch-list-page'){renderWatchPage();}
   if(id==='blacklist-page'){renderBlacklistPage();}
   if(id==='employees'){filterEmp();}
-  if(id==='kpi')renderKPI();
+  if(id==='kpi'){initKpiFilters();setKpiView('cards');renderKPI();}
   if(id==='attendance')renderAttWeek();
   if(id==='cn-attendance')cnRenderPage();
   if(id==='turnover'){
