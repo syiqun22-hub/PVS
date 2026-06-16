@@ -446,6 +446,13 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 
   <!-- 指标分析 -->
   <div id="pa-panel-kpi" style="display:none">
+    <!-- 科室/班组 筛选栏 -->
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;background:var(--color-background-secondary);border-radius:8px;border:0.5px solid var(--color-border-tertiary)">
+      <span style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">分析范围：</span>
+      <select id="pa-kpi-sec" onchange="onPAKpiSecChange()" style="width:150px"><option value="">全部科室</option></select>
+      <select id="pa-kpi-team" onchange="renderPAKPITab()" style="width:150px"><option value="">全部班组</option></select>
+      <span id="pa-kpi-scope-hint" style="font-size:11px;color:var(--color-text-tertiary);margin-left:4px"></span>
+    </div>
     <!-- KPI cards row -->
     <div id="pa-kpi-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -469,11 +476,20 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       </div>
     </div>
     <div class="card">
-      <div class="card-header">
-        <div class="card-title">跨部门指标对比</div>
-        <select id="pa-kpi-select" onchange="renderKPICrossDept()" style="width:200px"><option value="">选择指标</option></select>
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <div class="card-title">横向对比分析</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="pa-kpi-select" onchange="renderKPICrossOrg()" style="width:180px"><option value="">选择指标</option></select>
+          <div class="pills">
+            <button class="pill on" id="pa-cross-by-dept" onclick="setPACrossBy('dept')">跨部门</button>
+            <button class="pill" id="pa-cross-by-sec" onclick="setPACrossBy('sec')">跨科室</button>
+            <button class="pill" id="pa-cross-by-team" onclick="setPACrossBy('team')">跨班组</button>
+          </div>
+          <span id="pa-cross-hint" style="font-size:11px;color:var(--color-text-tertiary)"></span>
+        </div>
       </div>
-      <div style="position:relative;height:240px"><canvas id="pa-kpi-cross-chart"></canvas></div>
+      <div style="position:relative;height:260px"><canvas id="pa-kpi-cross-chart"></canvas></div>
+      <div id="pa-kpi-cross-table" style="margin-top:10px;overflow-x:auto"></div>
     </div>
     <!-- 连续3个月未达成名单 -->
     <div class="card" style="margin-top:14px">
@@ -5282,7 +5298,7 @@ function switchPATab(tab){
   if(tab==='company') renderPACompany(allScores,months,emps,deptF);
   if(tab==='dept') renderPADept(allScores,months,emps,deptF);
   if(tab==='emp') renderPAEmployee(allScores,months,emps);
-  if(tab==='kpi') renderPAKPI(months,emps,deptF);
+  if(tab==='kpi') renderPAKPITab();
 }
 
 // ═══════════════════════════════════════════════════
@@ -5526,6 +5542,148 @@ function renderPAEmployee(allScores,months,emps){
 }
 
 // ── KPI 指标分析 ────────────────────────────────────────────────
+let _paCrossBy = 'dept';
+function setPACrossBy(by){
+  _paCrossBy = by;
+  ['dept','sec','team'].forEach(v=>{
+    const btn = document.getElementById('pa-cross-by-'+v);
+    if(btn) btn.classList.toggle('on', v===by);
+  });
+  renderKPICrossOrg();
+}
+function initPAKpiSecFilter(){
+  const deptF = document.getElementById('pa-dept')?.value||'';
+  const secSel = document.getElementById('pa-kpi-sec');
+  if(!secSel) return;
+  const secs = new Set(employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&(!deptF||e.dept===deptF)).map(e=>e.section).filter(Boolean));
+  const prev = secSel.value;
+  secSel.innerHTML = '<option value="">全部科室</option>' + [...secs].sort().map(s=>`<option value="${s}">${s}</option>`).join('');
+  if(prev && [...secs].includes(prev)) secSel.value = prev;
+}
+function onPAKpiSecChange(){
+  const deptF = document.getElementById('pa-dept')?.value||'';
+  const secF  = document.getElementById('pa-kpi-sec')?.value||'';
+  const teamSel = document.getElementById('pa-kpi-team');
+  if(teamSel){
+    const teams = new Set(employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&(!deptF||e.dept===deptF)&&(!secF||e.section===secF)).map(e=>e.team).filter(Boolean));
+    const prev = teamSel.value;
+    teamSel.innerHTML = '<option value="">全部班组</option>' + [...teams].sort().map(t=>`<option value="${t}">${t}</option>`).join('');
+    if(prev && [...teams].includes(prev)) teamSel.value = prev;
+  }
+  renderPAKPITab();
+}
+function renderPAKPITab(){
+  const range = parseInt(document.getElementById('pa-range')?.value||6);
+  const deptF = document.getElementById('pa-dept')?.value||'';
+  const secF  = document.getElementById('pa-kpi-sec')?.value||'';
+  const teamF = document.getElementById('pa-kpi-team')?.value||'';
+  const months = getPAMonths(range);
+  const emps = employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)
+    &&(!deptF||e.dept===deptF)
+    &&(!secF||e.section===secF)
+    &&(!teamF||e.team===teamF));
+  initPAKpiSecFilter();
+  const hintEl = document.getElementById('pa-kpi-scope-hint');
+  if(hintEl){
+    const parts=[];
+    if(deptF) parts.push('部门：'+deptF);
+    if(secF)  parts.push('科室：'+secF);
+    if(teamF) parts.push('班组：'+teamF);
+    hintEl.textContent = (parts.length?parts.join(' · '):'全公司') + '  共 '+emps.length+' 人';
+  }
+  renderPAKPI(months, emps, deptF);
+}
+function renderKPICrossOrg(){
+  const kpiSel = document.getElementById('pa-kpi-select');
+  if(!kpiSel||!window._paKpiList) return;
+  const kpiId = kpiSel.value;
+  const by = _paCrossBy;
+  const deptF = document.getElementById('pa-dept')?.value||'';
+  const secF  = document.getElementById('pa-kpi-sec')?.value||'';
+  const hintEl = document.getElementById('pa-cross-hint');
+
+  if(!kpiId){
+    if(hintEl) hintEl.textContent='请选择一个指标';
+    destroyPAChart('pa-kpi-cross-chart');
+    const tbl=document.getElementById('pa-kpi-cross-table'); if(tbl) tbl.innerHTML='';
+    return;
+  }
+  const kStat = window._paKpiList.find(k=>String(k.id)===String(kpiId));
+  if(!kStat){ if(hintEl) hintEl.textContent=''; return; }
+
+  const range = parseInt(document.getElementById('pa-range')?.value||6);
+  const months = getPAMonths(range);
+  const baseEmps = employees.filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&(!deptF||e.dept===deptF));
+
+  let groups = {};
+  if(by==='dept'){
+    baseEmps.forEach(e=>{const g=e.dept||'未分配';if(!groups[g])groups[g]=[];groups[g].push(e);});
+    if(hintEl) hintEl.textContent = '各部门对比';
+  } else if(by==='sec'){
+    baseEmps.forEach(e=>{const g=e.section||'未分配科室';if(!groups[g])groups[g]=[];groups[g].push(e);});
+    if(hintEl) hintEl.textContent = (deptF?deptF+' · ':'')+'各科室对比';
+  } else {
+    const secBase = baseEmps.filter(e=>!secF||e.section===secF);
+    secBase.forEach(e=>{const g=e.team||'未分配班组';if(!groups[g])groups[g]=[];groups[g].push(e);});
+    if(hintEl) hintEl.textContent = (secF?secF+' · ':deptF?deptF+' · ':'')+'各班组对比';
+  }
+
+  const labels = Object.keys(groups).sort();
+  const data = labels.map(g=>{
+    const emps = groups[g];
+    const scores = [];
+    months.forEach(({y,m})=>{
+      emps.forEach(e=>{
+        const ms=getMS(e.id,y,m);
+        if(!ms.done) return;
+        const s=ms.scores[kpiId];
+        if(s!=null) scores.push(s);
+      });
+    });
+    return scores.length ? +(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : null;
+  });
+  const counts = labels.map(g=>{
+    let n=0;
+    months.forEach(({y,m})=>{ groups[g].forEach(e=>{ const ms=getMS(e.id,y,m); if(ms.done&&ms.scores[kpiId]!=null) n++; }); });
+    return n;
+  });
+  const colors = data.map(v=>v===null?'#e2e8f044':v>=90?'#16a34a88':v>=70?'#2563eb88':v>=60?'#d97706aa':'#dc262688');
+  const borderColors = data.map(v=>v===null?'#e2e8f0':v>=90?'#16a34a':v>=70?'#2563eb':v>=60?'#d97706':'#dc2626');
+
+  destroyPAChart('pa-kpi-cross-chart');
+  const ctx = document.getElementById('pa-kpi-cross-chart')?.getContext('2d');
+  if(ctx){
+    _paCharts['pa-kpi-cross-chart'] = new Chart(ctx,{
+      type:'bar',
+      data:{labels, datasets:[{
+        label:'平均得分',
+        data,
+        backgroundColor:colors, borderColor:borderColors, borderWidth:1.5, borderRadius:5
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y!==null?`均分：${ctx.parsed.y}`:'无数据'}}},
+        scales:{y:{beginAtZero:true,max:105,ticks:{callback:v=>v+'分'},grid:{color:'rgba(0,0,0,0.05)'}},x:{grid:{display:false}}}}
+    });
+  }
+  const tableEl = document.getElementById('pa-kpi-cross-table');
+  if(tableEl){
+    const byLabel = by==='dept'?'部门':by==='sec'?'科室':'班组';
+    tableEl.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--color-border-tertiary)">
+        <th style="text-align:left;padding:6px 8px;color:var(--color-text-secondary)">${byLabel}</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--color-text-secondary)">平均得分</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--color-text-secondary)">样本数</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--color-text-secondary)">状态</th>
+      </tr></thead>
+      <tbody>${labels.map((g,i)=>`<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
+        <td style="padding:6px 8px;font-weight:500">${g}</td>
+        <td style="text-align:center;padding:6px 8px;font-weight:600;color:${borderColors[i]}">${data[i]!==null?data[i]+'分':'—'}</td>
+        <td style="text-align:center;padding:6px 8px;color:var(--color-text-secondary)">${counts[i]}</td>
+        <td style="text-align:center;padding:6px 8px">${data[i]===null?'<span style="color:var(--color-text-tertiary)">无数据</span>':data[i]>=90?'<span style="color:#16a34a;font-size:11px">● 优秀</span>':data[i]>=70?'<span style="color:#2563eb;font-size:11px">● 良好</span>':data[i]>=60?'<span style="color:#d97706;font-size:11px">● 合格</span>':'<span style="color:#dc2626;font-size:11px">● 待改进</span>'}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+}
+function renderKPICrossDept(){ renderKPICrossOrg(); }
 function renderPAKPI(months, emps, deptF){
   // Build kpiStats: per kpi {name, weight, scores[], completions[], depts{}}
   const kpiStats = {};
@@ -5692,7 +5850,7 @@ function renderPAKPI(months, emps, deptF){
     kpiSel.innerHTML = '<option value="">选择指标</option>' + kpiList.map(k=>`<option value="${k.id}">${getName(k)}</option>`).join('');
     if(prev) kpiSel.value=prev;
     window._paKpiList = kpiList;
-    renderKPICrossDept();
+    renderKPICrossOrg();
   }
   renderFail3List();
 }
