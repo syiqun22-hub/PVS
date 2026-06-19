@@ -2641,10 +2641,10 @@ function renderQRadar(empId){
     if(isPct){
       a=ms.scores&&ms.scores[k.id];
     }else{
-      // 与逐日明细的月总计保持一致：对所有非%指标取月度汇总（而非平均）
+      const isCnt=(k.unit||'').trim().includes('次');
       let sum=0,filled=0;
       for(let d=1;d<=_detN;d++){const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const cur=rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:null;if(cur!==null){sum+=parseFloat(cur)||0;filled++;}}
-      a=filled>0?Math.round(sum*100)/100:null;
+      a=filled>0?(isCnt?Math.round(sum*100)/100:Math.round(sum/filled*100)/100):null;
     }
     const s=scores[i];
     const rate=a!=null?calcRate(a,k.target,k.rule&&k.rule.kd||'achieve'):null;
@@ -2903,7 +2903,9 @@ function buildEmpDailyBlock(emp){
       const cumStr=pctFilled>0?`<span style="font-weight:700">${Math.round(totalNum*10)/10}</span><span style="font-size:9px;color:var(--color-text-tertiary)">/${Math.round(totalDen*10)/10}</span><div style="font-size:9px;color:var(--color-text-tertiary)">${totalDen>0?(totalNum/totalDen*100).toFixed(1)+'%':'—'}</div>`:'—';
       sumCell=`<td id="qd-pct-tot-${empId}-${k.id}" style="text-align:center;font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary);line-height:1.3">${cumStr}</td>`;
     } else {
-      sumCell=`<td style="text-align:center;font-weight:600;font-family:var(--font-mono);font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary)">${kpiFilled>0?Math.round(kpiSum*100)/100:'—'}</td>`;
+      const isCnt=(k.unit||'').trim().includes('次');
+      const kpiDisplay=kpiFilled>0?(isCnt?Math.round(kpiSum*100)/100:Math.round(kpiSum/kpiFilled*100)/100):'—';
+      sumCell=`<td style="text-align:center;font-weight:600;font-family:var(--font-mono);font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary)">${kpiDisplay}${kpiFilled>0&&!isCnt?'<div style=\"font-size:9px;font-weight:400;color:var(--color-text-tertiary)\">均值·'+kpiFilled+'天</div>':''}</td>`;
     }
     return `<tr><td style="${lblStyle}">${getName(k)}<div style="font-size:10px;font-weight:400;color:var(--color-text-tertiary)">目标 ${k.target}${k.unit||''}${isPct?' (\u5206\u5b50/\u5206\u6bcd)':''}</div></td>${cells}${sumCell}</tr>`;
   }).join('');
