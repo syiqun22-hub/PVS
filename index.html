@@ -4051,14 +4051,20 @@ async function delKpiLib(id){
   kpiTemplates=kpiTemplates.filter(k=>k.id!==id);await saveAndToast('已删除');renderKpiLib();
 }
 function dlKpiTpl(){
-  const h=['编码','名称','类型','方向','目标值','单位','周期','核算规则','上限','下限','公式','班组共享'];
+  const h=['编码','名称','类型','级别','方向','目标值','单位','周期','核算规则','上限','下限','公式','班组共享','描述','西语名称','西语描述','超额加分模式','每超出单位数','加分数','加分上限','加分公式','排名前N','排名奖励分'];
   const KM_LABEL={rate:'完成率=兑现系数',r11:'奖一罚一',fml:'设定公式',direct:'直接得分'};
+  const BM_LABEL={step:'阶梯加分',fml:'自定义公式'};
   let rows=kpiTemplates.map(k=>{
     const r=k.rule||{};
-    return[k.code||'K'+k.id,k.name,k.type,r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':''];
+    return[k.code||'K'+k.id,k.name,k.type,k.level||'',r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':'',k.desc||'',k.nameEs||'',k.descEs||'',r.bonusEnabled?BM_LABEL[r.bonusMode]||'阶梯加分':'',r.bonusEnabled&&r.bonusStep!=null?r.bonusStep:'',r.bonusEnabled&&r.bonusPerStep!=null?r.bonusPerStep:'',r.bonusEnabled&&r.bonusCap!=null?r.bonusCap:'',r.bonusEnabled&&r.bonusFormula?r.bonusFormula:'',r.topN!=null?r.topN:'',r.topPoints!=null?r.topPoints:''];
   });
-  if(!rows.length)rows=[['K001','示例销售达成率','KPI类','达成类',100,'%','月度','完成率=兑现系数',150,0,'',''],['K002','示例投诉次数','KPI类','控制类',0,'次','月度','完成率=兑现系数',150,0,'',''],['K003','示例公式指标','GS类','达成类',90,'分','月度','设定公式',150,0,'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))','']];
+  if(!rows.length)rows=[
+    ['K001','示例销售达成率','KPI类','部门级','达成类',100,'%','月度','完成率=兑现系数',150,0,'','','月度销售目标完成率','','','阶梯加分',50,50,'','','',''],
+    ['K002','示例投诉次数','KPI类','科室级','控制类',0,'次','月度','完成率=兑现系数',150,0,'','','客户投诉次数，目标为0','','','','','','','','',''],
+    ['K003','示例公式指标','GS类','员工级','达成类',90,'分','月度','设定公式',150,0,'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))','','自定义公式计分示例','','','','','','','','','']
+  ];
   const ws=XLSX.utils.aoa_to_sheet([h,...rows]);
+  ws['!cols']=[{wch:8},{wch:20},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:8},{wch:18},{wch:8},{wch:8},{wch:50},{wch:10},{wch:30},{wch:20},{wch:30},{wch:14},{wch:14},{wch:10},{wch:10},{wch:30},{wch:10},{wch:12}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'指标库');
   XLSX.writeFile(wb,'指标库导入模板.xlsx');
 }
@@ -4072,11 +4078,13 @@ function handleKpiFile(e){
       const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
       let added=0,updated=0;
       const KM_ALIAS={'完成率=兑现系数':'rate','rate':'rate','奖一罚一':'r11','r11':'r11','奖一罚二':'fml','r12':'fml','奖二罚一':'fml','r21':'fml','设定公式':'fml','fml':'fml','直接得分':'direct','direct':'direct'};
+      const BM_ALIAS={'阶梯加分':'step','step':'step','自定义公式':'fml','fml':'fml'};
       rows.forEach(row=>{
         const name=String(row['名称']||row['指标名称']||row['Name']||'').trim();
         if(!name)return;
         const code=String(row['编码']||row['Code']||'').trim();
         const type=String(row['类型']||row['Type']||'KPI类').trim();
+        const level=String(row['级别']||row['Level']||'').trim();
         const dir=String(row['方向']||row['Direction']||'达成类').trim();
         const target=parseFloat(row['目标值']||row['Target']||0)||0;
         const unit=String(row['单位']||row['Unit']||'').trim();
@@ -4087,10 +4095,23 @@ function handleKpiFile(e){
         const floor=parseFloat(row['下限']||row['Floor']||0)||0;
         const formula=String(row['公式']||row['Formula']||'').trim();
         const teamShared=String(row['班组共享']||row['TeamShared']||'').trim()==='是';
+        const desc=String(row['描述']||row['Description']||'').trim()||undefined;
+        const nameEs=String(row['西语名称']||row['NameEs']||'').trim()||undefined;
+        const descEs=String(row['西语描述']||row['DescEs']||'').trim()||undefined;
         const rule={kd:dir.includes('控制')?'control':'achieve',km,rateCap:cap,rateFloor:floor,formula:(km!=='rate'&&km!=='direct')?formula:undefined};
+        const bmRaw=String(row['超额加分模式']||row['BonusMode']||'').trim();
+        if(bmRaw){
+          rule.bonusEnabled=true;
+          rule.bonusMode=BM_ALIAS[bmRaw]||'step';
+          const bStep=parseFloat(row['每超出单位数']||row['BonusStep']||'');if(!isNaN(bStep))rule.bonusStep=bStep;
+          const bPer=parseFloat(row['加分数']||row['BonusPerStep']||'');if(!isNaN(bPer))rule.bonusPerStep=bPer;
+          const bCap=parseFloat(row['加分上限']||row['BonusCap']||'');if(!isNaN(bCap))rule.bonusCap=bCap;
+          const bFml=String(row['加分公式']||row['BonusFormula']||'').trim();if(bFml)rule.bonusFormula=bFml;
+        }
+        const topN=parseInt(row['排名前N']||row['TopN']||'');if(!isNaN(topN)){rule.topN=topN;rule.topPoints=parseFloat(row['排名奖励分']||row['TopPoints']||0)||0;}
         const ex=code?kpiTemplates.find(k=>k.code===code):null;
-        if(ex){Object.assign(ex,{name,type,target,unit,period,teamShared,rule:Object.assign({},ex.rule,rule)});updated++;}
-        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,type,target,unit,period,teamShared,rule});added++;}
+        if(ex){Object.assign(ex,{name,type,level,target,unit,period,teamShared,desc,nameEs,descEs,rule:Object.assign({},ex.rule,rule)});updated++;}
+        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,nameEs,desc,descEs,type,level,target,unit,period,teamShared,rule});added++;}
       });
       await saveAndToast(`导入完成：新增 ${added}，更新 ${updated}`);renderKpiLib();
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
