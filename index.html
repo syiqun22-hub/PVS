@@ -797,7 +797,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   </div>
   <div class="info" style="margin-bottom:10px;font-size:12px">指标库为系统中所有绩效指标的统一来源。岗位可从此处选取指标，避免重复录入。</div>
   <div class="card" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>编码</th><th>指标名称</th><th>类型</th><th>级别</th><th>方向</th><th>目标值</th><th>单位</th><th>周期</th><th>核算规则</th><th>在用岗位</th><th style="min-width:120px">操作</th></tr></thead>
+    <table><thead><tr><th>编码</th><th>指标名称</th><th>类型</th><th>级别</th><th>方向</th><th>目标值</th><th>单位</th><th>周期</th><th>月度取值</th><th>核算规则</th><th>在用岗位</th><th style="min-width:120px">操作</th></tr></thead>
     <tbody id="kl-tbody"></tbody></table>
   </div>
 </div>
@@ -1441,6 +1441,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="fg"><label class="fl">目标值</label><input id="ki-target" type="number" oninput="updateKPIPreview()"></div>
       <div class="fg"><label class="fl">单位</label><input id="ki-unit"></div>
       <div class="fg"><label class="fl">评价周期</label><select id="ki-period"><option value="月度">月度</option><option value="季度">季度</option><option value="年度">年度</option></select></div>
+      <div class="fg"><label class="fl">月度取值方式</label><select id="ki-month-agg"><option value="">自动（按单位判断）</option><option value="sum">累计总和</option><option value="avg">日均值</option><option value="fraction">分数聚合（分子/分母）</option><option value="last">取末值</option><option value="max">取最大值</option><option value="min">取最小值</option></select></div>
     </div>
     <div style="margin-top:10px">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
@@ -2477,8 +2478,8 @@ function syncDailyToMonthly(empId){
   // 同步各指标逐日得分（%指标按累积分子/分母计算，其余取平均）
   let anyData=false;
   kpis.forEach(k=>{
-    const isPct=isFractionUnit(k.unit);
-    if(isPct){
+    const _agg=k.monthAgg||(isFractionUnit(k.unit)?'fraction':(k.unit||'').trim().includes('次')?'sum':'avg');
+    if(_agg==='fraction'){
       let totalNum=0,totalDen=0,cnt=0;
       for(let d=1;d<=n;d++){
         const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
@@ -2637,14 +2638,14 @@ function renderQRadar(empId){
   const _detN=pastDaysInMonth();const _detAdj=calcAdjustedMonthScore(empId);
   const detailRows=kpis.map((k,i)=>{
     const isPct=isFractionUnit(k.unit);
+    const _agg=k.monthAgg||(isPct?'fraction':(k.unit||'').trim().includes('次')?'sum':'avg');
     let a;
-    if(isPct){
+    if(_agg==='fraction'){
       a=ms.scores&&ms.scores[k.id];
     }else{
-      const isCnt=(k.unit||'').trim().includes('次');
-      let sum=0,filled=0;
-      for(let d=1;d<=_detN;d++){const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const cur=rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:null;if(cur!==null){sum+=parseFloat(cur)||0;filled++;}}
-      a=filled>0?(isCnt?Math.round(sum*100)/100:Math.round(sum/filled*100)/100):null;
+      let sum=0,filled=0;const _allV=[];
+      for(let d=1;d<=_detN;d++){const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const cur=rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:null;if(cur!==null){sum+=parseFloat(cur)||0;filled++;_allV.push(parseFloat(cur)||0);}}
+      if(filled>0){if(_agg==='sum')a=Math.round(sum*100)/100;else if(_agg==='last')a=Math.round(_allV[_allV.length-1]*100)/100;else if(_agg==='max')a=Math.round(Math.max(..._allV)*100)/100;else if(_agg==='min')a=Math.round(Math.min(..._allV)*100)/100;else a=Math.round(sum/filled*100)/100;}else a=null;
     }
     const s=scores[i];
     const rate=a!=null?calcRate(a,k.target,k.rule&&k.rule.kd||'achieve'):null;
@@ -2898,14 +2899,24 @@ function buildEmpDailyBlock(emp){
         cells+=`<td style="padding:2px;text-align:center;${bg}"><div style="display:flex;flex-direction:column;gap:1px;align-items:center"><input type="number" step="any" value="${cur}" ${editable?'':'readonly'} placeholder="·" onchange="saveDailyCell('${empId}','${ds}','${k.id}',this.value)" style="width:40px;padding:2px;text-align:center;font-size:11px;border:0.5px solid var(--color-border-tertiary);border-radius:3px;font-family:var(--font-mono);${editable?'':'background:var(--color-background-secondary);color:var(--color-text-secondary)'}${bd}">${linkIcon}</div></td>`;
       }
     }
-    let sumCell;
-    if(isPct){
+    const agg=k.monthAgg||(isPct?'fraction':(k.unit||'').trim().includes('次')?'sum':'avg');
+    const AGG_CN={sum:'总和',avg:'均值',last:'末值',max:'最大',min:'最小',fraction:'聚合'};
+    let sumCell;const stickyR='text-align:center;font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary);line-height:1.3';
+    if(agg==='fraction'){
       const cumStr=pctFilled>0?`<span style="font-weight:700">${Math.round(totalNum*10)/10}</span><span style="font-size:9px;color:var(--color-text-tertiary)">/${Math.round(totalDen*10)/10}</span><div style="font-size:9px;color:var(--color-text-tertiary)">${totalDen>0?(totalNum/totalDen*100).toFixed(1)+'%':'—'}</div>`:'—';
-      sumCell=`<td id="qd-pct-tot-${empId}-${k.id}" style="text-align:center;font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary);line-height:1.3">${cumStr}</td>`;
+      sumCell=`<td id="qd-pct-tot-${empId}-${k.id}" style="${stickyR}">${cumStr}</td>`;
     } else {
-      const isCnt=(k.unit||'').trim().includes('次');
-      const kpiDisplay=kpiFilled>0?(isCnt?Math.round(kpiSum*100)/100:Math.round(kpiSum/kpiFilled*100)/100):'—';
-      sumCell=`<td style="text-align:center;font-weight:600;font-family:var(--font-mono);font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary)">${kpiDisplay}${kpiFilled>0&&!isCnt?'<div style=\"font-size:9px;font-weight:400;color:var(--color-text-tertiary)\">均值·'+kpiFilled+'天</div>':''}</td>`;
+      let kpiDisplay='—',aggLabel='';
+      if(kpiFilled>0){
+        if(agg==='sum'){kpiDisplay=Math.round(kpiSum*100)/100;}
+        else if(agg==='avg'){kpiDisplay=Math.round(kpiSum/kpiFilled*100)/100;}
+        else if(agg==='last'){const allDayVals=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allDayVals.push(drec.scores[k.id]);}kpiDisplay=allDayVals.length?Math.round(allDayVals[allDayVals.length-1]*100)/100:'—';}
+        else if(agg==='max'){const allV=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allV.push(drec.scores[k.id]);}kpiDisplay=allV.length?Math.round(Math.max(...allV)*100)/100:'—';}
+        else if(agg==='min'){const allV=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allV.push(drec.scores[k.id]);}kpiDisplay=allV.length?Math.round(Math.min(...allV)*100)/100:'—';}
+        else{kpiDisplay=Math.round(kpiSum/kpiFilled*100)/100;}
+        aggLabel=AGG_CN[agg]||'均值';
+      }
+      sumCell=`<td style="text-align:center;font-weight:600;font-family:var(--font-mono);font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary)">${kpiDisplay}${kpiFilled>0?'<div style=\"font-size:9px;font-weight:400;color:var(--color-text-tertiary)\">'+aggLabel+'·'+kpiFilled+'天</div>':''}</td>`;
     }
     return `<tr><td style="${lblStyle}">${getName(k)}<div style="font-size:10px;font-weight:400;color:var(--color-text-tertiary)">目标 ${k.target}${k.unit||''}${isPct?' (\u5206\u5b50/\u5206\u6bcd)':''}</div></td>${cells}${sumCell}</tr>`;
   }).join('');
@@ -3256,9 +3267,8 @@ function calcAdjustedMonthScore(empId){
 }
 // 按月累计实际达成：%指标累积分子/分母，次数指标求和，其他指标取平均
 function calcMonthlyKpiActual(empId,kpi,adj,n){
-  const isPct=isFractionUnit(kpi.unit);
-  const isCnt=(kpi.unit||'').trim().includes('次');
-  if(isPct){
+  const agg=kpi.monthAgg||(isFractionUnit(kpi.unit)?'fraction':(kpi.unit||'').trim().includes('次')?'sum':'avg');
+  if(agg==='fraction'){
     let totalNum=0,totalDen=0,cnt=0;
     for(let d=1;d<=n;d++){
       const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
@@ -3269,26 +3279,23 @@ function calcMonthlyKpiActual(empId,kpi,adj,n){
       totalNum+=isZero?0:num;totalDen+=den;cnt++;
     }
     return(cnt>0&&totalDen>0)?Math.round(totalNum/totalDen*10000)/100:null;
-  }else if(isCnt){
-    // 次数类指标：统计月度累计总次数，再代入得分逻辑
-    let total=0,cnt=0;
+  }else{
+    let total=0,cnt=0,lastVal=null,maxVal=-Infinity,minVal=Infinity;
     for(let d=1;d<=n;d++){
       const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
       if(!rec||!rec.scores||rec.scores[kpi.id]==null)continue;
       const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
       const isZero=adj.zeroStatuses&&adj.zeroStatuses.has(att);
-      total+=isZero?0:rec.scores[kpi.id];cnt++;
+      const v=isZero?0:rec.scores[kpi.id];
+      total+=v;cnt++;lastVal=v;
+      if(v>maxVal)maxVal=v;if(v<minVal)minVal=v;
     }
-    return cnt>0?total:null;
-  }else{
-    // 其他指标：取月度日均实际达成
-    let total=0,cnt=0;
-    for(let d=1;d<=n;d++){
-      const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
-      if(!rec||!rec.scores||rec.scores[kpi.id]==null)continue;
-      total+=rec.scores[kpi.id];cnt++;
-    }
-    return cnt>0?total/cnt:null;
+    if(cnt===0)return null;
+    if(agg==='sum')return total;
+    if(agg==='last')return lastVal;
+    if(agg==='max')return maxVal;
+    if(agg==='min')return minVal;
+    return total/cnt;
   }
 }
 // 单个KPI的月度得分（基于月累计实际达成，考勤规则折算）
@@ -4012,11 +4019,11 @@ function renderKpiLib(){
     const usedByPos=positions.filter(p=>(p.kpiRefs||[]).find(r=>r.kpiId===k.id));
     const descTip=getDesc(k);
     const lvl=k.level||'';
-    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td${descTip?` title="${escHtml(descTip)}"`:''}><strong>${getName(k)}</strong>${k.teamShared?' <span class="badge badge-info" style="font-size:9px" title="同班组+同岗位自动同步逐日数值">🔗班组共享</span>':''}${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}${descTip?`<div style="font-size:10px;color:var(--color-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(descTip)}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td>${lvl?`<span class="badge ${LEVEL_CLS[lvl]||'badge-gray'}" style="font-size:10px">${lvl}</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">—</span>'}</td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
-  }).join(''):'<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
+    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td${descTip?` title="${escHtml(descTip)}"`:''}><strong>${getName(k)}</strong>${k.teamShared?' <span class="badge badge-info" style="font-size:9px" title="同班组+同岗位自动同步逐日数值">🔗班组共享</span>':''}${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}${descTip?`<div style="font-size:10px;color:var(--color-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(descTip)}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td>${lvl?`<span class="badge ${LEVEL_CLS[lvl]||'badge-gray'}" style="font-size:10px">${lvl}</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">—</span>'}</td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td style="font-size:11px">${({'sum':'累计总和','avg':'日均值','fraction':'分数聚合','last':'取末值','max':'取最大值','min':'取最小值'})[k.monthAgg]||'<span style="color:var(--color-text-tertiary)">自动</span>'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
+  }).join(''):'<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
 }
 function openAddKpiLib(){editingKPIId=null;$('klm-title').textContent='新增指标';$('ki-code').value='K'+String(Math.max(0,...kpiTemplates.map(k=>parseInt((k.code||'').replace(/\D/g,''))||0))+1).padStart(3,'0');resetKPIModal();if($('ki-name-es'))$('ki-name-es').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('modal-add-kpilib').classList.add('open');}
-function openEditKpiLib(id){const k=kpiTemplates.find(x=>x.id===id);if(!k)return;editingKPIId=id;$('klm-title').textContent='编辑指标';$('ki-code').value=k.code||'K'+id;$('ki-name').value=k.name;if($('ki-name-es'))$('ki-name-es').value=k.nameEs||'';if($('ki-desc'))$('ki-desc').value=k.desc||'';if($('ki-desc-es'))$('ki-desc-es').value=k.descEs||'';$('ki-type').value=k.type;if($('ki-level'))$('ki-level').value=k.level||'';$('ki-target').value=k.target;$('ki-unit').value=k.unit||'';$('ki-period').value=k.period||'月度';if($('ki-team-shared'))$('ki-team-shared').checked=!!k.teamShared;kd=k.rule&&k.rule.kd||'achieve';km=k.rule&&k.rule.km||'rate';if(km==='r12'||km==='r21')km='fml';$('kr-cap').value=k.rule&&k.rule.rateCap!=null?k.rule.rateCap:150;$('kr-floor').value=k.rule&&k.rule.rateFloor!=null?k.rule.rateFloor:0;$('kf-fml').value=k.rule&&k.rule.formula||'';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const r=k.rule;if(r&&r.bonusEnabled){$('kb-enabled').checked=true;$('kpi-bonus-body').style.display='block';setBonusMode(r.bonusMode||'step');if($('kb-step'))$('kb-step').value=r.bonusStep!=null?r.bonusStep:'';if($('kb-per-step'))$('kb-per-step').value=r.bonusPerStep!=null?r.bonusPerStep:'';if($('kb-cap'))$('kb-cap').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-fml'))$('kb-fml').value=r.bonusFormula||'';if($('kb-cap-fml'))$('kb-cap-fml').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-top-n'))$('kb-top-n').value=r.topN!=null?r.topN:'';if($('kb-top-pts'))$('kb-top-pts').value=r.topPoints!=null?r.topPoints:'';}else{$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';}applyKModes();$('modal-add-kpilib').classList.add('open');}
+function openEditKpiLib(id){const k=kpiTemplates.find(x=>x.id===id);if(!k)return;editingKPIId=id;$('klm-title').textContent='编辑指标';$('ki-code').value=k.code||'K'+id;$('ki-name').value=k.name;if($('ki-name-es'))$('ki-name-es').value=k.nameEs||'';if($('ki-desc'))$('ki-desc').value=k.desc||'';if($('ki-desc-es'))$('ki-desc-es').value=k.descEs||'';$('ki-type').value=k.type;if($('ki-level'))$('ki-level').value=k.level||'';$('ki-target').value=k.target;$('ki-unit').value=k.unit||'';$('ki-period').value=k.period||'月度';if($('ki-month-agg'))$('ki-month-agg').value=k.monthAgg||'';if($('ki-team-shared'))$('ki-team-shared').checked=!!k.teamShared;kd=k.rule&&k.rule.kd||'achieve';km=k.rule&&k.rule.km||'rate';if(km==='r12'||km==='r21')km='fml';$('kr-cap').value=k.rule&&k.rule.rateCap!=null?k.rule.rateCap:150;$('kr-floor').value=k.rule&&k.rule.rateFloor!=null?k.rule.rateFloor:0;$('kf-fml').value=k.rule&&k.rule.formula||'';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const r=k.rule;if(r&&r.bonusEnabled){$('kb-enabled').checked=true;$('kpi-bonus-body').style.display='block';setBonusMode(r.bonusMode||'step');if($('kb-step'))$('kb-step').value=r.bonusStep!=null?r.bonusStep:'';if($('kb-per-step'))$('kb-per-step').value=r.bonusPerStep!=null?r.bonusPerStep:'';if($('kb-cap'))$('kb-cap').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-fml'))$('kb-fml').value=r.bonusFormula||'';if($('kb-cap-fml'))$('kb-cap-fml').value=r.bonusCap!=null?r.bonusCap:'';if($('kb-top-n'))$('kb-top-n').value=r.topN!=null?r.topN:'';if($('kb-top-pts'))$('kb-top-pts').value=r.topPoints!=null?r.topPoints:'';}else{$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';}applyKModes();$('modal-add-kpilib').classList.add('open');}
 async function saveKpiLib(){
   const name=$('ki-name').value.trim();if(!name){toast('请填写指标名称');return;}
   const code=$('ki-code').value.trim()||('K'+Date.now().toString().slice(-5));
@@ -4039,7 +4046,7 @@ async function saveKpiLib(){
   const desc=($('ki-desc')?$('ki-desc').value.trim():'')||undefined;
   const descEs=($('ki-desc-es')?$('ki-desc-es').value.trim():'')||undefined;
   const teamShared=$('ki-team-shared')?$('ki-team-shared').checked:false;
-  const level=($('ki-level')&&$('ki-level').value)||'';const kpi={id:editingKPIId||uid('K'),code,name,nameEs,desc,descEs,type:$('ki-type').value,level,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,teamShared,rule};
+  const level=($('ki-level')&&$('ki-level').value)||'';const monthAgg=($('ki-month-agg')&&$('ki-month-agg').value)||'';const kpi={id:editingKPIId||uid('K'),code,name,nameEs,desc,descEs,type:$('ki-type').value,level,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,monthAgg:monthAgg||undefined,teamShared,rule};
   if(editingKPIId){const idx=kpiTemplates.findIndex(k=>k.id===editingKPIId);if(idx>=0)kpiTemplates[idx]=kpi;}
   else{kpiTemplates.push(kpi);}
   closeM('modal-add-kpilib');await saveAndToast('指标已保存');renderKpiLib();
@@ -4051,20 +4058,22 @@ async function delKpiLib(id){
   kpiTemplates=kpiTemplates.filter(k=>k.id!==id);await saveAndToast('已删除');renderKpiLib();
 }
 function dlKpiTpl(){
-  const h=['编码','名称','类型','级别','方向','目标值','单位','周期','核算规则','上限','下限','公式','班组共享','描述','西语名称','西语描述','超额加分模式','每超出单位数','加分数','加分上限','加分公式','排名前N','排名奖励分'];
+  const h=['编码','名称','类型','级别','方向','目标值','单位','周期','月度取值','核算规则','上限','下限','公式','班组共享','描述','西语名称','西语描述','超额加分模式','每超出单位数','加分数','加分上限','加分公式','排名前N','排名奖励分'];
   const KM_LABEL={rate:'完成率=兑现系数',r11:'奖一罚一',fml:'设定公式',direct:'直接得分'};
+  const AGG_LABEL={sum:'累计总和',avg:'日均值',fraction:'分数聚合',last:'取末值',max:'取最大值',min:'取最小值'};
   const BM_LABEL={step:'阶梯加分',fml:'自定义公式'};
   let rows=kpiTemplates.map(k=>{
     const r=k.rule||{};
-    return[k.code||'K'+k.id,k.name,k.type,k.level||'',r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':'',k.desc||'',k.nameEs||'',k.descEs||'',r.bonusEnabled?BM_LABEL[r.bonusMode]||'阶梯加分':'',r.bonusEnabled&&r.bonusStep!=null?r.bonusStep:'',r.bonusEnabled&&r.bonusPerStep!=null?r.bonusPerStep:'',r.bonusEnabled&&r.bonusCap!=null?r.bonusCap:'',r.bonusEnabled&&r.bonusFormula?r.bonusFormula:'',r.topN!=null?r.topN:'',r.topPoints!=null?r.topPoints:''];
+    return[k.code||'K'+k.id,k.name,k.type,k.level||'',r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',AGG_LABEL[k.monthAgg]||'',KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':'',k.desc||'',k.nameEs||'',k.descEs||'',r.bonusEnabled?BM_LABEL[r.bonusMode]||'阶梯加分':'',r.bonusEnabled&&r.bonusStep!=null?r.bonusStep:'',r.bonusEnabled&&r.bonusPerStep!=null?r.bonusPerStep:'',r.bonusEnabled&&r.bonusCap!=null?r.bonusCap:'',r.bonusEnabled&&r.bonusFormula?r.bonusFormula:'',r.topN!=null?r.topN:'',r.topPoints!=null?r.topPoints:''];
   });
   if(!rows.length)rows=[
-    ['K001','示例销售达成率','KPI类','部门级','达成类',100,'%','月度','完成率=兑现系数',150,0,'','','月度销售目标完成率','','','阶梯加分',50,50,'','','',''],
-    ['K002','示例投诉次数','KPI类','科室级','控制类',0,'次','月度','完成率=兑现系数',150,0,'','','客户投诉次数，目标为0','','','','','','','','',''],
-    ['K003','示例公式指标','GS类','员工级','达成类',90,'分','月度','设定公式',150,0,'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))','','自定义公式计分示例','','','','','','','','','']
+    ['K001','示例销售达成率','KPI类','部门级','达成类',100,'%','月度','','完成率=兑现系数',150,0,'','','月度销售目标完成率','','','阶梯加分',50,50,'','','',''],
+    ['K002','示例投诉次数','KPI类','科室级','控制类',0,'次','月度','累计总和','完成率=兑现系数',150,0,'','','客户投诉次数，目标为0','','','','','','','','',''],
+    ['K003','示例产品合格率','KPI类','班组级','达成类',95,'%','月度','分数聚合','完成率=兑现系数',150,0,'','','合格数/总检数，月度分数聚合','','','','','','','','',''],
+    ['K004','示例公式指标','GS类','员工级','达成类',90,'分','月度','日均值','设定公式',150,0,'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))','','自定义公式计分示例','','','','','','','','','']
   ];
   const ws=XLSX.utils.aoa_to_sheet([h,...rows]);
-  ws['!cols']=[{wch:8},{wch:20},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:8},{wch:18},{wch:8},{wch:8},{wch:50},{wch:10},{wch:30},{wch:20},{wch:30},{wch:14},{wch:14},{wch:10},{wch:10},{wch:30},{wch:10},{wch:12}];
+  ws['!cols']=[{wch:8},{wch:20},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:8},{wch:12},{wch:18},{wch:8},{wch:8},{wch:50},{wch:10},{wch:30},{wch:20},{wch:30},{wch:14},{wch:14},{wch:10},{wch:10},{wch:30},{wch:10},{wch:12}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'指标库');
   XLSX.writeFile(wb,'指标库导入模板.xlsx');
 }
@@ -4098,6 +4107,9 @@ function handleKpiFile(e){
         const desc=String(row['描述']||row['Description']||'').trim()||undefined;
         const nameEs=String(row['西语名称']||row['NameEs']||'').trim()||undefined;
         const descEs=String(row['西语描述']||row['DescEs']||'').trim()||undefined;
+        const AGG_ALIAS={'累计总和':'sum','sum':'sum','日均值':'avg','avg':'avg','分数聚合':'fraction','fraction':'fraction','取末值':'last','last':'last','取最大值':'max','max':'max','取最小值':'min','min':'min'};
+        const monthAggRaw=String(row['月度取值']||row['MonthAgg']||'').trim();
+        const monthAgg=AGG_ALIAS[monthAggRaw]||undefined;
         const rule={kd:dir.includes('控制')?'control':'achieve',km,rateCap:cap,rateFloor:floor,formula:(km!=='rate'&&km!=='direct')?formula:undefined};
         const bmRaw=String(row['超额加分模式']||row['BonusMode']||'').trim();
         if(bmRaw){
@@ -4110,8 +4122,8 @@ function handleKpiFile(e){
         }
         const topN=parseInt(row['排名前N']||row['TopN']||'');if(!isNaN(topN)){rule.topN=topN;rule.topPoints=parseFloat(row['排名奖励分']||row['TopPoints']||0)||0;}
         const ex=code?kpiTemplates.find(k=>k.code===code):null;
-        if(ex){Object.assign(ex,{name,type,level,target,unit,period,teamShared,desc,nameEs,descEs,rule:Object.assign({},ex.rule,rule)});updated++;}
-        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,nameEs,desc,descEs,type,level,target,unit,period,teamShared,rule});added++;}
+        if(ex){Object.assign(ex,{name,type,level,target,unit,period,monthAgg,teamShared,desc,nameEs,descEs,rule:Object.assign({},ex.rule,rule)});updated++;}
+        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,nameEs,desc,descEs,type,level,target,unit,period,monthAgg,teamShared,rule});added++;}
       });
       await saveAndToast(`导入完成：新增 ${added}，更新 ${updated}`);renderKpiLib();
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
@@ -4119,7 +4131,7 @@ function handleKpiFile(e){
   };
   r.readAsArrayBuffer(f);
 }
-function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';if($('ki-level'))$('ki-level').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('ki-target').value='';$('ki-unit').value='';$('kr-cap').value=150;$('kr-floor').value=0;$('kf-fml').value='';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';$('kb-step').value='';$('kb-per-step').value='';$('kb-cap').value='';$('kb-fml').value='';$('kb-cap-fml').value='';$('kb-top-n').value='';$('kb-top-pts').value='';$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';if($('ki-team-shared'))$('ki-team-shared').checked=false;setBonusMode('step');applyKModes();}
+function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';if($('ki-level'))$('ki-level').value='';if($('ki-month-agg'))$('ki-month-agg').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('ki-target').value='';$('ki-unit').value='';$('kr-cap').value=150;$('kr-floor').value=0;$('kf-fml').value='';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';$('kb-step').value='';$('kb-per-step').value='';$('kb-cap').value='';$('kb-fml').value='';$('kb-cap-fml').value='';$('kb-top-n').value='';$('kb-top-pts').value='';$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';if($('ki-team-shared'))$('ki-team-shared').checked=false;setBonusMode('step');applyKModes();}
 function setKD(v){kd=v;applyKModes();}function setKM(v){km=v;applyKModes();}
 let bonusMode='step';
 function setBonusMode(v){bonusMode=v;$('bp-step').classList.toggle('on',v==='step');$('bp-fml').classList.toggle('on',v==='fml');$('bonus-cfg-step').style.display=v==='step'?'grid':'none';$('bonus-cfg-fml').style.display=v==='fml'?'block':'none';updateKPIPreview();}
