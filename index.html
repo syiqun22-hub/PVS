@@ -1881,7 +1881,7 @@ function calcRate(actual,target,ktype){
   else{if(target===0)return actual===0?1:1.5;return Math.min(actual/target,1.5);}
 }
 function evalFormula(formula,actual,target,rate,excess){
-  let expr=formula.trim().replace(/\bIF\b/gi,'__IF').replace(/\bIFS\b/gi,'__IFS').replace(/\bMAX\b/gi,'Math.max').replace(/\bMIN\b/gi,'Math.min').replace(/\bABS\b/gi,'Math.abs').replace(/\bFLOOR\b/gi,'__FLOOR').replace(/\bCEIL\b/gi,'__CEIL').replace(/\bROUND\b/gi,'__ROUND').replace(/\bAND\b/gi,'__AND').replace(/\bOR\b/gi,'__OR');
+  let expr=formula.trim().replace(/(?<![><=!])=(?!=)/g,'===').replace(/\bIF\b/gi,'__IF').replace(/\bIFS\b/gi,'__IFS').replace(/\bMAX\b/gi,'Math.max').replace(/\bMIN\b/gi,'Math.min').replace(/\bABS\b/gi,'Math.abs').replace(/\bFLOOR\b/gi,'__FLOOR').replace(/\bCEIL\b/gi,'__CEIL').replace(/\bROUND\b/gi,'__ROUND').replace(/\bAND\b/gi,'__AND').replace(/\bOR\b/gi,'__OR');
   function __IF(c,a,b){return c?a:b;}function __IFS(...a){for(let i=0;i<a.length-1;i+=2){if(a[i])return a[i+1];}return a[a.length-1]||0;}
   function __FLOOR(v,s=1){return Math.floor(v/s)*s;}function __CEIL(v,s=1){return Math.ceil(v/s)*s;}function __ROUND(v,d=0){return Math.round(v*10**d)/10**d;}
   function __AND(...a){return a.every(Boolean);}function __OR(...a){return a.some(Boolean);}
