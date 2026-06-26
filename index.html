@@ -1877,7 +1877,7 @@ function scoreColor(s){return s>=90?'#16a34a':s>=60?'#2563eb':'#dc2626';}
 function scoreNodeCls(s){return s>=90?'g':s>=60?'b':'r';}
 // FORMULA ENGINE
 function calcRate(actual,target,ktype){
-  if(ktype==='control'){if(target===0)return actual===0?1:0;if(actual===0)return 1;return Math.min(1+(target-actual)/target,1.5);}
+  if(ktype==='control'){if(target===0)return actual===0?1:0;return Math.min(1+(target-actual)/target,1.5);}
   else{if(target===0)return actual===0?1:1.5;return Math.min(actual/target,1.5);}
 }
 function evalFormula(formula,actual,target,rate,excess){
@@ -3747,7 +3747,7 @@ function updateEvalRow(kpiId){
   const score=calcKPIScore(val,kpi);$('score-'+kpiId).textContent=score!==null?score:'错误';
   updateTotalScore();
 }
-function updateTotalScore(){const kpis=getEmpKPIs(currentEvalEmp);let total=0,any=false;kpis.forEach(k=>{const el=$('actual-'+k.id);if(!el)return;const v=parseFloat(el.value);if(isNaN(v))return;const sc=calcKPIScore(v,k);if(sc===null)return;total+=sc*(k.weight/100);any=true;});$('total-score-display').textContent=any?Math.round(total*100)/100:'-';}
+function updateTotalScore(){const kpis=getEmpKPIs(currentEvalEmp);let total=0,bonusSum=0,any=false;kpis.forEach(k=>{const el=$('actual-'+k.id);if(!el)return;const v=parseFloat(el.value);if(isNaN(v))return;if(k.rule&&k.rule.bonusEnabled)bonusSum+=calcBonusPoints(v,k);const sc=calcKPIScore(v,k);if(sc===null)return;total+=sc*(k.weight/100);any=true;});$('total-score-display').textContent=(any||bonusSum>0)?Math.round((total+bonusSum)*10)/10:'-';}
 async function saveEval(){
   if(!currentEvalEmp)return;const mk=mKey(curY,curM);if(!monthlyScores[mk])monthlyScores[mk]={};
   const ms=getMS(currentEvalEmp.id);
