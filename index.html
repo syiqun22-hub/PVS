@@ -193,6 +193,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .eval-hd{display:grid;grid-template-columns:2fr 70px 60px 110px 80px 80px;gap:8px;font-size:10px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;padding-bottom:8px;border-bottom:0.5px solid var(--color-border-tertiary)}
 .qg-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
 .qg-card{border-radius:var(--border-radius-md);padding:12px;text-align:center;cursor:pointer;border:0.5px solid transparent}
+.qg-card.qg-active{box-shadow:0 0 0 2px #2563eb inset}
 .mc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
 .mc{border:1.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 8px;cursor:pointer;text-align:center;transition:all .12s}
 .mc:hover{background:var(--color-background-secondary)}
@@ -560,9 +561,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="fg"><label class="fl" data-i18n="filter_dept">部门</label><select id="q-dept" onchange="renderQuery()"><option value="" data-i18n="all_depts">全部部门</option></select></div>
       <div class="fg"><label class="fl">科室</label><select id="q-sec" onchange="renderQuery()"><option value="">全部科室</option></select></div>
       <div class="fg"><label class="fl">班组</label><select id="q-team" onchange="renderQuery()"><option value="">全部班组</option></select></div>
-      <div class="fg"><label class="fl">岗位</label><select id="q-pos" onchange="renderQuery()"><option value="">全部岗位</option></select></div>
+      <div class="fg"><label class="fl">岗位</label><input id="q-pos" placeholder="输入岗位关键字…" oninput="renderQuery()"></div>
       <div class="fg"><label class="fl" data-i18n="filter_grade">等级</label>
-        <select id="q-grade" onchange="renderQuery()"><option value="">全部等级</option><option value="S">S 优秀(&gt;95)</option><option value="A">A 良好(85-95)</option><option value="B">B 合格(70-85)</option><option value="C">C 待改进(60-70)</option><option value="D">D 不合格(&lt;60)</option></select>
+        <select id="q-grade" onchange="_qPendingOnly=false;renderQuery()"><option value="">全部等级</option><option value="S">S 优秀(&gt;95)</option><option value="A">A 良好(85-95)</option><option value="B">B 合格(70-85)</option><option value="C">C 待改进(60-70)</option><option value="D">D 不合格(&lt;60)</option></select>
       </div>
       <div class="fg"><label class="fl">员工状态</label>
         <select id="q-evalstatus" onchange="renderQuery()"><option value="">全部</option><option value="正常">正常（参与评价）</option><option value="试用">试用（待执行）</option></select>
@@ -620,7 +621,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <div class="fg"><label class="fl">部门</label><select id="qd-dept" onchange="_qdAllLimit=12;fillQDailySubFilters();renderQDaily()"><option value="">全部部门</option></select></div>
         <div class="fg"><label class="fl">科室</label><select id="qd-sec" onchange="_qdAllLimit=12;fillQDailyTeamPos();renderQDaily()"><option value="">全部科室</option></select></div>
         <div class="fg"><label class="fl">班组</label><select id="qd-team" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部班组</option></select></div>
-        <div class="fg"><label class="fl">岗位</label><select id="qd-pos" onchange="_qdAllLimit=12;renderQDaily()"><option value="">全部岗位</option></select></div>
+        <div class="fg"><label class="fl">岗位</label><input id="qd-pos" placeholder="输入岗位关键字…" oninput="_qdAllLimit=12;renderQDaily()"></div>
         <div class="fg"><label class="fl">搜索员工（工号 / 姓名）</label><input id="qd-search" placeholder="输入工号或姓名…" oninput="_qdAllLimit=12;renderQDaily()"></div>
         <div class="fg"><label class="fl">月份</label>
           <div class="month-sel" style="width:100%;justify-content:space-between"><button class="month-btn" onclick="chQM(-1)">‹</button><div class="month-lbl" id="qd-month" style="flex:1;text-align:center"></div><button class="month-btn" onclick="chQM(1)">›</button></div>
@@ -2423,6 +2424,7 @@ let _qActiveTab='month';
 let _qRadarCharts={};
 let _qTrendCharts={};
 let _qExpanded=new Set();
+let _qPendingOnly=false;
 // ── 逐日绩效（按天录入）数据辅助 ─────────────────────────────
 function getDS(empId){if(!dailyScores[empId])dailyScores[empId]={};return dailyScores[empId];}
 function getDayRec(empId,ds){const m=getDS(empId);if(!m[ds])m[ds]={scores:{},fractions:{},totalScore:null};if(!m[ds].scores)m[ds].scores={};if(!m[ds].fractions)m[ds].fractions={};return m[ds];}
@@ -2547,22 +2549,22 @@ function initQFilters(){const sel=$('q-dept');if(sel.options.length<=1){departme
   employees.forEach(e=>{if(empNat(e)==='墨西哥'&&isActive(e)){if(e.section)secs.add(e.section);if(e.team)teams.add(e.team);if(e.position)pos.add(e.position);}});
   const secSel=$('q-sec');if(secSel){secSel.innerHTML='<option value="">全部科室</option>';[...secs].sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;secSel.appendChild(o);});}
   const teamSel=$('q-team');if(teamSel){teamSel.innerHTML='<option value="">全部班组</option>';[...teams].sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;teamSel.appendChild(o);});}
-  const posSel=$('q-pos');if(posSel){posSel.innerHTML='<option value="">全部岗位</option>';[...pos].sort().forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;posSel.appendChild(o);});}
   $('q-month').textContent=mLabel(qY,qM);if(currentUser&&currentUser.role!=='admin'){sel.value=currentUser.dept;sel.disabled=true;}else{sel.disabled=false;}}
 function renderQuery(){
   const dF=$('q-dept').value,gF=$('q-grade').value,s=($('q-search').value||'').toLowerCase();
-  const secF=($('q-sec')&&$('q-sec').value)||'',teamF=($('q-team')&&$('q-team').value)||'',posF=($('q-pos')&&$('q-pos').value)||'';
+  const secF=($('q-sec')&&$('q-sec').value)||'',teamF=($('q-team')&&$('q-team').value)||'',posF=(($('q-pos')&&$('q-pos').value)||'').toLowerCase().trim();
   const evalF=($('q-evalstatus')&&$('q-evalstatus').value)||'';
+  const matchPos=e=>!posF||(e.position||'').toLowerCase().includes(posF)||(getPosLabel(e.position)||'').toLowerCase().includes(posF);
   let list=(canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope)).filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&isEvalEligible(e));
   if(secF)list=list.filter(e=>e.section===secF);
   if(teamF)list=list.filter(e=>e.team===teamF);
-  if(posF)list=list.filter(e=>e.position===posF);
+  list=list.filter(matchPos);
   if(s)list=list.filter(e=>e.name.toLowerCase().includes(s)||e.id.toLowerCase().includes(s));
   // 待执行名单：员工状态为"试用"，暂不参与本月评估
   let pending=(canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope)).filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&!isEvalEligible(e));
   if(secF)pending=pending.filter(e=>e.section===secF);
   if(teamF)pending=pending.filter(e=>e.team===teamF);
-  if(posF)pending=pending.filter(e=>e.position===posF);
+  pending=pending.filter(matchPos);
   if(s)pending=pending.filter(e=>e.name.toLowerCase().includes(s)||e.id.toLowerCase().includes(s));
   pending.sort((a,b)=>(a.joinDate||'').localeCompare(b.joinDate||''));
   // 员工状态筛选："试用"=仅显示待执行名单；"正常"=仅显示已参与评价名单；"全部"=两者都显示
@@ -2578,8 +2580,9 @@ function renderQuery(){
   list.forEach(e=>syncDailyToMonthly(e.id));
   list=list.map(e=>{const ms=getMS(e.id,qY,qM);const grade=ms.totalScore!==null?getGrade(ms.totalScore):null;return{...e,ms,grade};});
   const counts={S:0,A:0,B:0,C:0,D:0,p:0};list.forEach(e=>{if(!e.ms.done){counts.p++;return;}const g=getGrade(e.ms.totalScore);if(g)counts[g.k]++;});
-  $('q-grade-stats').innerHTML=GRADES.map(g=>`<div class="qg-card ${g.cls}" onclick="document.getElementById('q-grade').value='${g.k}';renderQuery()"><div style="font-size:24px;font-weight:500">${counts[g.k]||0}</div><div style="font-size:12px;font-weight:500;margin-top:3px">${g.k} ${t('grade_'+g.k)}</div></div>`).join('')+`<div class="qg-card" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)" onclick="document.getElementById('q-grade').value='';renderQuery()"><div style="font-size:24px;font-weight:500;color:var(--color-text-secondary)">${counts.p}</div><div style="font-size:12px;font-weight:500;margin-top:3px;color:var(--color-text-secondary)">${t('status_pending')}</div></div>`;
+  $('q-grade-stats').innerHTML=GRADES.map(g=>`<div class="qg-card ${g.cls}${gF===g.k?' qg-active':''}" onclick="document.getElementById('q-grade').value='${g.k}';_qPendingOnly=false;renderQuery()"><div style="font-size:24px;font-weight:500">${counts[g.k]||0}</div><div style="font-size:12px;font-weight:500;margin-top:3px">${g.k} ${t('grade_'+g.k)}</div></div>`).join('')+`<div class="qg-card${_qPendingOnly?' qg-active':''}" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);cursor:pointer" onclick="document.getElementById('q-grade').value='';_qPendingOnly=!_qPendingOnly;renderQuery()"><div style="font-size:24px;font-weight:500;color:var(--color-text-secondary)">${counts.p}</div><div style="font-size:12px;font-weight:500;margin-top:3px;color:var(--color-text-secondary)">${t('status_pending')}</div></div>`;
   if(gF)list=list.filter(e=>e.grade&&e.grade.k===gF);
+  if(_qPendingOnly)list=list.filter(e=>!e.ms.done);
   if(sortField==='score')list.sort((a,b)=>sortAsc?(a.ms.totalScore||0)-(b.ms.totalScore||0):(b.ms.totalScore||0)-(a.ms.totalScore||0));
   if(sortField==='grade'){const ord={S:0,A:1,B:2,C:3,D:4};list.sort((a,b)=>sortAsc?(ord[a.grade&&a.grade.k]!=null?ord[a.grade.k]:5)-(ord[b.grade&&b.grade.k]!=null?ord[b.grade.k]:5):(ord[b.grade&&b.grade.k]!=null?ord[b.grade.k]:5)-(ord[a.grade&&a.grade.k]!=null?ord[a.grade.k]:5));}
   $('q-count').textContent=`共 ${list.length} 条`;
@@ -2751,7 +2754,7 @@ function renderQueryTrend(){
   });
 }
 function toggleSort(f){if(sortField===f)sortAsc=!sortAsc;else{sortField=f;sortAsc=false;}['s','g'].forEach(x=>{const e=$(x==='s'?'si-s':'si-g');if(e)e.textContent=(f===(x==='s'?'score':'grade'))?(sortAsc?'↑':'↓'):'↕';});renderQuery();}
-function resetQuery(){$('q-dept').value='';$('q-grade').value='';$('q-search').value='';if($('q-sec'))$('q-sec').value='';if($('q-team'))$('q-team').value='';if($('q-pos'))$('q-pos').value='';if($('q-evalstatus'))$('q-evalstatus').value='';sortField=null;sortAsc=true;['si-s','si-g'].forEach(id=>{const e=$(id);if(e)e.textContent='↕';});renderQuery();}
+function resetQuery(){$('q-dept').value='';$('q-grade').value='';$('q-search').value='';if($('q-sec'))$('q-sec').value='';if($('q-team'))$('q-team').value='';if($('q-pos'))$('q-pos').value='';if($('q-evalstatus'))$('q-evalstatus').value='';_qPendingOnly=false;sortField=null;sortAsc=true;['si-s','si-g'].forEach(id=>{const e=$(id);if(e)e.textContent='↕';});renderQuery();}
 function exportQuery(){
   const list=canEdit()?employees:employees.filter(empInScope);
   const rows=[['工号','姓名','部门','岗位','月份','状态','总分','等级','指标达成明细']];
@@ -2782,9 +2785,8 @@ function fillQDailyTeamPos(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
   const secF=$('qd-sec')?$('qd-sec').value:'';
   const base=_qdFiltered(dF,secF);
-  const tsel=$('qd-team');const psel=$('qd-pos');
+  const tsel=$('qd-team');
   if(tsel){const teams=new Set(base.map(e=>e.team||e.section2||'').filter(Boolean));const pt=tsel.value;tsel.innerHTML='<option value="">全部班组</option>'+[...teams].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(pt&&teams.has(pt))tsel.value=pt;}
-  if(psel){const pos=new Set(base.map(e=>e.position||'').filter(Boolean));const pp=psel.value;psel.innerHTML='<option value="">全部岗位</option>'+[...pos].sort().map(s=>`<option value="${s}">${s}</option>`).join('');if(pp&&pos.has(pp))psel.value=pp;}
 }
 function fillQDailySubFilters(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
@@ -2953,12 +2955,12 @@ function _renderQDailyOverview(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
   const secF=($('qd-sec')&&$('qd-sec').value)||'';
   const teamF=($('qd-team')&&$('qd-team').value)||'';
-  const posF=($('qd-pos')&&$('qd-pos').value)||'';
+  const posF=(($('qd-pos')&&$('qd-pos').value)||'').toLowerCase().trim();
   const sq=(($('qd-search')&&$('qd-search').value)||'').toLowerCase().trim();
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   if(secF)list=list.filter(e=>e.section===secF);
   if(teamF)list=list.filter(e=>(e.team||e.section2||'')===teamF);
-  if(posF)list=list.filter(e=>(e.position||'')===posF);
+  if(posF)list=list.filter(e=>(e.position||'').toLowerCase().includes(posF)||(getPosLabel(e.position)||'').toLowerCase().includes(posF));
   list=list.filter(e=>empNat(e)!=='中国');
   list=list.filter(e=>getEmpKPIs(e).length>0&&(empStatus(e)!=='resigned'||qdMonthVals(e.id).length>0));
   list=list.filter(e=>empStatus(e)==='resigned'||isEvalEligible(e));
@@ -6508,7 +6510,6 @@ function _reloadActivePage() {
     const navEl = document.querySelector('.nav-item.active');
     if (pid && navEl) showPage(pid, navEl);
   }
-  toast('🔄 数据已同步（其他用户有新操作）');
 }
 
 loadAll().then(()=>{
