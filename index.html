@@ -2180,7 +2180,6 @@ async function saveAttendanceWeekOnly(weekKey) {
   _lastSavedAt = Date.now();
   try {
     const wk = attendanceData[weekKey] || {};
-    showLoading('正在保存考勤数据…');
     const { error } = await _sbClient.from('pvs_config').upsert(
       [{ id: 'att_' + weekKey, value: wk }], { onConflict: 'id' }
     );
