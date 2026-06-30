@@ -2173,6 +2173,7 @@ function _suppressRealtimeFor(ms) {
 
 async function saveAttendanceWeekOnly(weekKey) {
   if (!_sbWriteAllowed()) return true;
+  _lastSavedAt = Date.now();
   try {
     const wk = attendanceData[weekKey] || {};
     showLoading('正在保存考勤数据…');
