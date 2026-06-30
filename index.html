@@ -801,6 +801,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <table><thead><tr><th>编码</th><th>指标名称</th><th>类型</th><th>级别</th><th>方向</th><th>目标值</th><th>单位</th><th>周期</th><th>月度取值</th><th>核算规则</th><th>在用岗位</th><th style="min-width:120px">操作</th></tr></thead>
     <tbody id="kl-tbody"></tbody></table>
   </div>
+  <div style="margin-top:14px;text-align:center">
+    <button class="btn btn-p" onclick="openAddKpiLib()"><i class="ti ti-plus"></i>新增指标</button>
+  </div>
 </div>
 <!-- KPI -->
 <div id="page-kpi" class="page">
@@ -2068,6 +2071,11 @@ async function saveOvertime(empId, period) {
 async function saveAll(fullConfig = true) {
   try {
     if (!_sbWriteAllowed()) return true;
+    // 提前标记保存时间：写入过程中（网络往返期间）若收到自己这次写入触发的
+    // Realtime 通知，靠这个时间戳判断"是自己刚保存的"而跳过重新拉取覆盖，
+    // 否则旧的本地快照可能在新数据落库前被重新拉取回来，把刚保存的修改（如
+    // 新增的指标）覆盖掉，表现为"保存成功但内容又消失了"。
+    _lastSavedAt = Date.now();
 
     let ok = true;
 
