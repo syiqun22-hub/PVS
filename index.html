@@ -2068,9 +2068,12 @@ async function saveOvertime(empId, period) {
 // monthlyScores（每次编辑都会同步变化），跳过 employees/departments/...等几乎
 // 不变的配置项以及考勤/调薪/加班数据，避免每次按键后都把整份配置 JSON 重新上传，
 // 这是数据量增大后逐日录入页面卡顿的主要原因。
+let _isSaving = false; // 并发锁：防止 saveAll 同时被多次调用导致 _dirtyDaily 重复清除
 async function saveAll(fullConfig = true) {
+  if (_isSaving) return true; // 已有保存在进行中，本次跳过（当前的保存会包含所有脏数据）
+  _isSaving = true;
   try {
-    if (!_sbWriteAllowed()) return true;
+    if (!_sbWriteAllowed()) { _isSaving = false; return true; }
     // 提前标记保存时间：写入过程中（网络往返期间）若收到自己这次写入触发的
     // Realtime 通知，靠这个时间戳判断"是自己刚保存的"而跳过重新拉取覆盖，
     // 否则旧的本地快照可能在新数据落库前被重新拉取回来，把刚保存的修改（如
@@ -2152,6 +2155,7 @@ async function saveAll(fullConfig = true) {
     if (ok) _lastSavedAt = Date.now();
     return ok;
   } catch(e) { console.error('saveAll error', e); toast('⚠️ 保存失败：'+e.message); return false; }
+  finally { _isSaving = false; }
 }
 
 async function saveAndToast(m) {
@@ -2247,6 +2251,7 @@ async function loadAll(){
       if (otRows) { otRows.forEach(r => { if(!otR[r.period])otR[r.period]={}; otR[r.period][r.emp_id]=r.data; }); }
 
       employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};
+      _dirtyDaily.clear(); // dailyScores 已从数据库重新加载，内存中旧的脏标记已失效，清除避免把旧数据重新写回
     }
     if(!positions||positions.length===0){positions=defPositions();}
     if(!sections||sections.length===0){sections=defSections();}
@@ -3036,7 +3041,7 @@ function toggleTeamLink(empId,ds,kpiId){
   _dirtyDaily.add(empId+'|'+ds);
   if(!rec.unlinked||!rec.unlinked[kpiId])syncTeamSharedKPI(empId,ds,kpiId,emp,kpi);
   renderQDailyOverview();
-  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);_lastSavedAt=Date.now();},800);
+  _lastSavedAt=Date.now();clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);},800);
 }
 function saveDailyCell(empId,ds,kpiId,val){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
@@ -3058,7 +3063,7 @@ function saveDailyCell(empId,ds,kpiId,val){
     if(totEl){totEl.textContent=tot!=null?Math.round(tot):'·';totEl.style.color=tot!=null?scoreColor(tot):'var(--color-border-secondary)';}
     updateQDailySummary(empId);
   }
-  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);_lastSavedAt=Date.now();},800);
+  _lastSavedAt=Date.now();clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);},800);
 }
 function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
   const emp=employees.find(e=>e.id===empId);if(!emp)return;
@@ -3084,7 +3089,7 @@ function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
     const sumTd=document.getElementById('qd-pct-tot-'+empId+'-'+kpiId);
     if(sumTd){let tN=0,tD=0,fcnt=0;const nm=daysInMonth(qY,qM);for(let dd=1;dd<=nm;dd++){const ds2=dsOf(qY,qM,dd);const r2=dailyScores[empId]&&dailyScores[empId][ds2];if(!r2||!r2.fractions||!r2.fractions[kpiId])continue;const{num:fn,den:fd}=r2.fractions[kpiId];if(fn!=null&&fd!=null&&fd!==0){tN+=fn;tD+=fd;fcnt++;}}if(fcnt>0){const pct=tD>0?(tN/tD*100).toFixed(1)+'%':'—';sumTd.innerHTML=`<span style="font-weight:700">${Math.round(tN*10)/10}</span><span style="font-size:9px;color:var(--color-text-tertiary)">/${Math.round(tD*10)/10}</span><div style="font-size:9px;color:var(--color-text-tertiary)">${pct}</div>`;}else sumTd.innerHTML='—';}
   }
-  clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);_lastSavedAt=Date.now();},800);
+  _lastSavedAt=Date.now();clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);},800);
 }
 function exportQDaily(){
   if(_qdView==='all')return exportQDailyOverview();
@@ -3124,7 +3129,9 @@ function downloadQDailyImportTemplate(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   list=list.filter(e=>empNat(e)!=='中国'&&getEmpKPIs(e).length>0&&empStatus(e)!=='resigned');
-  const rows=[['工号','姓名','日期','指标ID','指标名称','指标名称(ES)','单位','实际达成(分子)','目标值/分母(%、PPM、h、‱指标需填写)']];
+  const header=['工号','姓名','日期','指标ID','指标名称','指标名称(ES)','单位','实际达成(分子)','目标值/分母(%、PPM、h、‱指标需填写)'];
+  const dataRows=[];   // 已录数据行
+  const emptyRows=[];  // 空白占位行（尚无数据的日期/指标，仅在无任何数据时才写入，避免文件全空）
   const n=daysInMonth(qY,qM);
   list.forEach(e=>{
     const kpis=getEmpKPIs(e);
@@ -3136,13 +3143,22 @@ function downloadQDailyImportTemplate(){
         const frac=rec&&rec.fractions&&rec.fractions[k.id];
         const num=isPct?(frac&&frac.num!=null?frac.num:''):(rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:'');
         const den=isPct?(frac&&frac.den!=null?frac.den:''):'';
-        rows.push([e.id,e.name,ds,k.id,k.name,k.nameEs||'',k.unit||'',num,den]);
+        const row=[e.id,e.name,ds,k.id,k.name,k.nameEs||'',k.unit||'',num,den];
+        if(num!=='')dataRows.push(row);
+        else if(emptyRows.length<50)emptyRows.push(row); // 最多保留少量空行作为填写示例
       });
     }
   });
-  const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'逐日导入模板');
-  XLSX.writeFile(wb,`逐日明细导入模板_${mKey(qY,qM)}.xlsx`);
-  toast('模板已下载：单位为%、PPM、h、‱的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列');
+  // 如果有已录数据，只导出已录行（作为数据快照+可二次导入的备份）；
+  // 如果完全没有数据，退化为完整空白模板方便首次填写
+  const rows=[header,...(dataRows.length?dataRows:emptyRows)];
+  const hasData=dataRows.length>0;
+  const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,hasData?'已录数据':'逐日导入模板');
+  XLSX.writeFile(wb,`逐日明细${hasData?'数据备份':'导入模板'}_${mKey(qY,qM)}.xlsx`);
+  toast(hasData
+    ?`✅ 已导出 ${dataRows.length} 条已录数据，可直接用于数据恢复/再次导入`
+    :'模板已下载：单位为%、PPM、h、‱的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列');
 }
 async function importQDaily(event){
   const file=event.target.files[0];event.target.value='';
@@ -4356,9 +4372,9 @@ function wKey(off){const ds=getWeekDates(off);return`week_${dStr(ds[0])}`;}
 function wLabel(off){const ds=getWeekDates(off);return`${dStr(ds[0])} ~ ${dStr(ds[6])}`;}
 function chWeek(d){weekOff+=d;renderAttWeek();if($('att-incomplete-panel')&&$('att-incomplete-panel').style.display!=='none')renderAttIncomplete();}
 function getExpDays(wk,empId){if(expectedDays[wk]&&expectedDays[wk][empId]!==undefined)return expectedDays[wk][empId];return 6;}
-function setExpDays(wk,empId,v){if(!expectedDays[wk])expectedDays[wk]={};const n=Math.max(0,Math.min(7,parseFloat(v)||0));expectedDays[wk][empId]=n;}
+function setExpDays(wk,empId,v){if(!expectedDays[wk])expectedDays[wk]={};const n=Math.max(0,Math.min(7,parseFloat(v)||0));expectedDays[wk][empId]=n;_attAutoSave(wk);}
 function getOt(wk,empId,ds){return(overtimeData[wk]&&overtimeData[wk][empId]&&overtimeData[wk][empId][ds])||0;}
-function setOt(empId,wk,ds,v){if(!overtimeData[wk])overtimeData[wk]={};if(!overtimeData[wk][empId])overtimeData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)overtimeData[wk][empId][ds]=n;else delete overtimeData[wk][empId][ds];}
+function setOt(empId,wk,ds,v){if(!overtimeData[wk])overtimeData[wk]={};if(!overtimeData[wk][empId])overtimeData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)overtimeData[wk][empId][ds]=n;else delete overtimeData[wk][empId][ds];_attAutoSave(wk);}
 function getRt(wk,empId,ds){return(lateData[wk]&&lateData[wk][empId]&&lateData[wk][empId][ds])||0;}
 function setRt(empId,wk,ds,v){if(!lateData[wk])lateData[wk]={};if(!lateData[wk][empId])lateData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)lateData[wk][empId][ds]=n;else delete lateData[wk][empId][ds];}
 // 考勤填报：按所选部门填充「科室」下拉（未选部门时列出全部科室）
@@ -4423,10 +4439,21 @@ function openPicker(empId,wk,ds,event){
   picker.style.display='block';picker.style.top=Math.min(rect.bottom+4,window.innerHeight-260)+'px';picker.style.left=Math.min(rect.left,window.innerWidth-240)+'px';
   setTimeout(()=>document.addEventListener('click',autoClose,{once:true,capture:true}),20);
 }
-function setStat(s){if(!attendanceData[_pWk])attendanceData[_pWk]={};if(!attendanceData[_pWk][_pEmpId])attendanceData[_pWk][_pEmpId]={};if(s)attendanceData[_pWk][_pEmpId][_pDs]=s;else delete attendanceData[_pWk][_pEmpId][_pDs];closePicker();renderAttWeek();}
+let _attSaveT=null;
+function _attAutoSave(wk){
+  // 立即更新时间戳，防止 Realtime 通知在保存完成前覆盖刚填的数据
+  _lastSavedAt=Date.now();
+  clearTimeout(_attSaveT);
+  _attSaveT=setTimeout(async()=>{
+    const ok=await saveAttendanceWeekOnly(wk);
+    if(ok){toast('✅ 考勤已自动保存');}else{toast('⚠️ 考勤自动保存失败，请手动点击"保存考勤"');}
+  },800);
+}
+function setStat(s){if(!attendanceData[_pWk])attendanceData[_pWk]={};if(!attendanceData[_pWk][_pEmpId])attendanceData[_pWk][_pEmpId]={};if(s)attendanceData[_pWk][_pEmpId][_pDs]=s;else delete attendanceData[_pWk][_pEmpId][_pDs];closePicker();renderAttWeek();_attAutoSave(_pWk);}
 function closePicker(){$('status-picker').style.display='none';}
 function autoClose(e){if(!$('status-picker').contains(e.target))closePicker();}
-async function saveAtt(){await saveAndToast('✅ 考勤已保存');}
+async function saveAtt(){clearTimeout(_attSaveT);_attSaveT=null;await saveAndToast('✅ 考勤已保存');}
+function cnSave(){saveAtt();}
 // ATTENDANCE PASTE / IMPORT
 const VALID_STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT','S'];
 function openAttPaste(){$('att-paste-area').value='';$('att-paste-preview').textContent='';$('modal-att-paste').classList.add('open');setTimeout(()=>$('att-paste-area').focus(),50);}
