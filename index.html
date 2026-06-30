@@ -2069,9 +2069,17 @@ async function saveOvertime(empId, period) {
 // 不变的配置项以及考勤/调薪/加班数据，避免每次按键后都把整份配置 JSON 重新上传，
 // 这是数据量增大后逐日录入页面卡顿的主要原因。
 let _isSaving = false; // 并发锁：防止 saveAll 同时被多次调用导致 _dirtyDaily 重复清除
+let _pendingFullSave = false; // 当 saveAll(false) 持锁期间收到 saveAll(true) 请求，标记待执行
 async function saveAll(fullConfig = true) {
-  if (_isSaving) return true; // 已有保存在进行中，本次跳过（当前的保存会包含所有脏数据）
+  if (_isSaving) {
+    // 当前已有保存进行中；若本次需要全量保存（如刚新增了指标/岗位等配置），
+    // 标记待执行，等锁释放后在 finally 里补做，防止 kpiTemplates 等配置项漏存。
+    if (fullConfig) _pendingFullSave = true;
+    return true;
+  }
   _isSaving = true;
+  // 若此前有待执行的全量保存，则本次一并做全量
+  if (_pendingFullSave) { fullConfig = true; _pendingFullSave = false; }
   try {
     if (!_sbWriteAllowed()) { _isSaving = false; return true; }
     // 提前标记保存时间：写入过程中（网络往返期间）若收到自己这次写入触发的
@@ -2155,7 +2163,11 @@ async function saveAll(fullConfig = true) {
     if (ok) _lastSavedAt = Date.now();
     return ok;
   } catch(e) { console.error('saveAll error', e); toast('⚠️ 保存失败：'+e.message); return false; }
-  finally { _isSaving = false; }
+  finally {
+    _isSaving = false;
+    // 若本次保存期间有 saveAll(true) 被跳过，补做一次全量保存
+    if (_pendingFullSave) { _pendingFullSave = false; setTimeout(() => saveAll(true), 0); }
+  }
 }
 
 async function saveAndToast(m) {
