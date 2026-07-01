@@ -2167,6 +2167,11 @@ async function saveAll(fullConfig = true) {
     // 当前已有保存进行中；若本次需要全量保存（如刚新增了指标/岗位等配置），
     // 标记待执行，等锁释放后在 finally 里补做，防止 kpiTemplates 等配置项漏存。
     if (fullConfig) _pendingFullSave = true;
+    // 等待当前保存完成后重试，确保调用方能拿到真实的保存结果
+    if (fullConfig) {
+      await new Promise(r => { const t = setInterval(() => { if (!_isSaving) { clearInterval(t); r(); } }, 30); });
+      return saveAll(true);
+    }
     return true;
   }
   _isSaving = true;
@@ -2263,8 +2268,10 @@ async function saveAll(fullConfig = true) {
 }
 
 async function saveAndToast(m) {
-  _suppressRealtimeFor(15000);
+  _suppressRealtimeFor(30000);
   const ok = await saveAll();
+  // 保存完成后再次延长抑制窗口，防止 Supabase 延迟的 Realtime 事件在保存后覆盖内存
+  _suppressRealtimeFor(30000);
   if(ok !== false){ _lastSavedAt = Date.now(); toast(m); }
 }
 let _lastSavedAt = 0;
@@ -6652,8 +6659,7 @@ function getEmpKPIs(emp){
 // INIT
 function _reloadActivePage() {
   if (_suppressRealtime) return;
-  // 如果距上次保存不足 8 秒，视为自己触发的 Realtime，静默处理
-  if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
+  if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
   const activePage = document.querySelector('.page.active');
   if (activePage) {
     const pid = activePage.id.replace('page-', '');
@@ -6669,9 +6675,13 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_config_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_config' }, async () => {
         if (!currentUser) return;
-        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
+        // 本机刚保存过：跳过自己触发的 Realtime 回播，延长保护窗口
+        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
+        // 正在主动抑制 Realtime（如刚完成配置保存）：跳过整个处理
+        if (_suppressRealtime) return;
         try {
-          const { data: cfgRows } = await _sbClient.from('pvs_config').select('id,value');
+          // 使用分页读取，防止 pvs_config 行数超过 1000 时截断导致覆盖空数据
+          const cfgRows = await _fetchAllRows('pvs_config', 'id,value');
           if (cfgRows && cfgRows.length) {
             const cfg = {};
             cfgRows.forEach(r => { cfg[r.id] = r.value; });
@@ -6698,7 +6708,8 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_daily_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_daily' }, payload => {
         if (!currentUser) return;
-        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
+        if (_suppressRealtime) return;
+        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.emp_id && r.date) {
@@ -6714,7 +6725,8 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_attendance_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_attendance' }, payload => {
         if (!currentUser) return;
-        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
+        if (_suppressRealtime) return;
+        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.week_key && r.emp_id && r.date) {
@@ -6729,7 +6741,8 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_salary_reviews_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_salary_reviews' }, payload => {
         if (!currentUser) return;
-        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
+        if (_suppressRealtime) return;
+        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.emp_id) { salaryReviews[r.emp_id] = r.data; _reloadActivePage(); }
@@ -6739,7 +6752,8 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_overtime_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_overtime' }, payload => {
         if (!currentUser) return;
-        if (Date.now() - _lastSavedAt < 8000) { _lastSavedAt = Date.now(); return; }
+        if (_suppressRealtime) return;
+        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
         try {
           const r = payload.new || {};
           if (r.emp_id && r.period) {
