@@ -3236,9 +3236,9 @@ function downloadQDailyImportTemplate(){
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   list=list.filter(e=>empNat(e)!=='中国'&&getEmpKPIs(e).length>0&&empStatus(e)!=='resigned');
   const header=['工号','姓名','日期','指标ID','指标名称','指标名称(ES)','单位','实际达成(分子)','目标值/分母(%、PPM、h、‱指标需填写)'];
-  const dataRows=[];   // 已录数据行
-  const emptyRows=[];  // 空白占位行（尚无数据的日期/指标，仅在无任何数据时才写入，避免文件全空）
+  const rows=[header];
   const n=daysInMonth(qY,qM);
+  let filledCount=0;
   list.forEach(e=>{
     const kpis=getEmpKPIs(e);
     for(let d=1;d<=n;d++){
@@ -3249,27 +3249,20 @@ function downloadQDailyImportTemplate(){
         const frac=rec&&rec.fractions&&rec.fractions[k.id];
         const num=isPct?(frac&&frac.num!=null?frac.num:''):(rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:'');
         const den=isPct?(frac&&frac.den!=null?frac.den:''):'';
-        const row=[e.id,e.name,ds,k.id,k.name,k.nameEs||'',k.unit||'',num,den];
-        if(num!=='')dataRows.push(row);
-        else if(emptyRows.length<50)emptyRows.push(row); // 最多保留少量空行作为填写示例
+        if(num!=='')filledCount++;
+        rows.push([e.id,e.name,ds,k.id,k.name,k.nameEs||'',k.unit||'',num,den]);
       });
     }
   });
-  // 如果有已录数据，只导出已录行（作为数据快照+可二次导入的备份）；
-  // 如果完全没有数据，退化为完整空白模板方便首次填写
-  const rows=[header,...(dataRows.length?dataRows:emptyRows)];
-  const hasData=dataRows.length>0;
   const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,hasData?'已录数据':'逐日导入模板');
-  XLSX.writeFile(wb,`逐日明细${hasData?'数据备份':'导入模板'}_${mKey(qY,qM)}.xlsx`);
-  toast(hasData
-    ?`✅ 已导出 ${dataRows.length} 条已录数据，可直接用于数据恢复/再次导入`
-    :'模板已下载：单位为%、PPM、h、‱的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列');
+  XLSX.utils.book_append_sheet(wb,ws,'逐日导入模板');
+  XLSX.writeFile(wb,`逐日明细导入模板_${mKey(qY,qM)}.xlsx`);
+  toast(`模板已下载：共 ${list.length} 名员工，${rows.length-1} 行（其中 ${filledCount} 行为已录数据）。单位为%、PPM、h、‱的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列`);
 }
 async function importQDaily(event){
   const file=event.target.files[0];event.target.value='';
   if(!file)return;
-  if(!canEdit()){toast('无权限');return;}
+  if(!currentUser){toast('无权限');return;}
   try{
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
@@ -3283,7 +3276,7 @@ async function importQDaily(event){
     const idxNum=header.indexOf('实际达成(分子)');
     const idxDen=header.indexOf('目标值/分母(%、PPM、h、‱指标需填写)');
     if(idxEmpId<0||idxDate<0||idxKpiId<0||idxNum<0){toast('模板格式不正确，请下载最新模板');return;}
-    let count=0;const touchedEmps=new Set();const touchedCells=[];
+    let count=0,skipped=0;const touchedEmps=new Set();const touchedCells=[];
     rows.slice(1).forEach(row=>{
       const empId=(row[idxEmpId]||'').toString().trim();
       let ds=row[idxDate];
@@ -3295,6 +3288,7 @@ async function importQDaily(event){
       if(!empId||!ds||kpiIdRaw===''||kpiIdRaw==null)return;
       if(numVal===''||numVal==null)return;
       const emp=employees.find(e=>e.id===empId);if(!emp)return;
+      if(!canEdit()&&!empInScope(emp)){skipped++;return;} // 部门/科室管理员仅可导入自己权限范围内的员工
       const kpi=getEmpKPIs(emp).find(k=>String(k.id)===String(kpiIdRaw).trim());if(!kpi)return;
       const n=parseFloat(numVal);if(isNaN(n))return;
       const rec=getDayRec(empId,ds);
@@ -3318,7 +3312,7 @@ async function importQDaily(event){
     touchedEmps.forEach(empId=>syncDailyToMonthly(empId));
     await saveAll();
     renderQDailyOverview();
-    toast('✅ 导入成功，共更新 '+count+' 条逐日数据');
+    toast('✅ 导入成功，共更新 '+count+' 条逐日数据'+(skipped?`（已跳过 ${skipped} 条超出权限范围的数据）`:''));
   }catch(e){console.error(e);toast('导入失败：'+e.message);}
 }
 
