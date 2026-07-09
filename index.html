@@ -629,7 +629,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <div style="display:flex;gap:6px">
           <button class="btn" onclick="exportQDaily()"><i class="ti ti-download"></i> 导出</button>
           <button id="qd-scroll-btn" class="btn" onclick="toggleLinkedScroll('daily')" title="每10秒滚屏，到底后自动切换到岗位排名"><i class="ti ti-player-play"></i> 滚动播放</button>
-          <button class="btn" onclick="downloadQDailyImportTemplate()" title="下载逐日明细导入模板（%指标含分子/分母两列，其他指标只需填写实际达成列）"><i class="ti ti-table-import"></i> 导入模板</button>
+          <button class="btn" onclick="downloadQDailyImportTemplate()" title="下载逐日明细导入模板（月度取值方式为分数聚合的指标含分子/分母两列，其他指标只需填写实际达成列）"><i class="ti ti-table-import"></i> 导入模板</button>
           <button class="btn" onclick="document.getElementById('qd-import-file').click()"><i class="ti ti-upload"></i> 批量导入</button>
           <input type="file" id="qd-import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importQDaily(event)">
         </div>
@@ -1448,7 +1448,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="fg"><label class="fl">目标值</label><input id="ki-target" type="number" oninput="updateKPIPreview()"></div>
       <div class="fg"><label class="fl">单位</label><input id="ki-unit"></div>
       <div class="fg"><label class="fl">评价周期</label><select id="ki-period"><option value="月度">月度</option><option value="季度">季度</option><option value="年度">年度</option></select></div>
-      <div class="fg"><label class="fl">月度取值方式</label><select id="ki-month-agg"><option value="">自动（按单位判断）</option><option value="sum">累计总和</option><option value="avg">日均值</option><option value="fraction">分数聚合（分子/分母）</option><option value="last">取末值</option><option value="max">取最大值</option><option value="min">取最小值</option></select></div>
+      <div class="fg"><label class="fl">月度取值方式</label><select id="ki-month-agg" onchange="toggleTopDaysField()"><option value="">自动（按单位判断）</option><option value="sum">累计总和</option><option value="avg">日均值</option><option value="fraction">分数聚合（分子/分母）</option><option value="last">取末值</option><option value="max">取最大值</option><option value="min">取最小值</option><option value="topavg">最高N天均值</option></select></div>
+      <div class="fg" id="ki-topdays-wrap" style="display:none"><label class="fl">取值天数 N</label><input id="ki-topdays" type="number" min="1" step="1" placeholder="如 15"></div>
     </div>
     <div style="margin-top:10px">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
@@ -2566,9 +2567,26 @@ function isFractionUnit(unit){
   const u=(unit||'').trim();
   return u==='%'||u==='PPM'||u==='h'||u==='‱';
 }
+// 解析指标实际生效的月度取值方式：优先用指标编辑里的显式选择，
+// 未设置时才按单位/名称自动判断（兼容历史未设置该字段的指标）
+function resolveMonthAgg(kpi){
+  return(kpi&&kpi.monthAgg)||(isFractionUnit(kpi&&kpi.unit)?'fraction':((kpi&&kpi.unit)||'').trim().includes('次')?'sum':'avg');
+}
+// 取values中最高的N个值求平均（N未设置或非正数时按全部天数）；不足N个则按实际天数平均
+function computeTopAvg(values,n){
+  if(!values||!values.length)return null;
+  const N=n>0?Math.min(n,values.length):values.length;
+  const top=[...values].sort((a,b)=>b-a).slice(0,N);
+  return top.reduce((s,v)=>s+v,0)/top.length;
+}
+// 某指标是否按"分子/分母"两栏录入
+function isFractionKpi(kpi){
+  if(!kpi)return false;
+  return resolveMonthAgg(kpi)==='fraction';
+}
 // 取某天单个KPI的实际达成值（与calcMonthlyKpiActual逻辑一致，仅取当天）
 function calcDayKpiActual(rec,kpi){
-  const isPct=isFractionUnit(kpi.unit);
+  const isPct=isFractionKpi(kpi);
   if(isPct){
     const frac=rec.fractions&&rec.fractions[kpi.id];
     if(!frac||frac.num==null||frac.den==null||frac.den===0)return null;
@@ -2599,7 +2617,7 @@ function syncDailyToMonthly(empId){
   // 同步各指标逐日得分（%指标按累积分子/分母计算，其余取平均）
   let anyData=false;
   kpis.forEach(k=>{
-    const _agg=k.monthAgg||(isFractionUnit(k.unit)?'fraction':(k.unit||'').trim().includes('次')?'sum':'avg');
+    const _agg=resolveMonthAgg(k);
     if(_agg==='fraction'){
       let totalNum=0,totalDen=0,cnt=0;
       for(let d=1;d<=n;d++){
@@ -2760,15 +2778,15 @@ function renderQRadar(empId){
   // Right-side legend / details table
   const _detN=pastDaysInMonth();const _detAdj=calcAdjustedMonthScore(empId);
   const detailRows=kpis.map((k,i)=>{
-    const isPct=isFractionUnit(k.unit);
-    const _agg=k.monthAgg||(isPct?'fraction':(k.unit||'').trim().includes('次')?'sum':'avg');
+    const isPct=isFractionKpi(k);
+    const _agg=resolveMonthAgg(k);
     let a;
     if(_agg==='fraction'){
       a=ms.scores&&ms.scores[k.id];
     }else{
       let sum=0,filled=0;const _allV=[];
       for(let d=1;d<=_detN;d++){const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const cur=rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:null;if(cur!==null){sum+=parseFloat(cur)||0;filled++;_allV.push(parseFloat(cur)||0);}}
-      if(filled>0){if(_agg==='sum')a=Math.round(sum*100)/100;else if(_agg==='last')a=Math.round(_allV[_allV.length-1]*100)/100;else if(_agg==='max')a=Math.round(Math.max(..._allV)*100)/100;else if(_agg==='min')a=Math.round(Math.min(..._allV)*100)/100;else a=Math.round(sum/filled*100)/100;}else a=null;
+      if(filled>0){if(_agg==='sum')a=Math.round(sum*100)/100;else if(_agg==='last')a=Math.round(_allV[_allV.length-1]*100)/100;else if(_agg==='max')a=Math.round(Math.max(..._allV)*100)/100;else if(_agg==='min')a=Math.round(Math.min(..._allV)*100)/100;else if(_agg==='topavg')a=Math.round(computeTopAvg(_allV,k.topDays)*100)/100;else a=Math.round(sum/filled*100)/100;}else a=null;
     }
     const s=scores[i];
     const rate=a!=null?calcRate(a,k.target,k.rule&&k.rule.kd||'achieve'):null;
@@ -2998,7 +3016,7 @@ function buildEmpDailyBlock(emp){
   const lblStyle='position:sticky;left:0;background:var(--color-background-primary);z-index:1;font-weight:500;min-width:170px;box-shadow:1px 0 0 var(--color-border-tertiary);text-align:left';
   const adj=calcAdjustedMonthScore(empId);
   let kpiRows=kpis.map(k=>{
-    const isPct=isFractionUnit(k.unit);
+    const isPct=isFractionKpi(k);
     let cells='';let kpiSum=0;let kpiFilled=0;let totalNum=0,totalDen=0,pctFilled=0;
     for(let d=1;d<=n;d++){
       const dow=new Date(qY,qM-1,d).getDay();const wk=(dow===0||dow===6);const ds=dsOf(qY,qM,d);
@@ -3021,8 +3039,8 @@ function buildEmpDailyBlock(emp){
         cells+=`<td style="padding:2px;text-align:center;${bg}"><div style="display:flex;flex-direction:column;gap:1px;align-items:center"><input type="number" step="any" value="${cur}" ${editable?'':'readonly'} placeholder="·" onchange="saveDailyCell('${empId}','${ds}','${k.id}',this.value)" style="width:40px;padding:2px;text-align:center;font-size:11px;border:0.5px solid var(--color-border-tertiary);border-radius:3px;font-family:var(--font-mono);${editable?'':'background:var(--color-background-secondary);color:var(--color-text-secondary)'}${bd}">${linkIcon}</div></td>`;
       }
     }
-    const agg=k.monthAgg||(isPct?'fraction':(k.unit||'').trim().includes('次')?'sum':'avg');
-    const AGG_CN={sum:'总和',avg:'均值',last:'末值',max:'最大',min:'最小',fraction:'聚合'};
+    const agg=resolveMonthAgg(k);
+    const AGG_CN={sum:'总和',avg:'均值',last:'末值',max:'最大',min:'最小',fraction:'聚合',topavg:'最高'+(k.topDays||'N')+'天均值'};
     let sumCell;const stickyR='text-align:center;font-size:11px;background:var(--color-background-tertiary);position:sticky;right:0;box-shadow:-1px 0 0 var(--color-border-tertiary);line-height:1.3';
     if(agg==='fraction'){
       const cumStr=pctFilled>0?`<span style="font-weight:700">${Math.round(totalNum*10)/10}</span><span style="font-size:9px;color:var(--color-text-tertiary)">/${Math.round(totalDen*10)/10}</span><div style="font-size:9px;color:var(--color-text-tertiary)">${totalDen>0?(totalNum/totalDen*100).toFixed(1)+'%':'—'}</div>`:'—';
@@ -3035,6 +3053,7 @@ function buildEmpDailyBlock(emp){
         else if(agg==='last'){const allDayVals=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allDayVals.push(drec.scores[k.id]);}kpiDisplay=allDayVals.length?Math.round(allDayVals[allDayVals.length-1]*100)/100:'—';}
         else if(agg==='max'){const allV=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allV.push(drec.scores[k.id]);}kpiDisplay=allV.length?Math.round(Math.max(...allV)*100)/100:'—';}
         else if(agg==='min'){const allV=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allV.push(drec.scores[k.id]);}kpiDisplay=allV.length?Math.round(Math.min(...allV)*100)/100:'—';}
+        else if(agg==='topavg'){const allV=[];for(let dd=1;dd<=n;dd++){const dds=dsOf(qY,qM,dd);const drec=dailyScores[empId]&&dailyScores[empId][dds];if(drec&&drec.scores&&drec.scores[k.id]!=null)allV.push(parseFloat(drec.scores[k.id])||0);}const ta=computeTopAvg(allV,k.topDays);kpiDisplay=ta!=null?Math.round(ta*100)/100:'—';}
         else{kpiDisplay=Math.round(kpiSum/kpiFilled*100)/100;}
         aggLabel=AGG_CN[agg]||'均值';
       }
@@ -3103,7 +3122,7 @@ function syncTeamSharedKPI(empId,ds,kpiId,emp,kpi){
   if(!kpi||!kpi.teamShared)return false;
   const rec=dailyScores[empId]&&dailyScores[empId][ds];if(!rec)return false;
   if(rec.unlinked&&rec.unlinked[kpiId])return false;
-  const isPct=isFractionUnit(kpi.unit);
+  const isPct=isFractionKpi(kpi);
   const peers=getTeamPeers(emp,kpiId);
   let changed=false;
   peers.forEach(p=>{
@@ -3130,7 +3149,7 @@ function toggleTeamLink(empId,ds,kpiId){
   if(!rec.unlinked)rec.unlinked={};
   if(rec.unlinked[kpiId]){
     delete rec.unlinked[kpiId];
-    const isPct=isFractionUnit(kpi.unit);
+    const isPct=isFractionKpi(kpi);
     for(const p of getTeamPeers(emp,kpiId)){
       const prec=dailyScores[p.id]&&dailyScores[p.id][ds];
       if(!prec||(prec.unlinked&&prec.unlinked[kpiId]))continue;
@@ -3235,7 +3254,7 @@ function downloadQDailyImportTemplate(){
   const dF=$('qd-dept')?$('qd-dept').value:'';
   let list=canEdit()?(dF?employees.filter(e=>e.dept===dF):employees):employees.filter(empInScope);
   list=list.filter(e=>empNat(e)!=='中国'&&getEmpKPIs(e).length>0&&empStatus(e)!=='resigned');
-  const header=['工号','姓名','日期','指标ID','指标名称','指标名称(ES)','单位','实际达成(分子)','目标值/分母(%、PPM、h、‱指标需填写)'];
+  const header=['工号','姓名','日期','指标ID','指标名称','指标名称(ES)','单位','实际达成(分子)','目标值/分母(分数聚合指标需填写)'];
   const rows=[header];
   const n=daysInMonth(qY,qM);
   let filledCount=0;
@@ -3245,7 +3264,7 @@ function downloadQDailyImportTemplate(){
       const ds=dsOf(qY,qM,d);
       const rec=dailyScores[e.id]&&dailyScores[e.id][ds];
       kpis.forEach(k=>{
-        const isPct=isFractionUnit(k.unit);
+        const isPct=isFractionKpi(k);
         const frac=rec&&rec.fractions&&rec.fractions[k.id];
         const num=isPct?(frac&&frac.num!=null?frac.num:''):(rec&&rec.scores&&rec.scores[k.id]!=null?rec.scores[k.id]:'');
         const den=isPct?(frac&&frac.den!=null?frac.den:''):'';
@@ -3257,7 +3276,7 @@ function downloadQDailyImportTemplate(){
   const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'逐日导入模板');
   XLSX.writeFile(wb,`逐日明细导入模板_${mKey(qY,qM)}.xlsx`);
-  toast(`模板已下载：共 ${list.length} 名员工，${rows.length-1} 行（其中 ${filledCount} 行为已录数据）。单位为%、PPM、h、‱的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列`);
+  toast(`模板已下载：共 ${list.length} 名员工，${rows.length-1} 行（其中 ${filledCount} 行为已录数据）。月度取值方式为"分数聚合"的指标请填写"实际达成(分子)"和"目标值/分母"两列，其他指标只需填写"实际达成(分子)"列`);
 }
 async function importQDaily(event){
   const file=event.target.files[0];event.target.value='';
@@ -3274,7 +3293,8 @@ async function importQDaily(event){
     const idxDate=header.indexOf('日期');
     const idxKpiId=header.indexOf('指标ID');
     const idxNum=header.indexOf('实际达成(分子)');
-    const idxDen=header.indexOf('目标值/分母(%、PPM、h、‱指标需填写)');
+    let idxDen=header.indexOf('目标值/分母(分数聚合指标需填写)');
+    if(idxDen<0)idxDen=header.indexOf('目标值/分母(%、PPM、h、‱指标需填写)'); // 兼容旧版模板
     if(idxEmpId<0||idxDate<0||idxKpiId<0||idxNum<0){toast('模板格式不正确，请下载最新模板');return;}
     let count=0,skipped=0;const touchedEmps=new Set();const touchedCells=[];
     rows.slice(1).forEach(row=>{
@@ -3292,7 +3312,7 @@ async function importQDaily(event){
       const kpi=getEmpKPIs(emp).find(k=>String(k.id)===String(kpiIdRaw).trim());if(!kpi)return;
       const n=parseFloat(numVal);if(isNaN(n))return;
       const rec=getDayRec(empId,ds);
-      const isPct=isFractionUnit(kpi.unit);
+      const isPct=isFractionKpi(kpi);
       if(isPct){
         const d=denVal===''||denVal==null?NaN:parseFloat(denVal);
         if(isNaN(d)||d===0){delete rec.fractions[kpi.id];delete rec.scores[kpi.id];}
@@ -3393,7 +3413,7 @@ function calcAdjustedMonthScore(empId){
 }
 // 按月累计实际达成：%指标累积分子/分母，次数指标求和，其他指标取平均
 function calcMonthlyKpiActual(empId,kpi,adj,n){
-  const agg=kpi.monthAgg||(isFractionUnit(kpi.unit)?'fraction':(kpi.unit||'').trim().includes('次')?'sum':'avg');
+  const agg=resolveMonthAgg(kpi);
   if(agg==='fraction'){
     let totalNum=0,totalDen=0,cnt=0;
     for(let d=1;d<=n;d++){
@@ -3406,14 +3426,14 @@ function calcMonthlyKpiActual(empId,kpi,adj,n){
     }
     return(cnt>0&&totalDen>0)?Math.round(totalNum/totalDen*10000)/100:null;
   }else{
-    let total=0,cnt=0,lastVal=null,maxVal=-Infinity,minVal=Infinity;
+    let total=0,cnt=0,lastVal=null,maxVal=-Infinity,minVal=Infinity;const vals=[];
     for(let d=1;d<=n;d++){
       const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
       if(!rec||!rec.scores||rec.scores[kpi.id]==null)continue;
       const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
       const isZero=adj.zeroStatuses&&adj.zeroStatuses.has(att);
       const v=isZero?0:rec.scores[kpi.id];
-      total+=v;cnt++;lastVal=v;
+      total+=v;cnt++;lastVal=v;vals.push(v);
       if(v>maxVal)maxVal=v;if(v<minVal)minVal=v;
     }
     if(cnt===0)return null;
@@ -3421,6 +3441,7 @@ function calcMonthlyKpiActual(empId,kpi,adj,n){
     if(agg==='last')return lastVal;
     if(agg==='max')return maxVal;
     if(agg==='min')return minVal;
+    if(agg==='topavg')return Math.round(computeTopAvg(vals,kpi.topDays)*10000)/10000;
     return total/cnt;
   }
 }
@@ -3824,11 +3845,11 @@ function openEval(empId,y,m){
   const posLabel=currentEvalEmp.position?`${currentEvalEmp.position}`:'未设置岗位';
   $('eval-title').textContent=`绩效评估 — ${currentEvalEmp.name} · ${mLabel(curY,curM)}`;
   if(!kpis.length){$('eval-rows').innerHTML=`<div class="info red" style="padding:16px;font-size:13px">该员工岗位「${posLabel}」尚未配置绩效指标，请先到"岗位指标"页面配置。</div>`;updateTotalScore();$('modal-eval').classList.add('open');return;}
-  $('eval-rows').innerHTML=`<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:10px;padding:8px 10px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)">岗位：<strong style="color:var(--color-text-primary)">${posLabel}</strong> · 共 ${kpis.length} 个指标 <span style="margin-left:8px;color:var(--color-text-tertiary)">·</span> <span style="color:var(--color-text-tertiary)">单位为 % 的指标按"分子 / 分母"填报,系统自动核算实际达成</span></div>`+kpis.map(k=>{
+  $('eval-rows').innerHTML=`<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:10px;padding:8px 10px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)">岗位：<strong style="color:var(--color-text-primary)">${posLabel}</strong> · 共 ${kpis.length} 个指标 <span style="margin-left:8px;color:var(--color-text-tertiary)">·</span> <span style="color:var(--color-text-tertiary)">月度取值方式为"分数聚合"的指标按"分子 / 分母"填报,系统自动核算实际达成</span></div>`+kpis.map(k=>{
     const actual=ms.scores[k.id]!=null?ms.scores[k.id]:null;const val=actual!==null?actual:'';
     const rate=actual!==null?calcRate(actual,k.target,k.rule&&k.rule.kd||'achieve'):null;
     const score=actual!==null?calcKPIScore(actual,k):null;
-    const isPct=isFractionUnit(k.unit);
+    const isPct=isFractionKpi(k);
     const frac=ms.fractions&&ms.fractions[k.id]?ms.fractions[k.id]:null;
     const numV=frac&&frac.num!=null?frac.num:'';
     const denV=frac&&frac.den!=null?frac.den:'';
@@ -3856,7 +3877,7 @@ function openEval(empId,y,m){
 function updateEvalRow(kpiId){
   const kpis=getEmpKPIs(currentEvalEmp);
   const kpi=kpis.find(k=>k.id===kpiId);if(!kpi)return;
-  const isPct=isFractionUnit(kpi.unit);
+  const isPct=isFractionKpi(kpi);
   let val=NaN;
   if(isPct){
     const nEl=$('num-'+kpiId),dEl=$('den-'+kpiId),aEl=$('actual-'+kpiId),disp=$('actual-disp-'+kpiId);
@@ -3899,7 +3920,7 @@ async function saveEval(){
   if(!ms.fractions)ms.fractions={};
   kpis.forEach(k=>{
     const el=$('actual-'+k.id);const v=el?parseFloat(el.value):NaN;ms.scores[k.id]=isNaN(v)?null:v;
-    if(isFractionUnit(k.unit)){
+    if(isFractionKpi(k)){
       const nEl=$('num-'+k.id),dEl=$('den-'+k.id);
       const n=nEl&&nEl.value!==''?parseFloat(nEl.value):NaN;
       const d=dEl&&dEl.value!==''?parseFloat(dEl.value):NaN;
@@ -4163,11 +4184,11 @@ function renderKpiLib(){
     const usedByPos=positions.filter(p=>(p.kpiRefs||[]).find(r=>r.kpiId===k.id));
     const descTip=getDesc(k);
     const lvl=k.level||'';
-    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td${descTip?` title="${escHtml(descTip)}"`:''}><strong>${getName(k)}</strong>${k.teamShared?' <span class="badge badge-info" style="font-size:9px" title="同班组+同岗位自动同步逐日数值">🔗班组共享</span>':''}${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}${descTip?`<div style="font-size:10px;color:var(--color-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(descTip)}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td>${lvl?`<span class="badge ${LEVEL_CLS[lvl]||'badge-gray'}" style="font-size:10px">${lvl}</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">—</span>'}</td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td style="font-size:11px">${({'sum':'累计总和','avg':'日均值','fraction':'分数聚合','last':'取末值','max':'取最大值','min':'取最小值'})[k.monthAgg]||'<span style="color:var(--color-text-tertiary)">自动</span>'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
+    return`<tr><td style="font-family:monospace;font-size:11px">${k.code||'K'+k.id}</td><td${descTip?` title="${escHtml(descTip)}"`:''}><strong>${getName(k)}</strong>${k.teamShared?' <span class="badge badge-info" style="font-size:9px" title="同班组+同岗位自动同步逐日数值">🔗班组共享</span>':''}${k.nameEs&&lang==='zh'?`<div style="font-size:10px;color:var(--color-text-tertiary)">${k.nameEs}</div>`:''}${descTip?`<div style="font-size:10px;color:var(--color-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(descTip)}</div>`:''}</td><td><span class="badge ${k.type==='KPI类'?'badge-info':k.type==='GS类'?'badge-success':'badge-gray'}">${k.type}</span></td><td>${lvl?`<span class="badge ${LEVEL_CLS[lvl]||'badge-gray'}" style="font-size:10px">${lvl}</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">—</span>'}</td><td style="font-size:12px">${k.rule&&k.rule.kd==='control'?'📉控制类':'📈达成类'}</td><td>${k.target}</td><td>${k.unit||'-'}</td><td>${k.period||'月度'}</td><td style="font-size:11px">${k.monthAgg==='topavg'?'最高'+(k.topDays||'N')+'天均值':({'sum':'累计总和','avg':'日均值','fraction':'分数聚合','last':'取末值','max':'取最大值','min':'取最小值'})[k.monthAgg]||'<span style="color:var(--color-text-tertiary)">自动</span>'}</td><td><span class="badge ${k.rule?'badge-success':'badge-gray'}" style="font-size:10px">${k.rule?ML[k.rule.km]||'自定义':'未配置'}</span></td><td>${usedByPos.length?`<span class="badge badge-info" title="${usedByPos.map(p=>p.name).join('、')}">${usedByPos.length} 个</span>`:'<span style="color:var(--color-text-tertiary);font-size:11px">未使用</span>'}</td>${canEdit()?`<td><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditKpiLib(${jsArg(k.id)})"><i class="ti ti-edit"></i> 编辑</button><button class="btn-del btn btn-sm" onclick="delKpiLib(${jsArg(k.id)})"><i class="ti ti-trash"></i></button></div></td>`:'<td>—</td>'}</tr>`;
   }).join(''):'<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--color-text-tertiary)">暂无指标</td></tr>';
 }
 function openAddKpiLib(){editingKPIId=null;$('klm-title').textContent='新增指标';$('ki-code').value='K'+String(Math.max(0,...kpiTemplates.map(k=>parseInt((k.code||'').replace(/\D/g,''))||0))+1).padStart(3,'0');resetKPIModal();if($('ki-name-es'))$('ki-name-es').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('modal-add-kpilib').classList.add('open');}
-function openEditKpiLib(id){const k=kpiTemplates.find(x=>x.id===id);if(!k)return;editingKPIId=id;$('klm-title').textContent='编辑指标';$('ki-code').value=k.code||'K'+id;$('ki-name').value=k.name;if($('ki-name-es'))$('ki-name-es').value=k.nameEs||'';if($('ki-desc'))$('ki-desc').value=k.desc||'';if($('ki-desc-es'))$('ki-desc-es').value=k.descEs||'';$('ki-type').value=k.type;if($('ki-level'))$('ki-level').value=k.level||'';$('ki-target').value=k.target;$('ki-unit').value=k.unit||'';$('ki-period').value=k.period||'月度';if($('ki-month-agg'))$('ki-month-agg').value=k.monthAgg||'';if($('ki-team-shared'))$('ki-team-shared').checked=!!k.teamShared;kd=k.rule&&k.rule.kd||'achieve';km=k.rule&&k.rule.km||'rate';if(km==='r12'||km==='r21')km='fml';$('kr-cap').value=k.rule&&k.rule.rateCap!=null?k.rule.rateCap:150;$('kr-floor').value=k.rule&&k.rule.rateFloor!=null?k.rule.rateFloor:0;$('kf-fml').value=k.rule&&k.rule.formula||'';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const r=k.rule;if(r&&r.bonusEnabled){$('kb-enabled').checked=true;$('kpi-bonus-body').style.display='block';const _bte=$('kb-bonus-rank-tiers');if(_bte){_bte.innerHTML='';(r.bonusRankTiers||[]).forEach(t=>addBonusRankTier(t.rank,t.pts));}const _tierEl=$('kb-rank-tiers');if(_tierEl)_tierEl.innerHTML='';getKpiRankTiers(k).forEach(t=>addRankTier(t.rank,t.pts));}else{$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';}applyKModes();$('modal-add-kpilib').classList.add('open');}
+function openEditKpiLib(id){const k=kpiTemplates.find(x=>x.id===id);if(!k)return;editingKPIId=id;$('klm-title').textContent='编辑指标';$('ki-code').value=k.code||'K'+id;$('ki-name').value=k.name;if($('ki-name-es'))$('ki-name-es').value=k.nameEs||'';if($('ki-desc'))$('ki-desc').value=k.desc||'';if($('ki-desc-es'))$('ki-desc-es').value=k.descEs||'';$('ki-type').value=k.type;if($('ki-level'))$('ki-level').value=k.level||'';$('ki-target').value=k.target;$('ki-unit').value=k.unit||'';$('ki-period').value=k.period||'月度';if($('ki-month-agg'))$('ki-month-agg').value=k.monthAgg||'';if($('ki-topdays'))$('ki-topdays').value=k.topDays||'';toggleTopDaysField();if($('ki-team-shared'))$('ki-team-shared').checked=!!k.teamShared;kd=k.rule&&k.rule.kd||'achieve';km=k.rule&&k.rule.km||'rate';if(km==='r12'||km==='r21')km='fml';$('kr-cap').value=k.rule&&k.rule.rateCap!=null?k.rule.rateCap:150;$('kr-floor').value=k.rule&&k.rule.rateFloor!=null?k.rule.rateFloor:0;$('kf-fml').value=k.rule&&k.rule.formula||'';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const r=k.rule;if(r&&r.bonusEnabled){$('kb-enabled').checked=true;$('kpi-bonus-body').style.display='block';const _bte=$('kb-bonus-rank-tiers');if(_bte){_bte.innerHTML='';(r.bonusRankTiers||[]).forEach(t=>addBonusRankTier(t.rank,t.pts));}const _tierEl=$('kb-rank-tiers');if(_tierEl)_tierEl.innerHTML='';getKpiRankTiers(k).forEach(t=>addRankTier(t.rank,t.pts));}else{$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';}applyKModes();$('modal-add-kpilib').classList.add('open');}
 async function saveKpiLib(){
   const name=$('ki-name').value.trim();if(!name){toast('请填写指标名称');return;}
   const code=$('ki-code').value.trim()||('K'+Date.now().toString().slice(-5));
@@ -4188,7 +4209,7 @@ async function saveKpiLib(){
   const desc=($('ki-desc')?$('ki-desc').value.trim():'')||undefined;
   const descEs=($('ki-desc-es')?$('ki-desc-es').value.trim():'')||undefined;
   const teamShared=$('ki-team-shared')?$('ki-team-shared').checked:false;
-  const level=($('ki-level')&&$('ki-level').value)||'';const monthAgg=($('ki-month-agg')&&$('ki-month-agg').value)||'';const kpi={id:editingKPIId||uid('K'),code,name,nameEs,desc,descEs,type:$('ki-type').value,level,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,monthAgg:monthAgg||undefined,teamShared,rule};
+  const level=($('ki-level')&&$('ki-level').value)||'';const monthAgg=($('ki-month-agg')&&$('ki-month-agg').value)||'';const topDaysRaw=$('ki-topdays')&&$('ki-topdays').value;const topDays=monthAgg==='topavg'&&topDaysRaw?parseInt(topDaysRaw,10):undefined;const kpi={id:editingKPIId||uid('K'),code,name,nameEs,desc,descEs,type:$('ki-type').value,level,target:parseFloat($('ki-target').value)||0,unit:$('ki-unit').value,period:$('ki-period').value,monthAgg:monthAgg||undefined,topDays,teamShared,rule};
   if(editingKPIId){const idx=kpiTemplates.findIndex(k=>k.id===editingKPIId);if(idx>=0)kpiTemplates[idx]=kpi;}
   else{kpiTemplates.push(kpi);}
   closeM('modal-add-kpilib');await saveAndToast('指标已保存');renderKpiLib();
@@ -4202,11 +4223,11 @@ async function delKpiLib(id){
 function dlKpiTpl(){
   const h=['编码','名称','类型','级别','方向','目标值','单位','周期','月度取值','核算规则','上限','下限','公式','班组共享','描述','西语名称','西语描述','超额加分模式','每超出单位数','加分数','加分上限','加分公式','排名前N','排名奖励分'];
   const KM_LABEL={rate:'完成率=兑现系数',r11:'奖一罚一',fml:'设定公式',direct:'直接得分'};
-  const AGG_LABEL={sum:'累计总和',avg:'日均值',fraction:'分数聚合',last:'取末值',max:'取最大值',min:'取最小值'};
+  const AGG_LABEL={sum:'累计总和',avg:'日均值',fraction:'分数聚合',last:'取末值',max:'取最大值',min:'取最小值',topavg:'最高N天均值'};
   const BM_LABEL={step:'阶梯加分',fml:'自定义公式'};
   let rows=kpiTemplates.map(k=>{
     const r=k.rule||{};
-    return[k.code||'K'+k.id,k.name,k.type,k.level||'',r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',AGG_LABEL[k.monthAgg]||'',KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':'',k.desc||'',k.nameEs||'',k.descEs||'',r.bonusEnabled?BM_LABEL[r.bonusMode]||'阶梯加分':'',r.bonusEnabled&&r.bonusStep!=null?r.bonusStep:'',r.bonusEnabled&&r.bonusPerStep!=null?r.bonusPerStep:'',r.bonusEnabled&&r.bonusCap!=null?r.bonusCap:'',r.bonusEnabled&&r.bonusFormula?r.bonusFormula:'',r.topN!=null?r.topN:'',r.topPoints!=null?r.topPoints:''];
+    return[k.code||'K'+k.id,k.name,k.type,k.level||'',r.kd==='control'?'控制类':'达成类',k.target,k.unit||'',k.period||'月度',k.monthAgg==='topavg'?'最高'+(k.topDays||'N')+'天均值':(AGG_LABEL[k.monthAgg]||''),KM_LABEL[r.km]||'完成率=兑现系数',r.rateCap!=null?r.rateCap:150,r.rateFloor!=null?r.rateFloor:0,r.formula||'',k.teamShared?'是':'',k.desc||'',k.nameEs||'',k.descEs||'',r.bonusEnabled?BM_LABEL[r.bonusMode]||'阶梯加分':'',r.bonusEnabled&&r.bonusStep!=null?r.bonusStep:'',r.bonusEnabled&&r.bonusPerStep!=null?r.bonusPerStep:'',r.bonusEnabled&&r.bonusCap!=null?r.bonusCap:'',r.bonusEnabled&&r.bonusFormula?r.bonusFormula:'',r.topN!=null?r.topN:'',r.topPoints!=null?r.topPoints:''];
   });
   if(!rows.length)rows=[
     ['K001','示例销售达成率','KPI类','部门级','达成类',100,'%','月度','','完成率=兑现系数',150,0,'','','月度销售目标完成率','','','阶梯加分',50,50,'','','',''],
@@ -4249,9 +4270,11 @@ function handleKpiFile(e){
         const desc=String(row['描述']||row['Description']||'').trim()||undefined;
         const nameEs=String(row['西语名称']||row['NameEs']||'').trim()||undefined;
         const descEs=String(row['西语描述']||row['DescEs']||'').trim()||undefined;
-        const AGG_ALIAS={'累计总和':'sum','sum':'sum','日均值':'avg','avg':'avg','分数聚合':'fraction','fraction':'fraction','取末值':'last','last':'last','取最大值':'max','max':'max','取最小值':'min','min':'min'};
+        const AGG_ALIAS={'累计总和':'sum','sum':'sum','日均值':'avg','avg':'avg','分数聚合':'fraction','fraction':'fraction','取末值':'last','last':'last','取最大值':'max','max':'max','取最小值':'min','min':'min','topavg':'topavg'};
         const monthAggRaw=String(row['月度取值']||row['MonthAgg']||'').trim();
-        const monthAgg=AGG_ALIAS[monthAggRaw]||undefined;
+        const topAvgMatch=monthAggRaw.match(/^最高(\d+)天均值$/);
+        const monthAgg=topAvgMatch?'topavg':(AGG_ALIAS[monthAggRaw]||undefined);
+        const topDays=topAvgMatch?parseInt(topAvgMatch[1],10):undefined;
         const rule={kd:dir.includes('控制')?'control':'achieve',km,rateCap:cap,rateFloor:floor,formula:(km!=='rate'&&km!=='direct')?formula:undefined};
         const bmRaw=String(row['超额加分模式']||row['BonusMode']||'').trim();
         if(bmRaw){
@@ -4264,8 +4287,8 @@ function handleKpiFile(e){
         }
         const topN=parseInt(row['排名前N']||row['TopN']||'');if(!isNaN(topN)){rule.topN=topN;rule.topPoints=parseFloat(row['排名奖励分']||row['TopPoints']||0)||0;}
         const ex=code?kpiTemplates.find(k=>k.code===code):null;
-        if(ex){Object.assign(ex,{name,type,level,target,unit,period,monthAgg,teamShared,desc,nameEs,descEs,rule:Object.assign({},ex.rule,rule)});updated++;}
-        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,nameEs,desc,descEs,type,level,target,unit,period,monthAgg,teamShared,rule});added++;}
+        if(ex){Object.assign(ex,{name,type,level,target,unit,period,monthAgg,topDays,teamShared,desc,nameEs,descEs,rule:Object.assign({},ex.rule,rule)});updated++;}
+        else{kpiTemplates.push({id:Date.now()+Math.floor(Math.random()*1000),code:code||('K'+Date.now().toString().slice(-5)),name,nameEs,desc,descEs,type,level,target,unit,period,monthAgg,topDays,teamShared,rule});added++;}
       });
       await saveAndToast(`导入完成：新增 ${added}，更新 ${updated}`);renderKpiLib();
     }catch(err){console.error(err);toast('导入失败：'+err.message);}
@@ -4273,11 +4296,12 @@ function handleKpiFile(e){
   };
   r.readAsArrayBuffer(f);
 }
-function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';if($('ki-level'))$('ki-level').value='';if($('ki-month-agg'))$('ki-month-agg').value='';if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('ki-target').value='';$('ki-unit').value='';$('kr-cap').value=150;$('kr-floor').value=0;$('kf-fml').value='';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const _bte=$('kb-bonus-rank-tiers');if(_bte)_bte.innerHTML='';const _rte=$('kb-rank-tiers');if(_rte)_rte.innerHTML='';$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';if($('ki-team-shared'))$('ki-team-shared').checked=false;applyKModes();}
+function resetKPIModal(){kd='achieve';km='rate';$('ki-name').value='';if($('ki-level'))$('ki-level').value='';if($('ki-month-agg'))$('ki-month-agg').value='';if($('ki-topdays'))$('ki-topdays').value='';toggleTopDaysField();if($('ki-desc'))$('ki-desc').value='';if($('ki-desc-es'))$('ki-desc-es').value='';$('ki-target').value='';$('ki-unit').value='';$('kr-cap').value=150;$('kr-floor').value=0;$('kf-fml').value='';$('kp-actual').value='';$('kp-res').style.display='none';$('kp-explain').style.display='none';$('kp-err').style.display='none';const _bte=$('kb-bonus-rank-tiers');if(_bte)_bte.innerHTML='';const _rte=$('kb-rank-tiers');if(_rte)_rte.innerHTML='';$('kb-enabled').checked=false;$('kpi-bonus-body').style.display='none';if($('ki-team-shared'))$('ki-team-shared').checked=false;applyKModes();}
 function setKD(v){kd=v;applyKModes();}function setKM(v){km=v;applyKModes();}
 let bonusMode='step';
 function setBonusMode(v){bonusMode=v;$('bp-step').classList.toggle('on',v==='step');$('bp-fml').classList.toggle('on',v==='fml');$('bonus-cfg-step').style.display=v==='step'?'grid':'none';$('bonus-cfg-fml').style.display=v==='fml'?'block':'none';updateKPIPreview();}
 function toggleBonusEnabled(){const on=$('kb-enabled').checked;$('kpi-bonus-body').style.display=on?'block':'none';updateKPIPreview();}
+function toggleTopDaysField(){const wrap=$('ki-topdays-wrap');if(wrap)wrap.style.display=$('ki-month-agg').value==='topavg'?'block':'none';}
 function applyKModes(){
   ['achieve','control'].forEach(v=>$('kp-'+v).classList.toggle('on',v===kd));
   ['rate','r11','fml','direct'].forEach(v=>$('km-'+v).classList.toggle('on',v===km||(v==='fml'&&km!=='rate'&&km!=='r11'&&km!=='direct')));
@@ -7936,7 +7960,7 @@ const ES_DICT={
 '主动 / 被动 占比':'Proporción Voluntaria / Involuntaria',
 '保存失败，数据未写入':'Error al guardar, los datos no se escribieron',
 '分（直接叠加到总分）':'puntos (se suman directamente al puntaje total)',
-'单位为 % 的指标按':'Para los indicadores con unidad %,',
+'月度取值方式为"分数聚合"的指标按':'Los indicadores cuyo método de valor mensual es "agregación de fracción" se registran como',
 '如 EMP-S001':'ej. EMP-S001',
 '导出离线版（含数据）':'Exportar versión sin conexión (con datos)',
 '日期格式不正确，应为':'Formato de fecha incorrecto, debe ser',
