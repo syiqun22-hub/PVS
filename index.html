@@ -2490,6 +2490,19 @@ function isEvalEligible(e){return empEvalStatus(e)==='正常';}
 function mxEmpsEligible(){return mxEmps().filter(isEvalEligible);}
 // 试用期、暂不参与绩效评价的墨方员工（待执行名单）
 function mxEmpsPending(){return mxEmps().filter(e=>!isEvalEligible(e));}
+// 数据总览页专用范围：与"墨方绩效评价"查询页口径一致（国籍墨西哥、非离职、非试用），
+// 只统计墨方绩效评价的完成情况，避免把不参与评价的试用期员工/中方员工算进分母
+function mxEvalPool(){return (canEdit()?employees:employees.filter(empInScope)).filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&isEvalEligible(e));}
+function getDeptStatsMx(y,m){
+  const byDept={};
+  mxEvalPool().forEach(e=>{if(!byDept[e.dept])byDept[e.dept]=[];byDept[e.dept].push(e);});
+  return departments.map(d=>{
+    const emps=byDept[d.name]||[];
+    let doneCount=0,scoreSum=0,scoreCnt=0;
+    emps.forEach(e=>{const ms=getMS(e.id,y,m);if(ms.done){doneCount++;if(ms.totalScore!==null){scoreSum+=ms.totalScore;scoreCnt++;}}});
+    return{...d,_emp:emps.length,_done:doneCount,_avg:scoreCnt?Math.round(scoreSum/scoreCnt*10)/10:0};
+  });
+}
 // 中方：仅国籍为中国的员工（在职）
 function cnEmps(){return visibleEmps().filter(e=>empNat(e)==='中国');}
 // 逐日明细月度均分：直接读 dailyScores，任意年月均可用
@@ -2529,11 +2542,11 @@ function getDeptStats(y,m){
 }
 // DASHBOARD
 function renderDashboard(){
-  const vis=visibleEmps();const total=vis.length,done=vis.filter(e=>getMS(e.id).done).length;
+  const vis=mxEvalPool();const total=vis.length,done=vis.filter(e=>getMS(e.id).done).length;
   const scores=vis.map(e=>getMS(e.id).totalScore).filter(s=>s!==null);
   const avg=scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:0;
   $('m-rate').textContent=total?Math.round(done/total*100)+'%':'-';$('m-rate-sub').textContent=`${done} / ${total}`;$('m-avg').textContent=avg||'-';$('m-pending').textContent=total-done;$('m-total').textContent=total;
-  const ds=getDeptStats();
+  const ds=getDeptStatsMx();
   $('dept-progress-list').innerHTML=ds.slice(0,10).map(d=>{const pct=d._emp?Math.round(d._done/d._emp*100):0;const col=pct>=80?'#28a745':pct>=50?'#ffc107':'#dc3545';return`<div style="display:grid;grid-template-columns:140px 1fr 60px;gap:10px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span>${d.name}</span><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div><span style="font-size:12px;text-align:right">${pct}%</span></div>`;}).join('');
   const top10=[...vis].map(e=>({...e,ts:getMS(e.id).totalScore})).filter(e=>e.ts!==null).sort((a,b)=>b.ts-a.ts).slice(0,10);
   $('rank-table').innerHTML=top10.map((e,i)=>`<tr><td><span class="rank-num ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">${i+1}</span></td><td>${e.name}</td><td>${getDeptLabel(e.dept)}</td><td><strong>${e.ts}</strong></td></tr>`).join('');
