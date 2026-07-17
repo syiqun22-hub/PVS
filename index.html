@@ -2933,7 +2933,7 @@ function resetQuery(){$('q-dept').value='';$('q-grade').value='';$('q-search').v
 function exportQuery(){
   // 仅导出国籍为墨西哥、且非离职/非待岗的员工（与本页"仅墨西哥员工"口径一致）
   const list=mxEmps();
-  const rows=[['工号','姓名','部门','岗位','员工状态','月份','评估状态','总分','等级','额外加分说明','指标达成明细']];
+  const rows=[['工号','姓名','部门','岗位','员工状态','评价状态','月份','评估状态','总分','等级','额外加分说明','指标达成明细']];
   list.forEach(e=>{
     const ms=getMS(e.id,qY,qM);
     const g=ms.totalScore!==null?getGrade(ms.totalScore):null;
@@ -2946,7 +2946,7 @@ function exportQuery(){
       const target=frac&&frac.den!=null?frac.den:'—';
       return `${getName(k)}：${actual}/${target}（${score}分）`;
     }).join(' | ');
-    rows.push([e.id,e.name,e.dept,e.position||'',empStatusCN(e),mLabel(qY,qM),ms.done?'已完成':'待完成',ms.totalScore!=null?ms.totalScore:'',g?g.k:'',ms.bonusReason||'',details]);
+    rows.push([e.id,e.name,e.dept,e.position||'',empStatusCN(e),empEvalStatus(e),mLabel(qY,qM),ms.done?'已完成':'待完成',ms.totalScore!=null?ms.totalScore:'',g?g.k:'',ms.bonusReason||'',details]);
   });
   const ws=XLSX.utils.aoa_to_sheet(rows);
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'绩效评估');
@@ -3277,12 +3277,12 @@ function exportQDailyOverview(){
   // 仅导出国籍为墨西哥、且非离职/非待岗的员工
   let list=mxEmps().filter(e=>!dF||e.dept===dF);
   const n=daysInMonth(qY,qM);
-  const rows=[['工号','姓名','部门','岗位','员工状态','考核指标数','已录天数','本月天数','日均绩效总分','等级','最近录入日','最近录入分']];
+  const rows=[['工号','姓名','部门','岗位','员工状态','评价状态','考核指标数','已录天数','本月天数','日均绩效总分','等级','最近录入日','最近录入分']];
   list.forEach(e=>{
     const vals=qdMonthVals(e.id);if(!vals.length&&getEmpKPIs(e).length===0)return;
     const avg=vals.length?Math.round(vals.reduce((a,b)=>a+b.v,0)/vals.length*10)/10:'';
     const g=avg!==''?getGrade(avg):null;const last=vals.length?vals[vals.length-1]:null;
-    rows.push([e.id,e.name,e.dept||'',e.position||'',empStatusCN(e),getEmpKPIs(e).length,vals.length,n,avg,g?g.k:'',last?last.d+'日':'',last?last.v:'']);
+    rows.push([e.id,e.name,e.dept||'',e.position||'',empStatusCN(e),empEvalStatus(e),getEmpKPIs(e).length,vals.length,n,avg,g?g.k:'',last?last.d+'日':'',last?last.v:'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,mKey(qY,qM));
   XLSX.writeFile(wb,`逐日绩效全员总览_${mKey(qY,qM)}.xlsx`);toast('导出成功');
@@ -3675,11 +3675,11 @@ function exportQRank(){
   const dF=$('qr-dept')?$('qr-dept').value:'';
   // 仅导出国籍为墨西哥、且非离职/非待岗的员工
   const list=mxEmps().filter(e=>!dF||e.dept===dF);
-  const rows=[['岗位','排名','工号','姓名','部门','员工状态','日均绩效总分','等级','考核指标数']];
+  const rows=[['岗位','排名','工号','姓名','部门','员工状态','评价状态','日均绩效总分','等级','考核指标数']];
   const posMap={};list.forEach(e=>{const p=e.position||'未设置岗位';if(!posMap[p])posMap[p]=[];posMap[p].push(e);});
   Object.entries(posMap).forEach(([pos,emps])=>{
     const scored=emps.map(e=>({e,avg:getEmpDailyAvg(e.id)}));scored.sort((a,b)=>b.avg-a.avg);
-    scored.forEach((r,i)=>{const g=r.avg>0?getGrade(r.avg):null;rows.push([pos,i+1,r.e.id,r.e.name,r.e.dept,empStatusCN(r.e),r.avg,g?g.k:'',getEmpKPIs(r.e).length]);});
+    scored.forEach((r,i)=>{const g=r.avg>0?getGrade(r.avg):null;rows.push([pos,i+1,r.e.id,r.e.name,r.e.dept,empStatusCN(r.e),empEvalStatus(r.e),r.avg,g?g.k:'',getEmpKPIs(r.e).length]);});
   });
   const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,mKey(qY,qM));
   XLSX.writeFile(wb,`岗位绩效排名_${mKey(qY,qM)}.xlsx`);toast('导出成功');
