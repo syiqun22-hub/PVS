@@ -2160,7 +2160,6 @@ async function saveConfig(items) {
       { id: 'accounts', value: accounts },
       { id: 'expectedDays', value: expectedDays },
       { id: 'lateData', value: lateData },
-      { id: 'monthlyScores', value: monthlyScores },
     ];
     const { data: savedRows, error } = await _sbClient.from('pvs_config').upsert(items, { onConflict: 'id' }).select('id');
     if (error) { console.error('saveConfig error', error); return false; }
@@ -2221,6 +2220,19 @@ async function saveOvertime(empId, period) {
     if (error) { console.error('saveOvertime error', error); return false; }
     return true;
   } catch(e) { console.error('saveOvertime error', e); return false; }
+}
+
+async function saveMonthly(empId, period) {
+  if (!_sbWriteAllowed()) return true;
+  try {
+    const data = (monthlyScores[period] && monthlyScores[period][empId]) || null;
+    const { error } = await _sbClient.from('pvs_monthly').upsert(
+      { emp_id: empId, period, data, updated_at: new Date().toISOString() },
+      { onConflict: 'emp_id,period' }
+    );
+    if (error) { console.error('saveMonthly error', error); return false; }
+    return true;
+  } catch(e) { console.error('saveMonthly error', e); return false; }
 }
 
 // ---- 批量保存（向后兼容，所有 saveAll() 调用处继续正常工作）----
@@ -2296,7 +2308,34 @@ async function _doSaveAll(fullConfig) {
       if (dailyOk) dirtyKeys.forEach(k => _dirtyDaily.delete(k));
     }
 
-    const cfgOk = await saveConfig(fullConfig ? undefined : [{ id: 'monthlyScores', value: monthlyScores }]);
+    // pvs_monthly：月度评估数据按"员工+月份"粒度存储，只写"脏"记录，
+    // 不再把全公司历年所有月度数据当成一整块 JSON 重新上传（那是逐日录入
+    // 越用越慢的主因——见 saveConfig 里已移除的 monthlyScores 整块字段）。
+    const dirtyMonthlyKeys = [..._dirtyMonthly];
+    const monthlyUpserts = [];
+    for (const key of dirtyMonthlyKeys) {
+      const sep = key.indexOf('|');
+      const empId = key.slice(0, sep), period = key.slice(sep + 1);
+      const rec = (monthlyScores[period] && monthlyScores[period][empId]) || null;
+      monthlyUpserts.push({ emp_id: empId, period, data: rec, updated_at: new Date().toISOString() });
+    }
+    if (monthlyUpserts.length) {
+      let monthlyOk = true;
+      const CHUNK = 500;
+      for (let i = 0; i < monthlyUpserts.length; i += CHUNK) {
+        const chunk = monthlyUpserts.slice(i, i + CHUNK);
+        const { data: savedRows, error } = await _sbClient.from('pvs_monthly').upsert(chunk, { onConflict: 'emp_id,period' }).select('emp_id,period');
+        if (error) { console.error('saveAll monthly error', error); toast('⚠️ 月度评估数据保存失败：'+error.message); ok = false; monthlyOk = false; break; }
+        else if (!savedRows || savedRows.length !== chunk.length) {
+          console.error('saveAll monthly verify mismatch', { expected: chunk.length, got: savedRows && savedRows.length });
+          toast('⚠️ 月度评估数据写入未确认（可能是数据库权限问题），请联系管理员检查 pvs_monthly 表的写入权限');
+          ok = false; monthlyOk = false; break;
+        }
+      }
+      if (monthlyOk) dirtyMonthlyKeys.forEach(k => _dirtyMonthly.delete(k));
+    }
+
+    const cfgOk = fullConfig ? await saveConfig() : true;
     if (!cfgOk) { toast('⚠️ 配置数据保存失败，请检查网络连接'); ok = false; }
 
     if (fullConfig) {
@@ -2347,6 +2386,8 @@ async function saveAndToast(m) {
 let _lastSavedAt = 0;
 // 待写入数据库的逐日记录（"empId|date" 集合），由 saveDailyCell/saveDailyFraction 标记
 let _dirtyDaily = new Set();
+// 待写入数据库的月度评估记录（"empId|period" 集合），由 syncDailyToMonthly/saveEval 标记
+let _dirtyMonthly = new Set();
 
 // 保存状态可视化：用户此前反馈"录入后不知道有没有保存上、有时要等很久"，
 // 之前自动保存完全静默（无 toast、无状态提示），失败也只在 console 里能看到。
@@ -2416,7 +2457,7 @@ async function loadAll(){
       document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa"><div style="background:#162145;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)"><div style="font-size:32px;margin-bottom:12px">⚙️</div><div style="font-size:18px;font-weight:600;margin-bottom:10px">请先配置 Supabase</div><div style="font-size:13px;color:#666;line-height:1.7">打开 index.html 文件，找到顶部的<br><code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_URL</code> 和 <code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_ANON_KEY</code><br>填入你的 Supabase 项目信息后重新上传。</div></div></div>`;
       return;
     } else {
-      var eR,dR,secR,kR,pR,aR,sR,attR,srR,otR,edR,dsdR,ldR;
+      var eR,dR,secR,kR,pR,aR,attR,srR,otR,edR,dsdR,ldR,msR,legacyMS;
 
       // 从 pvs_config 加载配置
       const cfgRows = await _fetchAllRows('pvs_config', 'id,value');
@@ -2424,8 +2465,14 @@ async function loadAll(){
         const cfg = {};
         cfgRows.forEach(r => { cfg[r.id] = r.value; });
         eR=cfg.employees;dR=cfg.departments;secR=cfg.sections;kR=cfg.kpiTemplates;
-        pR=cfg.positions;aR=cfg.accounts;sR=cfg.monthlyScores;edR=cfg.expectedDays;ldR=cfg.lateData;
+        pR=cfg.positions;aR=cfg.accounts;edR=cfg.expectedDays;ldR=cfg.lateData;
+        legacyMS=cfg.monthlyScores; // 旧版整块存储的月度评估数据，仅用于一次性迁移
       }
+
+      // 从 pvs_monthly 加载月度评估数据（按"员工+月份"粒度存储，取代旧的整块 pvs_config.monthlyScores）
+      const monthlyRows = await _fetchAllRows('pvs_monthly', 'emp_id,period,data');
+      msR = {};
+      if (monthlyRows) { monthlyRows.forEach(r => { if(!msR[r.period])msR[r.period]={}; msR[r.period][r.emp_id]=r.data; }); }
 
       // 从 pvs_daily 加载逐日得分
       const dailyRows = await _fetchAllRows('pvs_daily', 'emp_id,date,data');
@@ -2460,8 +2507,32 @@ async function loadAll(){
         _suspectEmptyLoad = true;
         console.error('[SB] 未读取到 pvs_config.employees，本次加载不会自动写回数据库（避免覆盖真实数据）。');
       }
-      employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};
+      employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};
+      monthlyScores=msR||{};
       _dirtyDaily.clear(); // dailyScores 已从数据库重新加载，内存中旧的脏标记已失效，清除避免把旧数据重新写回
+      _dirtyMonthly.clear();
+
+      // 一次性迁移：pvs_monthly 是新表，如果这次是"真实成功"的加载（不是读取异常）、
+      // 新表里还没有数据、但旧的 pvs_config.monthlyScores 整块 JSON 里有历史数据，
+      // 说明还没做过迁移，把历史数据灌入新表一次，以后就都走新表的按条读写了。
+      if(!_suspectEmptyLoad && Object.keys(msR).length===0 && legacyMS && Object.keys(legacyMS).length>0){
+        try{
+          monthlyScores=legacyMS;
+          const migrateRows=[];
+          Object.keys(legacyMS).forEach(period=>{
+            Object.keys(legacyMS[period]||{}).forEach(empId=>{
+              migrateRows.push({emp_id:empId,period,data:legacyMS[period][empId],updated_at:new Date().toISOString()});
+            });
+          });
+          const CHUNK=500;
+          for(let i=0;i<migrateRows.length;i+=CHUNK){
+            const chunk=migrateRows.slice(i,i+CHUNK);
+            const {error}=await _sbClient.from('pvs_monthly').upsert(chunk,{onConflict:'emp_id,period'});
+            if(error){console.error('[SB] monthlyScores 迁移到 pvs_monthly 失败',error);break;}
+          }
+          console.warn('[SB] 已将 '+migrateRows.length+' 条历史月度评估数据从 pvs_config.monthlyScores 迁移到 pvs_monthly');
+        }catch(e){console.error('[SB] monthlyScores 迁移异常',e);}
+      }
     }
     if(!positions||positions.length===0){positions=defPositions();}
     if(!sections||sections.length===0){sections=defSections();}
@@ -2799,6 +2870,7 @@ function syncDailyToMonthly(empId){
   ms.bonusReason=(anyData&&adj.bonusReason&&!adj.zeroed)?adj.bonusReason:null;
   ms.zeroReason=adj.zeroed?adj.reason:null;
   ms.done=ms.totalScore!==null;
+  _dirtyMonthly.add(empId+'|'+mKey(qY,qM));
 }
 let _qDailyEmpId=null;
 let _qDailySaveT=null;
@@ -4097,6 +4169,7 @@ async function saveEval(){
   });
   const allFilled=kpis.length>0&&kpis.every(k=>ms.scores[k.id]!==null&&ms.scores[k.id]!==undefined);
   ms.done=allFilled;if(allFilled){const res=calcTotal(ms.scores,currentEvalEmp,currentEvalEmp.id,curY,curM);ms.totalScore=res.score;ms.bonusReason=res.bonusReasons.length?res.bonusReasons.join('；'):null;}else{ms.totalScore=null;ms.bonusReason=null;}
+  _dirtyMonthly.add(currentEvalEmp.id+'|'+mk);
   closeM('modal-eval');await saveAndToast('评估已保存');filterEmp();renderQuery();if(document.getElementById('page-emp-eval')?.classList.contains('active'))renderEmpEval();
 }
 // DEPARTMENTS
@@ -6833,6 +6906,10 @@ function handleBackupFile(e){
       overtimeData=data.overtimeData||{};
       dailyScores=data.dailyScores||{};
       expectedDays=data.expectedDays||{};lateData=data.lateData||{};
+      // pvs_daily/pvs_monthly 是按"脏记录"增量写入的，整份覆盖时必须把恢复出来的
+      // 每一条都标记为脏，否则 saveAll() 会认为没有改动而不写入，刷新后又变回旧数据
+      Object.keys(dailyScores).forEach(empId=>{Object.keys(dailyScores[empId]||{}).forEach(ds=>_dirtyDaily.add(empId+'|'+ds));});
+      Object.keys(monthlyScores).forEach(period=>{Object.keys(monthlyScores[period]||{}).forEach(empId=>_dirtyMonthly.add(empId+'|'+period));});
       await saveAll();
       toast('✅ 恢复成功，2秒后刷新...');
       setTimeout(()=>location.reload(),1500);
@@ -6966,7 +7043,6 @@ loadAll().then(()=>{
             if (cfg.sections) sections = cfg.sections;
             if (cfg.kpiTemplates) kpiTemplates = cfg.kpiTemplates;
             if (cfg.positions) positions = cfg.positions;
-            if (cfg.monthlyScores) monthlyScores = cfg.monthlyScores;
             if (cfg.expectedDays) expectedDays = cfg.expectedDays;
             if (cfg.lateData) lateData = cfg.lateData;
             // handle attendance week keys
@@ -7035,6 +7111,22 @@ loadAll().then(()=>{
           if (r.emp_id && r.period) {
             if (!overtimeData[r.period]) overtimeData[r.period] = {};
             overtimeData[r.period][r.emp_id] = r.data;
+            _reloadActivePage();
+          }
+        } catch(e) {}
+      }).subscribe();
+
+    _sbClient.channel('pvs_monthly_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_monthly' }, payload => {
+        if (!currentUser) return;
+        if (_suppressRealtime) return;
+        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
+        try {
+          const r = payload.new || {};
+          if (r.emp_id && r.period) {
+            if (_dirtyMonthly.has(r.emp_id + '|' + r.period)) return;
+            if (!monthlyScores[r.period]) monthlyScores[r.period] = {};
+            monthlyScores[r.period][r.emp_id] = r.data;
             _reloadActivePage();
           }
         } catch(e) {}
