@@ -350,6 +350,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div class="avatar" id="user-avatar"></div>
       <div><div style="font-size:13px;font-weight:500;max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="user-name"></div><div style="font-size:11px;color:var(--color-text-tertiary)" id="user-role"></div></div>
     </div>
+    <div id="save-status" style="font-size:10px;text-align:center;margin-bottom:4px;min-height:14px;color:var(--color-text-tertiary)"></div>
     <div style="display:flex;gap:6px;margin-bottom:6px">
       <button class="btn btn-sm btn-primary" style="flex:1;justify-content:center" id="save-btn" onclick="doManualSave()"><i class="ti ti-device-floppy"></i>保存数据</button>
       <button class="btn btn-sm" style="flex:1;justify-content:center" id="refresh-btn" onclick="doRefresh()"><i class="ti ti-refresh"></i>刷新数据</button>
@@ -1877,6 +1878,17 @@ function dedupeIds(arr,prefix){let changed=false;const seen=new Set();arr.forEac
 function toast(m){const e=$('toast-el');e.textContent=m;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2400);}
 function showLoading(txt){$('loading-overlay').style.display='flex';$('loading-txt').textContent=txt||'...';}
 function hideLoading(){$('loading-overlay').style.display='none';}
+// 数据库读取异常（返回空/失败）时的持久警示条：不会像 toast 那样自动消失，
+// 提醒管理员在确认问题前不要继续操作，避免把演示数据当真实数据用下去
+function showDataLoadWarning(){
+  if($('data-load-warning'))return;
+  const bar=document.createElement('div');
+  bar.id='data-load-warning';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:10px 16px;font-size:13px;line-height:1.6;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  bar.innerHTML='⚠️ 未能从数据库读取到已保存的员工/部门/指标配置，当前显示的可能是内置演示数据。为防止误覆盖真实数据，本次加载已<strong>禁止自动保存</strong>。请勿继续录入或点击保存，先刷新页面重试；若反复出现，请检查网络连接或联系管理员核实 Supabase 项目状态。'
+    +'&nbsp;<button onclick="location.reload()" style="margin-left:8px;background:#fff;color:#c0392b;border:none;border-radius:4px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer">刷新页面</button>';
+  document.body.appendChild(bar);
+}
 function toggleSidebar(){
   const sb=document.getElementById('main-sidebar');
   const collapsed=sb.classList.toggle('collapsed');
@@ -2102,9 +2114,17 @@ const _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, 
   }
 });
 
+// 本次加载是否"读取异常/为空"，怀疑读到的不是真实数据（网络问题/权限问题/项目暂停唤醒等）。
+// 一旦置位，禁止任何自动保存，防止把演示数据误写回数据库覆盖真实数据。
+let _suspectEmptyLoad = false;
 function _sbWriteAllowed() {
   if (window.__EMBEDDED_SNAPSHOT) {
     console.warn('[SB] 离线快照模式，跳过写入');
+    return false;
+  }
+  if (_suspectEmptyLoad) {
+    console.warn('[SB] 本次加载未读取到已保存的员工配置，为防止误覆盖真实数据，已临时禁止写入。');
+    if (typeof toast === 'function') toast('⚠️ 未能确认已读取到真实数据，保存已禁用，请先刷新页面');
     return false;
   }
   return true;
@@ -2227,7 +2247,12 @@ async function saveAll(fullConfig = true) {
 }
 async function _doSaveAll(fullConfig) {
   try {
+    if (_suspectEmptyLoad) {
+      toast('⚠️ 未能确认已读取到真实数据，保存已禁用，请先刷新页面');
+      return false;
+    }
     if (!_sbWriteAllowed()) { return true; }
+    _setSaveStatus('saving');
     // 提前标记保存时间：写入过程中（网络往返期间）若收到自己这次写入触发的
     // Realtime 通知，靠这个时间戳判断"是自己刚保存的"而跳过重新拉取覆盖，
     // 否则旧的本地快照可能在新数据落库前被重新拉取回来，把刚保存的修改（如
@@ -2307,8 +2332,9 @@ async function _doSaveAll(fullConfig) {
     }
 
     if (ok) _lastSavedAt = Date.now();
+    _setSaveStatus(ok ? 'saved' : 'error');
     return ok;
-  } catch(e) { console.error('saveAll error', e); toast('⚠️ 保存失败：'+e.message); return false; }
+  } catch(e) { console.error('saveAll error', e); toast('⚠️ 保存失败：'+e.message); _setSaveStatus('error'); return false; }
 }
 
 async function saveAndToast(m) {
@@ -2321,6 +2347,29 @@ async function saveAndToast(m) {
 let _lastSavedAt = 0;
 // 待写入数据库的逐日记录（"empId|date" 集合），由 saveDailyCell/saveDailyFraction 标记
 let _dirtyDaily = new Set();
+
+// 保存状态可视化：用户此前反馈"录入后不知道有没有保存上、有时要等很久"，
+// 之前自动保存完全静默（无 toast、无状态提示），失败也只在 console 里能看到。
+// 这里给 user-bar 里的"保存数据"按钮上方加一条持久状态条，任何时候都能看出
+// 当前是"有修改未保存/保存中/已保存/保存失败"，失败态会一直亮着直到重试成功。
+function _setSaveStatus(state){
+  const el=document.getElementById('save-status');if(!el)return;
+  const time=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  if(state==='dirty'){el.textContent='● 有未保存的修改…';el.style.color='#b9770e';}
+  else if(state==='saving'){el.textContent='⏳ 保存中…';el.style.color='#2563eb';}
+  else if(state==='saved'){el.textContent='✓ 已保存 '+time;el.style.color='#1f8a5b';}
+  else if(state==='error'){el.textContent='⚠️ 保存失败，请检查网络后重试';el.style.color='#c0392b';}
+  else{el.textContent='';}
+}
+// 有未落库的修改（脏标记或正在等待防抖计时器触发）时，离开/关闭页面前用浏览器
+// 原生确认框拦一下，避免编辑完就切走/关标签页导致数据静默丢失
+window.addEventListener('beforeunload', function(e){
+  if(_dirtyDaily.size>0 || _qDailySaveT){
+    e.preventDefault();
+    e.returnValue='';
+    return '';
+  }
+});
 
 let _suppressRealtime = false, _suppressTimer = null;
 function _suppressRealtimeFor(ms) {
@@ -2404,6 +2453,13 @@ async function loadAll(){
       otR = {};
       if (otRows) { otRows.forEach(r => { if(!otR[r.period])otR[r.period]={}; otR[r.period][r.emp_id]=r.data; }); }
 
+      if(!eR){
+        // pvs_config 里读不到 employees：可能是网络问题/权限问题/项目刚从暂停中唤醒等一次性异常，
+        // 也可能是真的全新空账套。两者从代码里无法可靠区分，为防止把演示数据误写回覆盖真实数据，
+        // 一律先按"读取异常"处理：只在内存里展示演示数据，禁止自动保存，并提示管理员核实。
+        _suspectEmptyLoad = true;
+        console.error('[SB] 未读取到 pvs_config.employees，本次加载不会自动写回数据库（避免覆盖真实数据）。');
+      }
       employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();monthlyScores=sR||{};attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};
       _dirtyDaily.clear(); // dailyScores 已从数据库重新加载，内存中旧的脏标记已失效，清除避免把旧数据重新写回
     }
@@ -2427,9 +2483,10 @@ async function loadAll(){
     let _idFixed=false;
     if(dedupeIds(positions,'P'))_idFixed=true;
     if(dedupeIds(sections,'SEC'))_idFixed=true;
-    if(!eR||_idFixed)await saveAll();
-  }catch(e){console.error(e);employees=defEmployees();departments=defDepts();sections=defSections();kpiTemplates=defKPIs();positions=defPositions();accounts=defAccounts();monthlyScores={};attendanceData={};salaryReviews={};overtimeData={};dailyScores={};expectedDays={};lateData={};}
+    if(_idFixed&&!_suspectEmptyLoad)await saveAll();
+  }catch(e){console.error(e);_suspectEmptyLoad=true;employees=defEmployees();departments=defDepts();sections=defSections();kpiTemplates=defKPIs();positions=defPositions();accounts=defAccounts();monthlyScores={};attendanceData={};salaryReviews={};overtimeData={};dailyScores={};expectedDays={};lateData={};}
   hideLoading();
+  if(_suspectEmptyLoad)showDataLoadWarning();
 }
 // AUTH
 async function hashPassword(p){
@@ -3271,7 +3328,7 @@ function toggleTeamLink(empId,ds,kpiId){
   const tot=recalcDayTotal(empId,ds,emp);
   if(tot==null&&Object.keys(rec.scores).length===0&&Object.keys(rec.fractions).length===0&&Object.keys(rec.unlinked).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
   syncDailyToMonthly(empId);
-  _dirtyDaily.add(empId+'|'+ds);
+  _dirtyDaily.add(empId+'|'+ds);_setSaveStatus('dirty');
   if(!rec.unlinked||!rec.unlinked[kpiId])syncTeamSharedKPI(empId,ds,kpiId,emp,kpi);
   renderQDailyOverview();
   _lastSavedAt=Date.now();clearTimeout(_qDailySaveT);_qDailySaveT=setTimeout(()=>{saveAll(false);},800);
@@ -3289,7 +3346,7 @@ function saveDailyCell(empId,ds,kpiId,val){
   if(tot==null&&Object.keys(rec.scores).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
   // 同步到月度评估
   syncDailyToMonthly(empId);
-  _dirtyDaily.add(empId+'|'+ds);
+  _dirtyDaily.add(empId+'|'+ds);_setSaveStatus('dirty');
   const teamSynced=syncTeamSharedKPI(empId,ds,kpiId,emp,kpi);
   if(teamSynced){renderQDailyOverview();}else{
     const totEl=document.getElementById('qd-tot-'+empId+'-'+ds)||document.getElementById('qd-tot-'+ds);
@@ -3312,7 +3369,7 @@ function saveDailyFraction(empId,ds,kpiId,numVal,denVal){
   const tot=recalcDayTotal(empId,ds,emp);
   if(tot==null&&Object.keys(rec.scores).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
   syncDailyToMonthly(empId);
-  _dirtyDaily.add(empId+'|'+ds);
+  _dirtyDaily.add(empId+'|'+ds);_setSaveStatus('dirty');
   const teamSynced=syncTeamSharedKPI(empId,ds,kpiId,emp,kpi);
   if(teamSynced){renderQDailyOverview();}else{
     const totEl=document.getElementById('qd-tot-'+empId+'-'+ds);
@@ -3431,7 +3488,7 @@ async function importQDaily(event){
       }
       const tot=recalcDayTotal(empId,ds,emp);
       if(tot==null&&Object.keys(rec.scores).length===0&&Object.keys(rec.fractions).length===0&&dailyScores[empId])delete dailyScores[empId][ds];
-      _dirtyDaily.add(empId+'|'+ds);
+      _dirtyDaily.add(empId+'|'+ds);_setSaveStatus('dirty');
       touchedEmps.add(empId);
       touchedCells.push({empId,ds,kpi,emp});
       count++;
@@ -8338,6 +8395,9 @@ const ES_DICT={
 '个周期':'periodos',
 '为在职':'como activo',
 '保存中':'Guardando',
+'有未保存的修改':'Cambios sin guardar',
+'已保存':'Guardado',
+'保存失败，请检查网络后重试':'Error al guardar, verifique la red e intente de nuevo',
 '加分数':'Puntos de bonificación',
 '名员工':'empleados',
 '天调薪':'días de ajuste salarial',
