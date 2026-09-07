@@ -153,14 +153,18 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .att-tbl td:last-child{border-right:none}
 .chip{font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:999px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer;font-family:inherit}
 .chip.active{background:#2563eb;border-color:#2563eb;color:#fff}
-.pc-freeze{min-width:920px}
+.pc-freeze{min-width:960px}
 .pc-freeze th:nth-child(2),.pc-freeze th:nth-child(3),.pc-freeze th:nth-child(4){text-align:left}
+.pc-freeze thead th{position:sticky;top:0;z-index:4}
 .pc-freeze th:nth-child(1),.pc-freeze td:nth-child(1){position:sticky;left:0;width:14px;z-index:2}
 .pc-freeze th:nth-child(2),.pc-freeze td:nth-child(2){position:sticky;left:14px;width:64px;z-index:2}
-.pc-freeze th:nth-child(3),.pc-freeze td:nth-child(3){position:sticky;left:78px;width:90px;z-index:2}
-.pc-freeze th:nth-child(4),.pc-freeze td:nth-child(4){position:sticky;left:168px;width:90px;z-index:2;border-right:1px solid var(--color-border-tertiary)}
+.pc-freeze th:nth-child(3),.pc-freeze td:nth-child(3){position:sticky;left:78px;width:150px;z-index:2}
+.pc-freeze th:nth-child(4),.pc-freeze td:nth-child(4){position:sticky;left:228px;width:90px;z-index:2;border-right:1px solid var(--color-border-tertiary)}
 .pc-freeze td:nth-child(1),.pc-freeze td:nth-child(2),.pc-freeze td:nth-child(3),.pc-freeze td:nth-child(4){background:var(--color-background-primary)}
-.pc-freeze th:nth-child(1),.pc-freeze th:nth-child(2),.pc-freeze th:nth-child(3),.pc-freeze th:nth-child(4){background:var(--color-background-secondary);z-index:3}
+.pc-freeze th:nth-child(1),.pc-freeze th:nth-child(2),.pc-freeze th:nth-child(3),.pc-freeze th:nth-child(4){background:var(--color-background-secondary);z-index:5}
+.pc-freeze th:nth-child(5),.pc-freeze td:nth-child(5){width:56px}
+.pc-freeze th:nth-child(6),.pc-freeze td:nth-child(6){width:56px}
+.pc-freeze th:nth-child(7),.pc-freeze td:nth-child(7){width:64px}
 .att-btn{min-width:52px;padding:3px 4px;border-radius:4px;border:0.5px solid var(--color-border-secondary);font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .1s;display:inline-block}
 .ot-mini{width:46px;padding:2px 4px;font-size:10px;text-align:center;border:0.5px solid var(--color-border-tertiary);border-radius:3px;color:var(--color-text-secondary);background:transparent;margin-top:3px;display:block;margin-left:auto;margin-right:auto;font-family:var(--font-mono)}
 .ot-mini:focus{outline:none;border-color:var(--color-border-primary);color:var(--color-text-primary)}
@@ -380,6 +384,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <button class="tab" id="dash-tab-completion" onclick="switchDashTab('completion',this)">员工明细</button>
   </div>
   <div class="toolbar">
+    <select id="pc-month-f" onchange="renderPerfCompletion()" style="width:110px"></select>
     <select id="pc-dept-f" onchange="pcOnDeptChange()" style="width:150px"><option value="">全部部门</option></select>
     <select id="pc-sec-f" onchange="renderPerfCompletion()" style="width:170px"><option value="">全部科室</option></select>
     <input id="pc-search" placeholder="搜索工号/姓名" oninput="renderPerfCompletion()" style="width:160px">
@@ -400,13 +405,15 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <!-- 员工明细：工号/姓名/岗位 固定列，横向滚动查看其余统计 -->
   <div id="dash-panel-completion" style="display:none">
     <div class="chips" id="pc-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
-    <div class="card" style="padding:0;overflow-x:auto">
+    <div class="card" style="padding:0">
       <div class="card-header" style="padding:14px 16px 0"><div class="card-title">员工填报明细 <span style="font-size:11px;color:var(--color-text-tertiary);font-weight:400" id="pc-gap-count"></span></div></div>
+      <div style="max-height:640px;overflow:auto">
       <table class="att-tbl pc-freeze"><thead><tr>
         <th></th><th style="padding-left:8px">工号</th><th>姓名</th><th>岗位</th>
         <th style="text-align:left">部门</th><th style="text-align:left">科室</th>
         <th>当月绩效<br>兑现天数</th><th>指标填报（按天）</th><th>本月得分</th>
       </tr></thead><tbody id="pc-gap-tbody"></tbody></table>
+      </div>
     </div>
   </div>
 </div>
@@ -8743,8 +8750,28 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
   let _pcChart=null;
 
-  // 统计范围：本月 1 日 ~ 今天
-  function pcRange(){const t=new Date();return{y:t.getFullYear(),m:t.getMonth()+1,d:t.getDate()};}
+  // 月份筛选：默认当月，可切换到之前的月份查看历史填报情况
+  function pcInitMonthFilter(){
+    const sel=$('pc-month-f');
+    if(!sel||sel.options.length)return;
+    const t=new Date();let y=t.getFullYear(),m=t.getMonth()+1;
+    const opts=[];
+    for(let i=0;i<12;i++){
+      opts.push(`<option value="${y}-${m}">${typeof mLabel==='function'?mLabel(y,m):(y+'年'+m+'月')}</option>`);
+      m--;if(m<1){m=12;y--;}
+    }
+    sel.innerHTML=opts.join('');
+  }
+  // 统计范围：所选月份 1 日 ~ 月末（当月则截至今天，之前月份截至月末）
+  function pcRange(){
+    const sel=$('pc-month-f');
+    const t=new Date();
+    let y=t.getFullYear(),m=t.getMonth()+1;
+    if(sel&&sel.value){const parts=sel.value.split('-');y=+parts[0];m=+parts[1];}
+    const isCurrent=(y===t.getFullYear()&&m===(t.getMonth()+1));
+    const d=isCurrent?t.getDate():new Date(y,m,0).getDate();
+    return{y,m,d};
+  }
 
   // 纳入统计的员工：与「墨方绩效评价」完成率口径一致，且岗位已配置绩效指标（否则无法结构性填写）
   function pcPool(){return mxEvalPool().filter(e=>getEmpKPIs(e).length>0);}
@@ -8790,6 +8817,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   }
 
   function pcInitFilters(){
+    pcInitMonthFilter();
     const dsel=$('pc-dept-f');
     if(dsel){
       const cur=dsel.value;
@@ -8992,8 +9020,10 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
   function renderPerfCompletion(){
     const {y,m,d}=pcRange();
+    const t=new Date();
+    const isCurrent=(y===t.getFullYear()&&m===(t.getMonth()+1));
     const lbl=$('pc-range-lbl');
-    if(lbl)lbl.textContent=`统计范围：${y}-${pad2(m)}-01 ~ ${y}-${pad2(m)}-${pad2(d)}（本月至今，仅统计出勤状态为 A 的工作日）`;
+    if(lbl)lbl.textContent=`统计范围：${y}-${pad2(m)}-01 ~ ${y}-${pad2(m)}-${pad2(d)}（${isCurrent?'本月至今':'该月完整数据'}，仅统计出勤状态为 A 的工作日）`;
     renderPCOverview();
     renderPCDetail();
   }
@@ -9041,16 +9071,12 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     });
     html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td style="text-align:left"></td><td>${agg.emp}</td><td>${agg.due}</td><td>${agg.filled}</td><td>${agg.missing||'-'}</td><td>${rateTxt(agg.rate)}</td></tr></tbody></table>`;
 
-    const allGaps=emps.map(e=>pcEmpRowData(e)).filter(x=>x.st.missing>0).sort((a,b)=>b.st.missing-a.st.missing);
-    const gapRows=allGaps.slice(0,40);
-    let gapHtml='<table><thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>科室</th><th>兑现天数</th><th>缺口</th><th>未填日期</th></tr></thead><tbody>';
-    gapRows.forEach(({emp:e,st,perfDays})=>{gapHtml+=`<tr><td>${esc(e.id)}</td><td style="text-align:left">${esc(e.name)}</td><td>${esc(getDeptLabel(e.dept))}</td><td>${esc(getSecLabel(e.section)||'-')}</td><td>${perfDays==null?'':perfDays}</td><td>${st.missing}</td><td style="text-align:left">${esc(st.missingDates.map(dt=>dStr(dt)).join('、'))}</td></tr>`;});
-    gapHtml+='</tbody></table>';
-
     const {y,m,d}=pcRange();
+    const t=new Date();
+    const isCurrent=(y===t.getFullYear()&&m===(t.getMonth()+1));
     window.buildPDFReport({
       title:'绩效填写完成率报表',
-      meta:`统计范围：${y}-${pad2(m)}-01 ~ ${y}-${pad2(m)}-${pad2(d)}（本月至今）　·　仅统计出勤状态为 A 的工作日${dF?'　·　部门：'+getDeptLabel(dF):''}${sF?'　·　科室：'+getSecLabel(sF):''}　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
+      meta:`统计范围：${y}-${pad2(m)}-01 ~ ${y}-${pad2(m)}-${pad2(d)}（${isCurrent?'本月至今':'该月完整数据'}）　·　仅统计出勤状态为 A 的工作日${dF?'　·　部门：'+getDeptLabel(dF):''}${sF?'　·　科室：'+getSecLabel(sF):''}　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
       sections:[
         {kind:'kpi',cards:[
           {label:'应统计人数',value:agg.emp},
@@ -9061,7 +9087,6 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
         ]},
         {kind:'table',title:'各部门/科室绩效填写完成率',html:html},
         {kind:'charts',cols:1,images:[window.chartToImg&&window.chartToImg(_pcChart,'各部门填写完成率对比')]},
-        {kind:'table',title:`未填写明细（存在缺口共 ${allGaps.length} 人，报表最多列出前 40 人，完整名单请用「导出Excel」）`,html:gapHtml},
       ]
     });
     if(window.toast)toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
