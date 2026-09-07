@@ -151,6 +151,16 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .att-tbl td{padding:4px 4px;text-align:center;border-bottom:0.5px solid var(--color-border-tertiary);border-right:0.5px solid var(--color-border-tertiary)}
 .att-tbl td:first-child,.att-tbl td:nth-child(2),.att-tbl td:nth-child(3){text-align:left;padding:7px 8px;background:var(--color-background-secondary);border-right:0.5px solid var(--color-border-tertiary)}
 .att-tbl td:last-child{border-right:none}
+.chip{font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:999px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer;font-family:inherit}
+.chip.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.pc-freeze{min-width:920px}
+.pc-freeze th:nth-child(2),.pc-freeze th:nth-child(3),.pc-freeze th:nth-child(4){text-align:left}
+.pc-freeze th:nth-child(1),.pc-freeze td:nth-child(1){position:sticky;left:0;width:14px;z-index:2}
+.pc-freeze th:nth-child(2),.pc-freeze td:nth-child(2){position:sticky;left:14px;width:64px;z-index:2}
+.pc-freeze th:nth-child(3),.pc-freeze td:nth-child(3){position:sticky;left:78px;width:90px;z-index:2}
+.pc-freeze th:nth-child(4),.pc-freeze td:nth-child(4){position:sticky;left:168px;width:90px;z-index:2;border-right:1px solid var(--color-border-tertiary)}
+.pc-freeze td:nth-child(1),.pc-freeze td:nth-child(2),.pc-freeze td:nth-child(3),.pc-freeze td:nth-child(4){background:var(--color-background-primary)}
+.pc-freeze th:nth-child(1),.pc-freeze th:nth-child(2),.pc-freeze th:nth-child(3),.pc-freeze th:nth-child(4){background:var(--color-background-secondary);z-index:3}
 .att-btn{min-width:52px;padding:3px 4px;border-radius:4px;border:0.5px solid var(--color-border-secondary);font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .1s;display:inline-block}
 .ot-mini{width:46px;padding:2px 4px;font-size:10px;text-align:center;border:0.5px solid var(--color-border-tertiary);border-radius:3px;color:var(--color-text-secondary);background:transparent;margin-top:3px;display:block;margin-left:auto;margin-right:auto;font-family:var(--font-mono)}
 .ot-mini:focus{outline:none;border-color:var(--color-border-primary);color:var(--color-text-primary)}
@@ -361,53 +371,41 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 <div class="main">
 <!-- DASHBOARD -->
 <div id="page-dashboard" class="page active">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:6px">
     <div class="page-title" style="margin-bottom:0" data-i18n="nav_dashboard">总览</div>
-    <div class="month-sel" id="dash-month-sel"><button class="month-btn" onclick="chM(-1)">‹</button><div class="month-lbl" id="dash-month"></div><button class="month-btn" onclick="chM(1)">›</button></div>
+    <div style="font-size:12px;color:var(--color-text-tertiary)" id="pc-range-lbl"></div>
   </div>
   <div class="tabs" style="margin-bottom:16px">
-    <button class="tab active" id="dash-tab-overview" onclick="switchDashTab('overview',this)">总览</button>
-    <button class="tab" id="dash-tab-completion" onclick="switchDashTab('completion',this)">绩效填写进度</button>
+    <button class="tab active" id="dash-tab-overview" onclick="switchDashTab('overview',this)">部门/科室总览</button>
+    <button class="tab" id="dash-tab-completion" onclick="switchDashTab('completion',this)">员工明细</button>
   </div>
+  <div class="toolbar">
+    <select id="pc-dept-f" onchange="pcOnDeptChange()" style="width:150px"><option value="">全部部门</option></select>
+    <select id="pc-sec-f" onchange="renderPerfCompletion()" style="width:170px"><option value="">全部科室</option></select>
+    <input id="pc-search" placeholder="搜索工号/姓名" oninput="renderPerfCompletion()" style="width:160px">
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn" onclick="exportPerfCompletion()"><i class="ti ti-download"></i> 导出Excel</button>
+      <button class="btn" onclick="exportPerfCompletionPDF()"><i class="ti ti-file-type-pdf"></i> 生成分析报告</button>
+    </div>
+  </div>
+  <!-- 部门/科室总览：应填(A)/已填/完成率均按天统计，仅统计出勤状态为 A 的工作日 -->
   <div id="dash-panel-overview">
-  <div class="g4">
-    <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px" data-i18n="m_completion">全员完成率</div><div style="font-size:26px;font-weight:500" id="m-rate">-</div><div style="font-size:11px;color:var(--color-text-tertiary);margin-top:3px" id="m-rate-sub"></div></div>
-    <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px" data-i18n="m_avg">平均绩效分</div><div style="font-size:26px;font-weight:500" id="m-avg">-</div><div style="font-size:11px;color:var(--color-text-tertiary);margin-top:3px" data-i18n="m_avg_sub">综合加权平均</div></div>
-    <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px" data-i18n="m_pending">待填写人数</div><div style="font-size:26px;font-weight:500" id="m-pending">-</div><div style="font-size:11px;color:var(--color-text-tertiary);margin-top:3px" data-i18n="m_pending_sub">截止本月末</div></div>
-    <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px" data-i18n="m_total">员工总数</div><div style="font-size:26px;font-weight:500" id="m-total">-</div><div style="font-size:11px;color:var(--color-text-tertiary);margin-top:3px" data-i18n="m_total_sub">在职员工</div></div>
-  </div>
-  <div class="g2">
-    <div class="card"><div class="card-header"><div class="card-title" data-i18n="dept_progress">各部门填写进度</div></div><div id="dept-progress-list"></div></div>
-    <div class="card"><div class="card-header"><div class="card-title" data-i18n="emp_ranking">员工绩效排名 Top 10</div></div>
-      <table><thead><tr><th data-i18n="th_rank">排名</th><th data-i18n="th_name">姓名</th><th data-i18n="th_dept">部门</th><th data-i18n="th_score">得分</th></tr></thead><tbody id="rank-table"></tbody></table>
-    </div>
-  </div>
-  <div class="card"><div class="card-header"><div class="card-title">各科室填写进度</div></div><div id="section-progress-list" style="max-height:320px;overflow-y:auto"></div></div>
-  <div class="card"><div class="card-header"><div class="card-title" data-i18n="dept_avg_chart">各部门平均绩效得分</div></div><div style="position:relative;height:200px"><canvas id="deptChart"></canvas></div></div>
-  </div>
-  <!-- 绩效填写完成率 Tab：当月 1 日 ~ 今天，仅统计出勤状态为 A 的工作日 -->
-  <div id="dash-panel-completion" style="display:none">
-    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:10px" id="pc-range-lbl"></div>
-    <div class="toolbar">
-      <select id="pc-dept-f" onchange="pcOnDeptChange()" style="width:150px"><option value="">全部部门</option></select>
-      <select id="pc-sec-f" onchange="renderPerfCompletion()" style="width:170px"><option value="">全部科室</option></select>
-      <input id="pc-search" placeholder="搜索工号/姓名" oninput="renderPerfCompletion()" style="width:160px">
-      <div style="margin-left:auto;display:flex;gap:8px">
-        <button class="btn" onclick="exportPerfCompletion()"><i class="ti ti-download"></i> 导出Excel</button>
-        <button class="btn" onclick="exportPerfCompletionPDF()"><i class="ti ti-file-type-pdf"></i> 生成分析报告</button>
-      </div>
-    </div>
-    <div id="pc-kpi" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px"></div>
+    <div id="pc-head-cards" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px"></div>
     <div class="card">
       <div class="card-header"><div class="card-title">各部门/科室绩效填写完成率</div></div>
       <table><thead><tr><th style="text-align:left">部门</th><th style="text-align:left">科室</th><th>人数</th><th>应填(A)天数</th><th>已填天数</th><th>缺口天数</th><th>完成率</th></tr></thead><tbody id="pc-table"></tbody></table>
     </div>
     <div class="card"><div class="card-header"><div class="card-title">各部门填写完成率对比</div></div><div style="position:relative;height:220px"><canvas id="pc-chart"></canvas></div></div>
+  </div>
+  <!-- 员工明细：工号/姓名/岗位 固定列，横向滚动查看其余统计 -->
+  <div id="dash-panel-completion" style="display:none">
+    <div class="chips" id="pc-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
     <div class="card" style="padding:0;overflow-x:auto">
-      <div class="card-header" style="padding:14px 16px 0"><div class="card-title">未填写明细 <span style="font-size:11px;color:var(--color-text-tertiary);font-weight:400" id="pc-gap-count"></span></div></div>
-      <table class="att-tbl"><thead><tr>
-        <th style="text-align:left;padding-left:8px">工号</th><th style="text-align:left">姓名</th><th style="text-align:left">部门</th><th style="text-align:left">科室</th><th style="text-align:left">岗位</th>
-        <th style="text-align:center">应填(A)</th><th style="text-align:center">已填</th><th style="text-align:center">缺口</th><th style="text-align:left">未填日期</th>
+      <div class="card-header" style="padding:14px 16px 0"><div class="card-title">员工填报明细 <span style="font-size:11px;color:var(--color-text-tertiary);font-weight:400" id="pc-gap-count"></span></div></div>
+      <table class="att-tbl pc-freeze"><thead><tr>
+        <th></th><th style="padding-left:8px">工号</th><th>姓名</th><th>岗位</th>
+        <th style="text-align:left">部门</th><th style="text-align:left">科室</th>
+        <th>当月绩效<br>兑现天数</th><th>指标填报（按天）</th><th>本月得分</th>
       </tr></thead><tbody id="pc-gap-tbody"></tbody></table>
     </div>
   </div>
@@ -2578,7 +2576,7 @@ async function doLogin(){
   if(!acc){$('lg-err').textContent=lang==='zh'?'账号或密码错误':'Usuario o contraseña incorrectos';return;}
   $('lg-err').textContent='';currentUser=acc;
   $('login-screen').style.display='none';$('main-app').style.display='flex';
-  applyRoleUI();applyI18n();updateMonthLabels();initSidebarState();setTimeout(()=>renderDashboard(),50);
+  applyRoleUI();applyI18n();updateMonthLabels();initSidebarState();setTimeout(()=>{if(typeof pcInitFilters==='function')pcInitFilters();},50);
 }
 function doLogout(){currentUser=null;$('main-app').style.display='none';$('login-screen').style.display='flex';$('login-user').value='';$('login-pass').value='';}
 async function doManualSave(){
@@ -2669,30 +2667,6 @@ function mxEmpsPending(){return mxEmps().filter(e=>!isEvalEligible(e));}
 // 数据总览页专用范围：与"墨方绩效评价"查询页口径一致（国籍墨西哥、非离职、非试用），
 // 只统计墨方绩效评价的完成情况，避免把不参与评价的试用期员工/中方员工算进分母
 function mxEvalPool(){return (canEdit()?employees:employees.filter(empInScope)).filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&isEvalEligible(e));}
-function getDeptStatsMx(y,m){
-  const byDept={};
-  mxEvalPool().forEach(e=>{if(!byDept[e.dept])byDept[e.dept]=[];byDept[e.dept].push(e);});
-  return departments.map(d=>{
-    const emps=byDept[d.name]||[];
-    let doneCount=0,scoreSum=0,scoreCnt=0;
-    emps.forEach(e=>{const ms=getMS(e.id,y,m);if(ms.done){doneCount++;if(ms.totalScore!==null){scoreSum+=ms.totalScore;scoreCnt++;}}});
-    return{...d,_emp:emps.length,_done:doneCount,_avg:scoreCnt?Math.round(scoreSum/scoreCnt*10)/10:0};
-  });
-}
-// 各科室填写进度（同一范围：墨方绩效评价），科室为空的员工不计入科室维度
-function getSectionStatsMx(y,m){
-  const byKey={};
-  mxEvalPool().forEach(e=>{
-    if(!e.section)return;
-    if(!byKey[e.section])byKey[e.section]={section:e.section,dept:e.dept,emps:[]};
-    byKey[e.section].emps.push(e);
-  });
-  return Object.values(byKey).map(g=>{
-    let doneCount=0;
-    g.emps.forEach(e=>{if(getMS(e.id,y,m).done)doneCount++;});
-    return{section:g.section,dept:g.dept,_emp:g.emps.length,_done:doneCount};
-  }).sort((a,b)=>getDeptLabel(a.dept).localeCompare(getDeptLabel(b.dept))||getSecLabel(a.section).localeCompare(getSecLabel(b.section)));
-}
 // 中方：仅国籍为中国的员工（在职）
 function cnEmps(){return visibleEmps().filter(e=>empNat(e)==='中国');}
 // 逐日明细月度均分：直接读 dailyScores，任意年月均可用
@@ -2713,7 +2687,7 @@ function updateMonthLabels(){
   const sm=$('sum-month');if(sm)sm.textContent=mLabel(sumY,sumM);
   const dm=$('dept-month');if(dm)dm.textContent=mLabel(deptY,deptM);
 }
-function chM(d){curM+=d;if(curM>12){curM=1;curY++;}if(curM<1){curM=12;curY--;}updateMonthLabels();const p=document.querySelector('.page.active');if(p){const id=p.id.replace('page-','');if(id==='dashboard')renderDashboard();if(id==='employees')filterEmp();if(id==='kpi')renderKPI();}}
+function chM(d){curM+=d;if(curM>12){curM=1;curY++;}if(curM<1){curM=12;curY--;}updateMonthLabels();const p=document.querySelector('.page.active');if(p){const id=p.id.replace('page-','');if(id==='employees')filterEmp();if(id==='kpi')renderKPI();}}
 function chQM(d){qM+=d;if(qM>12){qM=1;qY++;}if(qM<1){qM=12;qY--;}$('q-month').textContent=mLabel(qY,qM);if($('q-month-trend'))$('q-month-trend').textContent=mLabel(qY,qM);if($('qd-month'))$('qd-month').textContent=mLabel(qY,qM);if($('qr-month'))$('qr-month').textContent=mLabel(qY,qM);if(_qActiveTab==='trend')renderQueryTrend();else if(_qActiveTab==='daily')renderQDaily();else if(_qActiveTab==='rank')renderQRank();else renderQuery();}
 function chAttM(d){attHistM+=d;if(attHistM>12){attHistM=1;attHistY++;}if(attHistM<1){attHistM=12;attHistY--;}$('att-hist-month').textContent=mLabel(attHistY,attHistM);renderAttHist();}
 function chSumM(d){sumM+=d;if(sumM>12){sumM=1;sumY++;}if(sumM<1){sumM=12;sumY--;}$('sum-month').textContent=mLabel(sumY,sumM);renderSummary();}
@@ -2730,7 +2704,7 @@ function getDeptStats(y,m){
     return{...d,_emp:emps.length,_done:doneCount,_avg:scoreCnt?Math.round(scoreSum/scoreCnt*10)/10:0};
   });
 }
-// DASHBOARD
+// DASHBOARD（数据总览 = 绩效填写进度监控：部门/科室总览 + 员工明细，均按"出勤(A)天数"口径统计，见文末 pc 模块）
 let _dashTab='overview';
 function switchDashTab(tab,el){
   _dashTab=tab;
@@ -2738,23 +2712,7 @@ function switchDashTab(tab,el){
   el.classList.add('active');
   $('dash-panel-overview').style.display=tab==='overview'?'block':'none';
   $('dash-panel-completion').style.display=tab==='completion'?'block':'none';
-  const msel=$('dash-month-sel');if(msel)msel.style.display=tab==='overview'?'flex':'none';
-  if(tab==='overview')renderDashboard();
-  else if(typeof pcInitFilters==='function')pcInitFilters();
-}
-function renderDashboard(){
-  const vis=mxEvalPool();const total=vis.length,done=vis.filter(e=>getMS(e.id).done).length;
-  const scores=vis.map(e=>getMS(e.id).totalScore).filter(s=>s!==null);
-  const avg=scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:0;
-  $('m-rate').textContent=total?Math.round(done/total*100)+'%':'-';$('m-rate-sub').textContent=`${done} / ${total}`;$('m-avg').textContent=avg||'-';$('m-pending').textContent=total-done;$('m-total').textContent=total;
-  const ds=getDeptStatsMx();
-  $('dept-progress-list').innerHTML=ds.slice(0,10).map(d=>{const pct=d._emp?Math.round(d._done/d._emp*100):0;const col=pct>=80?'#28a745':pct>=50?'#ffc107':'#dc3545';return`<div style="display:grid;grid-template-columns:140px 1fr 60px;gap:10px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span>${d.name}</span><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div><span style="font-size:12px;text-align:right">${pct}%</span></div>`;}).join('');
-  const secStats=getSectionStatsMx();
-  $('section-progress-list').innerHTML=secStats.length?secStats.map(s=>{const pct=s._emp?Math.round(s._done/s._emp*100):0;const col=pct>=80?'#28a745':pct>=50?'#ffc107':'#dc3545';return`<div style="display:grid;grid-template-columns:220px 1fr 60px;gap:10px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="font-size:12px">${getDeptLabel(s.dept)} <span style="color:var(--color-text-tertiary)">/</span> ${getSecLabel(s.section)}</span><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div><span style="font-size:12px;text-align:right">${pct}%</span></div>`;}).join(''):'<div style="padding:12px;color:var(--color-text-tertiary);font-size:12px;text-align:center">暂无科室数据</div>';
-  const top10=[...vis].map(e=>({...e,ts:getMS(e.id).totalScore})).filter(e=>e.ts!==null).sort((a,b)=>b.ts-a.ts).slice(0,10);
-  $('rank-table').innerHTML=top10.map((e,i)=>`<tr><td><span class="rank-num ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">${i+1}</span></td><td>${e.name}</td><td>${getDeptLabel(e.dept)}</td><td><strong>${e.ts}</strong></td></tr>`).join('');
-  try{const ctx=$('deptChart').getContext('2d');if(charts.dept)charts.dept.destroy();
-  charts.dept=new Chart(ctx,{type:'bar',data:{labels:ds.map(d=>tLabel(d.name)),datasets:[{label:t('m_avg'),data:ds.map(d=>d._avg||0),backgroundColor:'#0d6efd',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:160}}}});}catch(e){console.warn('Chart not ready',e);}
+  if(typeof pcInitFilters==='function')pcInitFilters();
 }
 // QUERY
 let _qActiveTab='month';
@@ -6935,8 +6893,7 @@ function showPage(id,el){
   $('page-'+id).classList.add('active');el.classList.add('active');
   initAllFilters();
   if(id==='dashboard'){
-    if(_dashTab==='completion'){try{if(typeof pcInitFilters==='function')pcInitFilters();}catch(err){console.error('pcInitFilters error:',err);}}
-    else renderDashboard();
+    try{if(typeof pcInitFilters==='function')pcInitFilters();}catch(err){console.error('pcInitFilters error:',err);}
   }
   if(id==='query'){initQFilters();renderQuery();}
   if(id==='employees')filterEmp();
@@ -8852,6 +8809,155 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   function rateTxt(r){return r==null?'—':r.toFixed(1)+'%';}
   function rateColor(r){if(r==null)return'var(--color-text-tertiary)';return r>=95?'#1f8a5b':r>=80?'#b9770e':'#c0392b';}
 
+  // 在职人数总览（正常 / 试用拆分）：口径与 pcPool 一致的角色可见范围 + 部门/科室筛选，
+  // 但不要求"已配置绩效指标"，用于反映真实在职人数
+  function pcHeadcount(){
+    const dF=$('pc-dept-f')?$('pc-dept-f').value:'';
+    const sF=$('pc-sec-f')?$('pc-sec-f').value:'';
+    let base;
+    try{base=(typeof canEdit==='function'&&canEdit())?employees:employees.filter(empInScope);}catch(_){base=employees||[];}
+    base=base.filter(e=>empNat(e)==='墨西哥'&&isActive(e)&&!isStandby(e));
+    base=base.filter(e=>(!dF||e.dept===dF)&&(!sF||e.section===sF));
+    const normal=base.filter(isEvalEligible).length;
+    return{total:base.length,normal,probation:base.length-normal};
+  }
+
+  // 临时切换查询月份上下文调用 calcAdjustedMonthScore，用完立即还原，避免影响「绩效查询」页当前所选月份
+  function pcScoreFor(emp,y,m){
+    if(typeof calcAdjustedMonthScore!=='function')return{score:0,zeroed:false,reason:''};
+    const _qy=(typeof qY!=='undefined')?qY:null,_qm=(typeof qM!=='undefined')?qM:null;
+    try{
+      qY=y;qM=m;
+      return calcAdjustedMonthScore(emp.id);
+    }catch(_){
+      return{score:0,zeroed:false,reason:''};
+    }finally{
+      if(_qy!==null){qY=_qy;qM=_qm;}
+    }
+  }
+
+  // 单个员工的综合填报状态：na=本月无出勤(A)记录不作要求，good=已按天全部填完，none=完全未填，mid=部分填写
+  function pcRowStatus(st){
+    if(st.due===0)return'na';
+    if(st.filled>=st.due)return'good';
+    if(st.filled===0)return'none';
+    return'mid';
+  }
+  const PC_STRIPE_COLOR={good:'#1f8a5b',mid:'#e6a23c',none:'#c0392b',na:'#ced4da'};
+
+  // 员工明细单行所需的全部数据：填报天数统计 + 当月绩效兑现天数 + 本月得分（含是否因考勤/纪律记0分）
+  function pcEmpRowData(emp){
+    const{y,m}=pcRange();
+    const st=pcEmpStat(emp);
+    const perfDays=(typeof perfDaysInMonth==='function')?perfDaysInMonth(emp,y,m):null;
+    let perfDaysNote='';
+    const rd=emp.regularDate?parseYMD(emp.regularDate):null;
+    if(rd&&rd.getFullYear()===y&&rd.getMonth()+1===m)perfDaysNote=`${rd.getMonth()+1}/${rd.getDate()} 转正`;
+    const adj=pcScoreFor(emp,y,m);
+    return{emp,st,perfDays,perfDaysNote,adj};
+  }
+
+  let _pcFilter='all';
+  function pcSetFilter(k){_pcFilter=k;renderPCDetail();}
+
+  function pcDetailRowHtml(r){
+    const{emp:e,st,perfDays,perfDaysNote,adj}=r;
+    const status=pcRowStatus(st);
+    const rate=st.due>0?Math.round(st.filled/st.due*100):null;
+    const barColor=rate==null?'#ced4da':rate>=100?'#1f8a5b':rate>0?'#e6a23c':'#c0392b';
+    const kpiCell=st.due===0
+      ?`<div style="font-size:10.5px;color:var(--color-text-tertiary)">本月出勤(A) 0 天<br>不作填报要求</div>`
+      :`<div style="min-width:150px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px"><span>已填 <strong>${st.filled}</strong>/${st.due} 天</span><span>${rate}%</span></div>
+          <div style="height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden"><div style="height:100%;width:${rate}%;background:${barColor}"></div></div>
+          ${st.missing>0?`<div style="font-size:10px;color:#c0392b;margin-top:3px" title="${esc(st.missingDates.map(dt=>dStr(dt)).join('、'))}">缺 ${st.missing} 天</div>`:''}
+        </div>`;
+    const scoreCell=st.due===0
+      ?`<span style="font-size:11px;color:var(--color-text-tertiary)">-</span>`
+      :(st.filled===0
+        ?`<span style="font-size:11px;color:var(--color-text-tertiary)">尚未算分</span>`
+        :`<div style="font-size:15px;font-weight:700;${adj.zeroed?'color:#c0392b':''}">${adj.score}</div>${adj.zeroed?`<div style="display:inline-block;font-size:10px;font-weight:600;color:#c0392b;background:#fdecea;border-radius:5px;padding:1px 6px;margin-top:3px">⚠ ${esc(adj.reason||'考勤/纪律规则记0分')}</div>`:''}`);
+    return`<tr>
+      <td style="padding:0!important"><div style="width:4px;height:26px;border-radius:2px;background:${PC_STRIPE_COLOR[status]};margin:0 auto"></div></td>
+      <td style="padding-left:8px">${esc(e.id)}</td>
+      <td><strong>${esc(e.name)}</strong></td>
+      <td style="color:var(--color-text-secondary)">${esc(e.position||'-')}</td>
+      <td style="color:var(--color-text-secondary)">${esc(getDeptLabel(e.dept))}</td>
+      <td style="color:var(--color-text-secondary)">${esc(getSecLabel(e.section)||'-')}</td>
+      <td style="text-align:center"><div style="font-weight:700">${perfDays==null?'-':perfDays+'天'}</div>${perfDaysNote?`<div style="font-size:10px;color:var(--color-text-tertiary)">${esc(perfDaysNote)}</div>`:''}</td>
+      <td>${kpiCell}</td>
+      <td style="text-align:center">${scoreCell}</td>
+    </tr>`;
+  }
+
+  // 员工明细 Tab：列出范围内全部员工（含完整填写的），配状态筛选 chips，而非只列有缺口的人
+  function renderPCDetail(){
+    const emps=pcCurEmps();
+    const rowsData=emps.map(pcEmpRowData);
+    const counts={all:rowsData.length,mid:0,none:0,zeroed:0,na:0};
+    rowsData.forEach(r=>{
+      const s=pcRowStatus(r.st);
+      if(s==='mid')counts.mid++;if(s==='none')counts.none++;if(s==='na')counts.na++;
+      if(r.adj.zeroed)counts.zeroed++;
+    });
+    const chipDefs=[
+      {k:'all',label:`全部 ${counts.all}`},
+      {k:'mid',label:`部分未填 ${counts.mid}`},
+      {k:'none',label:`完全未填 ${counts.none}`},
+      {k:'zeroed',label:`因考勤记0分 ${counts.zeroed}`},
+      {k:'na',label:`本月无出勤 ${counts.na}`},
+    ];
+    const chipsEl=$('pc-chips');
+    if(chipsEl)chipsEl.innerHTML=chipDefs.map(c=>`<button class="chip${_pcFilter===c.k?' active':''}" onclick="pcSetFilter('${c.k}')">${esc(c.label)}</button>`).join('');
+
+    let filtered=rowsData;
+    if(_pcFilter==='mid')filtered=filtered.filter(r=>pcRowStatus(r.st)==='mid');
+    else if(_pcFilter==='none')filtered=filtered.filter(r=>pcRowStatus(r.st)==='none');
+    else if(_pcFilter==='zeroed')filtered=filtered.filter(r=>r.adj.zeroed);
+    else if(_pcFilter==='na')filtered=filtered.filter(r=>pcRowStatus(r.st)==='na');
+
+    const gapCountEl=$('pc-gap-count');
+    if(gapCountEl)gapCountEl.textContent=rowsData.length?`共 ${filtered.length} / ${rowsData.length} 人`:'';
+    $('pc-gap-tbody').innerHTML=filtered.length?filtered.map(pcDetailRowHtml).join(''):`<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:18px">没有符合条件的员工</td></tr>`;
+  }
+
+  // 部门/科室总览 Tab：人数总览（正常/试用）+ 应填/已填/完成率 + 部门科室汇总表 + 图表
+  function renderPCOverview(){
+    const emps=pcCurEmps();
+    const agg=pcAgg(emps);
+    const hc=pcHeadcount();
+    $('pc-head-cards').innerHTML=`
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">人数总览（仅在职）</div>
+        <div style="display:flex;gap:20px;align-items:flex-end">
+          <div><div style="font-size:20px;font-weight:600;color:var(--color-text-secondary)">${hc.total}</div><div style="font-size:10.5px;color:var(--color-text-tertiary)">在职总人数</div></div>
+          <div><div style="font-size:28px;font-weight:700;color:#2563eb">${hc.normal}</div><div style="font-size:10.5px;color:var(--color-text-tertiary)">正常 · 参与评估</div></div>
+          <div><div style="font-size:28px;font-weight:700;color:#94a3b8">${hc.probation}</div><div style="font-size:10.5px;color:var(--color-text-tertiary)">试用 · 不参与评估</div></div>
+        </div>
+        <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:10px;background:var(--color-background-primary)">
+          <div style="flex:${Math.max(hc.normal,0.0001)};background:#2563eb"></div><div style="flex:${Math.max(hc.probation,0.0001)};background:#94a3b8"></div>
+        </div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">应填(A)天数</div><div style="font-size:24px;font-weight:600">${agg.due}</div></div>
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">已填天数</div><div style="font-size:24px;font-weight:600;color:#1f8a5b">${agg.filled}</div></div>
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:16px"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">填写完成率</div><div style="font-size:24px;font-weight:600;color:${rateColor(agg.rate)}">${rateTxt(agg.rate)}</div></div>`;
+
+    const rows=pcBuildRows(emps);
+    $('pc-table').innerHTML=rows.map(pcRowHtml).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--color-text-tertiary);padding:18px">暂无数据</td></tr>`;
+
+    if(typeof Chart!=='undefined'){
+      const deptRows=rows.filter(r=>r.isDept);
+      const labels=deptRows.map(r=>tr(getDeptLabel(r.dept)));
+      const data=deptRows.map(r=>r.st.rate==null?0:+r.st.rate.toFixed(1));
+      const cols=deptRows.map(r=>r.st.rate==null?'#ced4da':r.st.rate>=95?'#1f8a5b':r.st.rate>=80?'#e6a23c':'#c0392b');
+      const canv=$('pc-chart');
+      if(canv){
+        if(_pcChart)_pcChart.destroy();
+        _pcChart=new Chart(canv.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:tr('填写完成率'),data,backgroundColor:cols,borderRadius:4}]},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'完成率：'+ctx.parsed.y+'%'}}},scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
+      }
+    }
+  }
+
   // 按部门聚合：部门下再列各科室，并加部门级汇总行（结构参照离职率分析）
   function pcBuildRows(emps){
     const byDept={};
@@ -8888,41 +8994,8 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     const {y,m,d}=pcRange();
     const lbl=$('pc-range-lbl');
     if(lbl)lbl.textContent=`统计范围：${y}-${pad2(m)}-01 ~ ${y}-${pad2(m)}-${pad2(d)}（本月至今，仅统计出勤状态为 A 的工作日）`;
-
-    const emps=pcCurEmps();
-    const agg=pcAgg(emps);
-    const cards=[
-      {l:'应统计人数',v:agg.emp,c:'var(--color-text-primary)'},
-      {l:'应填(A)天数',v:agg.due,c:'var(--color-text-primary)'},
-      {l:'已填天数',v:agg.filled,c:'#1f8a5b'},
-      {l:'缺口天数',v:agg.missing,c:'#c0392b'},
-      {l:'填写完成率',v:rateTxt(agg.rate),c:rateColor(agg.rate)}
-    ];
-    $('pc-kpi').innerHTML=cards.map(c=>`<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:14px 16px"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">${c.l}</div><div style="font-size:24px;font-weight:600;color:${c.c}">${c.v}</div></div>`).join('');
-
-    const rows=pcBuildRows(emps);
-    $('pc-table').innerHTML=rows.map(pcRowHtml).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--color-text-tertiary);padding:18px">暂无数据</td></tr>`;
-
-    // 缺口明细（仅列出存在缺口的员工）
-    const gapRows=emps.map(e=>({e,st:pcEmpStat(e)})).filter(x=>x.st.missing>0).sort((a,b)=>b.st.missing-a.st.missing);
-    const gapCountEl=$('pc-gap-count');if(gapCountEl)gapCountEl.textContent=`（共 ${gapRows.length} 人存在缺口）`;
-    $('pc-gap-tbody').innerHTML=gapRows.map(({e,st})=>{
-      const missStr=st.missingDates.map(dt=>dStr(dt).slice(5)).join('、');
-      return `<tr><td style="padding-left:8px">${esc(e.id)}</td><td><strong>${esc(e.name)}</strong></td><td style="color:var(--color-text-secondary)">${esc(getDeptLabel(e.dept))}</td><td style="color:var(--color-text-secondary)">${esc(getSecLabel(e.section)||'-')}</td><td style="color:var(--color-text-secondary)">${esc(e.position||'-')}</td><td style="text-align:center">${st.due}</td><td style="text-align:center">${st.filled}</td><td style="text-align:center;font-weight:600;color:#c0392b">${st.missing}</td><td style="color:#c0392b">${esc(missStr)}</td></tr>`;
-    }).join('')||`<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:18px">暂无缺口，本月至今已全部填写 👍</td></tr>`;
-
-    // 各部门完成率对比图
-    if(typeof Chart!=='undefined'){
-      const deptRows=rows.filter(r=>r.isDept);
-      const labels=deptRows.map(r=>tr(getDeptLabel(r.dept)));
-      const data=deptRows.map(r=>r.st.rate==null?0:+r.st.rate.toFixed(1));
-      const cols=deptRows.map(r=>r.st.rate==null?'#ced4da':r.st.rate>=95?'#1f8a5b':r.st.rate>=80?'#e6a23c':'#c0392b');
-      const canv=$('pc-chart');
-      if(canv){
-        if(_pcChart)_pcChart.destroy();
-        _pcChart=new Chart(canv.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:tr('填写完成率'),data,backgroundColor:cols,borderRadius:4}]},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'完成率：'+ctx.parsed.y+'%'}}},scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
-      }
-    }
+    renderPCOverview();
+    renderPCDetail();
   }
 
   function exportPerfCompletion(){
@@ -8937,10 +9010,14 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'完成率汇总');
 
-    const gapRows=emps.map(e=>({e,st:pcEmpStat(e)})).filter(x=>x.st.missing>0).sort((a,b)=>b.st.missing-a.st.missing);
-    const rl=[['工号','姓名','部门','科室','岗位','应填(A)天数','已填天数','缺口天数','未填日期']];
-    gapRows.forEach(({e,st})=>rl.push([e.id,e.name,getDeptLabel(e.dept)||'',getSecLabel(e.section)||'',e.position||'',st.due,st.filled,st.missing,st.missingDates.map(dt=>dStr(dt)).join('、')]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rl),'未填写明细');
+    const detailRows=emps.map(pcEmpRowData);
+    const rl=[['工号','姓名','部门','科室','岗位','当月绩效兑现天数','应填(A)天数','已填天数','缺口天数','完成率','本月得分','因考勤记0分','清零原因','未填日期']];
+    detailRows.forEach(r=>{
+      const{emp:e,st,perfDays,adj}=r;
+      const rate=st.due>0?+((st.filled/st.due)*100).toFixed(1)+'%':'—';
+      rl.push([e.id,e.name,getDeptLabel(e.dept)||'',getSecLabel(e.section)||'',e.position||'',perfDays==null?'':perfDays,st.due,st.filled,st.missing,rate,st.filled===0?'':adj.score,adj.zeroed?'是':'否',adj.zeroed?(adj.reason||''):'',st.missingDates.map(dt=>dStr(dt)).join('、')]);
+    });
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rl),'员工明细');
 
     const {y,m,d}=pcRange();
     XLSX.writeFile(wb,`绩效填写完成率_${y}-${pad2(m)}-01至${pad2(d)}日.xlsx`);
@@ -8964,10 +9041,10 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     });
     html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td style="text-align:left"></td><td>${agg.emp}</td><td>${agg.due}</td><td>${agg.filled}</td><td>${agg.missing||'-'}</td><td>${rateTxt(agg.rate)}</td></tr></tbody></table>`;
 
-    const allGaps=emps.map(e=>({e,st:pcEmpStat(e)})).filter(x=>x.st.missing>0).sort((a,b)=>b.st.missing-a.st.missing);
+    const allGaps=emps.map(e=>pcEmpRowData(e)).filter(x=>x.st.missing>0).sort((a,b)=>b.st.missing-a.st.missing);
     const gapRows=allGaps.slice(0,40);
-    let gapHtml='<table><thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>科室</th><th>缺口</th><th>未填日期</th></tr></thead><tbody>';
-    gapRows.forEach(({e,st})=>{gapHtml+=`<tr><td>${esc(e.id)}</td><td style="text-align:left">${esc(e.name)}</td><td>${esc(getDeptLabel(e.dept))}</td><td>${esc(getSecLabel(e.section)||'-')}</td><td>${st.missing}</td><td style="text-align:left">${esc(st.missingDates.map(dt=>dStr(dt)).join('、'))}</td></tr>`;});
+    let gapHtml='<table><thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>科室</th><th>兑现天数</th><th>缺口</th><th>未填日期</th></tr></thead><tbody>';
+    gapRows.forEach(({emp:e,st,perfDays})=>{gapHtml+=`<tr><td>${esc(e.id)}</td><td style="text-align:left">${esc(e.name)}</td><td>${esc(getDeptLabel(e.dept))}</td><td>${esc(getSecLabel(e.section)||'-')}</td><td>${perfDays==null?'':perfDays}</td><td>${st.missing}</td><td style="text-align:left">${esc(st.missingDates.map(dt=>dStr(dt)).join('、'))}</td></tr>`;});
     gapHtml+='</tbody></table>';
 
     const {y,m,d}=pcRange();
@@ -8993,6 +9070,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   window.pcInitFilters=pcInitFilters;
   window.pcOnDeptChange=pcOnDeptChange;
   window.renderPerfCompletion=renderPerfCompletion;
+  window.pcSetFilter=pcSetFilter;
   window.exportPerfCompletion=exportPerfCompletion;
   window.exportPerfCompletionPDF=exportPerfCompletionPDF;
 })();
