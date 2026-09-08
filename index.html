@@ -2745,6 +2745,10 @@ function perfDaysInMonth(emp,y,m){
 }
 // 某天的考勤状态（考勤按周存储，需定位到周一所在的周键）
 function dayAttStatus(empId,dateObj){const dow=dateObj.getDay();const diff=dow===0?-6:1-dow;const monday=new Date(dateObj.getFullYear(),dateObj.getMonth(),dateObj.getDate()+diff);const wk='week_'+dStr(monday);return(attendanceData[wk]&&attendanceData[wk][empId]&&attendanceData[wk][empId][dStr(dateObj)])||'';}
+// 按 'YYYY-MM-DD' 字符串取考勤状态
+function dayAttStatusByDs(empId,ds){const[y,m,d]=ds.split('-').map(Number);return dayAttStatus(empId,new Date(y,m-1,d));}
+// 出勤状态是否为 A（出勤）：仅用于判断指标共享同步时是否应跳过该员工当天
+function isAttendA(empId,ds){return dayAttStatusByDs(empId,ds)==='A';}
 // 单位为 %、PPM、h、‱ 的指标：按分子/分母录入，计算逻辑相同（实际达成 = 分子/分母*100）
 function isFractionUnit(unit){
   const u=(unit||'').trim();
@@ -3330,6 +3334,7 @@ function syncTeamSharedKPI(empId,ds,kpiId,emp,kpi){
   const peers=getTeamPeers(emp,kpiId);
   let changed=false;
   peers.forEach(p=>{
+    if(!isAttendA(p.id,ds))return; // 非出勤（休息/请假等）不同步绩效达成结果
     const prec=getDayRec(p.id,ds);
     if(prec.unlinked&&prec.unlinked[kpiId])return;
     if(isPct){
