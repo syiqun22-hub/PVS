@@ -2346,34 +2346,49 @@ async function _doSaveAll(fullConfig) {
     if (!cfgOk) { toast('⚠️ 配置数据保存失败，请检查网络连接'); ok = false; }
 
     if (fullConfig) {
+      // 考勤/调薪/加班：只有自上次成功写入后确实被改过（_attDirty/_srDirty/_otDirty）才重新整体上传，
+      // 避免像编辑员工信息这类完全不涉及这三类数据的保存，也要把全公司历史数据重新传一遍——
+      // 这是此前"改一下员工信息就要等很久"的主因（跟 dailyScores/monthlyScores 之前的问题同源）。
       // pvs_attendance — 通过 pvs_config 保存（每周一条记录）
-      const attWeekUpserts = Object.keys(attendanceData).map(wk => ({ id: 'att_' + wk, value: attendanceData[wk] }));
-      if (attWeekUpserts.length) {
-        const CHUNK = 50;
-        for (let i = 0; i < attWeekUpserts.length; i += CHUNK) {
-          const { error } = await _sbClient.from('pvs_config').upsert(attWeekUpserts.slice(i, i + CHUNK), { onConflict: 'id' });
-          if (error) { console.error('saveAll attendance error', error); toast('⚠️ 考勤数据保存失败，请检查网络连接'); ok = false; }
+      if (_attDirty) {
+        const attWeekUpserts = Object.keys(attendanceData).map(wk => ({ id: 'att_' + wk, value: attendanceData[wk] }));
+        let attOk = true;
+        if (attWeekUpserts.length) {
+          const CHUNK = 50;
+          for (let i = 0; i < attWeekUpserts.length; i += CHUNK) {
+            const { error } = await _sbClient.from('pvs_config').upsert(attWeekUpserts.slice(i, i + CHUNK), { onConflict: 'id' });
+            if (error) { console.error('saveAll attendance error', error); toast('⚠️ 考勤数据保存失败，请检查网络连接'); ok = false; attOk = false; }
+          }
         }
+        if (attOk) _attDirty = false;
       }
 
       // pvs_salary_reviews
-      const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
-      if (srUpserts.length) {
-        const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
-        if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 调薪数据保存失败，请检查网络连接'); ok = false; }
+      if (_srDirty) {
+        const srUpserts = Object.keys(salaryReviews).map(empId => ({ emp_id: empId, data: salaryReviews[empId], updated_at: new Date().toISOString() }));
+        let srOk = true;
+        if (srUpserts.length) {
+          const { error } = await _sbClient.from('pvs_salary_reviews').upsert(srUpserts, { onConflict: 'emp_id' });
+          if (error) { console.error('saveAll salaryReviews error', error); toast('⚠️ 调薪数据保存失败，请检查网络连接'); ok = false; srOk = false; }
+        }
+        if (srOk) _srDirty = false;
       }
 
       // pvs_overtime  (结构: overtimeData[period][empId][date] = hours)
-      const otUpserts = [];
-      for (const period of Object.keys(overtimeData)) {
-        const pk = overtimeData[period];
-        for (const empId of Object.keys(pk)) {
-          otUpserts.push({ emp_id: empId, period, data: pk[empId], updated_at: new Date().toISOString() });
+      if (_otDirty) {
+        const otUpserts = [];
+        for (const period of Object.keys(overtimeData)) {
+          const pk = overtimeData[period];
+          for (const empId of Object.keys(pk)) {
+            otUpserts.push({ emp_id: empId, period, data: pk[empId], updated_at: new Date().toISOString() });
+          }
         }
-      }
-      if (otUpserts.length) {
-        const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
-        if (error) { console.error('saveAll overtime error', error); toast('⚠️ 加班数据保存失败，请检查网络连接'); ok = false; }
+        let otOk = true;
+        if (otUpserts.length) {
+          const { error } = await _sbClient.from('pvs_overtime').upsert(otUpserts, { onConflict: 'emp_id,period' });
+          if (error) { console.error('saveAll overtime error', error); toast('⚠️ 加班数据保存失败，请检查网络连接'); ok = false; otOk = false; }
+        }
+        if (otOk) _otDirty = false;
       }
     }
 
@@ -2395,6 +2410,12 @@ let _lastSavedAt = 0;
 let _dirtyDaily = new Set();
 // 待写入数据库的月度评估记录（"empId|period" 集合），由 syncDailyToMonthly/saveEval 标记
 let _dirtyMonthly = new Set();
+// 考勤/调薪/加班数据自上次全量写入后是否有变化：默认为脏（与此前"每次都全量重传"的行为一致，
+// 保证即使漏标某个写入点也不会丢数据，只是会多传一次，不会比改动前更差）。
+// 三者由各自的写入入口（setStat/applyAttRowsToWeek/delEmp、saveSN/saveActa/delActa/saveOpinion/
+// saveLedgerEval/delEmp、setOt）置脏；写入成功后清除，避免像编辑员工这类与考勤/调薪/加班完全无关
+// 的保存，也要把全公司历史考勤/调薪/加班数据重新上传一遍——这正是"修改员工信息要等很久"的主因。
+let _attDirty = true, _srDirty = true, _otDirty = true;
 
 // 保存状态可视化：用户此前反馈"录入后不知道有没有保存上、有时要等很久"，
 // 之前自动保存完全静默（无 toast、无状态提示），失败也只在 console 里能看到。
@@ -4008,7 +4029,7 @@ function updateNePosOptions(){
 }
 function openAddEmp(){editingPosId=null;$('modal-add-emp .modal-title')&&(document.querySelector('#modal-add-emp .modal-title').textContent='新增员工');$('ne-dept').innerHTML='<option value="">— 请选择部门 —</option>'+departments.map(d=>`<option value="${d.name}">${getName(d)}</option>`).join('');$('ne-dept').value='';updateNeSecOptions();updateNePosOptions();$('ne-id').value='';$('ne-salcode').value='';$('ne-name').value='';$('ne-date').value='';$('ne-nat').value='墨西哥';$('ne-status').value='active';if($('ne-eval-status'))$('ne-eval-status').value='试用';if($('ne-regular-date'))$('ne-regular-date').value='';$('ne-resign').value='';if($('ne-restype'))$('ne-restype').value='';updateNeResignVis();$('ne-id').disabled=false;$('ne-id').dataset.editMode='';$('modal-add-emp').classList.add('open');}
 function openEditEmp(empId){const e=employees.find(x=>x.id===empId);if(!e)return;const limited=currentUser&&currentUser.role!=='admin';document.querySelector('#modal-add-emp .modal-title').textContent=limited?'编辑员工（仅可修改岗位/班组）':'编辑员工';$('ne-dept').innerHTML='<option value="">— 请选择部门 —</option>'+departments.map(d=>`<option value="${d.name}">${getName(d)}</option>`).join('');$('ne-dept').value=e.dept||'';updateNeSecOptions(e.section||'');updateNePosOptions();$('ne-pos').value=e.position||'';$('ne-id').value=e.id;$('ne-salcode').value=e.salaryCode||'';$('ne-name').value=e.name;$('ne-date').value=inputFromYMD(e.joinDate)||'';$('ne-nat').value=e.nationality||'墨西哥';if($('ne-team'))$('ne-team').value=e.team||'';$('ne-status').value=empStatus(e);if($('ne-eval-status'))$('ne-eval-status').value=empEvalStatus(e);if($('ne-regular-date'))$('ne-regular-date').value=inputFromYMD(e.regularDate)||'';$('ne-resign').value=inputFromYMD(e.resignDate);if($('ne-restype'))$('ne-restype').value=e.resignType||'';updateNeResignVis();['ne-salcode','ne-name','ne-dept','ne-sec','ne-date','ne-nat','ne-status','ne-eval-status','ne-regular-date','ne-resign','ne-restype'].forEach(id=>{const el=$(id);if(el)el.disabled=limited;});$('ne-id').disabled=true;$('ne-id').dataset.editMode='1';$('modal-add-emp').classList.add('open');}
-async function delEmp(empId){const e=employees.find(x=>x.id===empId);if(!e)return;const hasScores=Object.values(monthlyScores).some(mk=>mk[empId]);const warn=hasScores?`\n\n⚠️ 该员工有历史绩效记录，删除后将一并清除。`:'';if(!confirm(`确定删除员工「${e.name}（${e.id}）」？${warn}\n\n此操作不可撤销。`))return;employees=employees.filter(x=>x.id!==empId);Object.keys(monthlyScores).forEach(mk=>{delete monthlyScores[mk][empId];});Object.keys(attendanceData).forEach(wk=>{delete attendanceData[wk][empId];});delete salaryReviews[empId];await saveAndToast(`已删除员工 ${e.name}`);filterEmp();}
+async function delEmp(empId){const e=employees.find(x=>x.id===empId);if(!e)return;const hasScores=Object.values(monthlyScores).some(mk=>mk[empId]);const warn=hasScores?`\n\n⚠️ 该员工有历史绩效记录，删除后将一并清除。`:'';if(!confirm(`确定删除员工「${e.name}（${e.id}）」？${warn}\n\n此操作不可撤销。`))return;employees=employees.filter(x=>x.id!==empId);Object.keys(monthlyScores).forEach(mk=>{delete monthlyScores[mk][empId];});Object.keys(attendanceData).forEach(wk=>{delete attendanceData[wk][empId];});delete salaryReviews[empId];_attDirty=true;_srDirty=true;await saveAndToast(`已删除员工 ${e.name}`);filterEmp();}
 async function saveNewEmp(){const id=$('ne-id').value.trim(),name=$('ne-name').value.trim();if(!id||!name){toast('请填写工号和姓名');return;}const editMode=$('ne-id').dataset.editMode==='1';if(editMode){const emp=employees.find(e=>e.id===id);if(!emp){toast('员工不存在');return;}const limited=currentUser&&currentUser.role!=='admin';if(limited){emp.team=$('ne-team')?$('ne-team').value.trim():emp.team;emp.position=$('ne-pos').value;}else{emp.salaryCode=$('ne-salcode').value.trim();emp.name=name;emp.dept=$('ne-dept').value;emp.section=$('ne-sec').value;emp.team=$('ne-team')?$('ne-team').value.trim():'';emp.position=$('ne-pos').value;emp.joinDate=$('ne-date').value;emp.nationality=$('ne-nat').value;emp.evalStatus=$('ne-eval-status')?$('ne-eval-status').value:'正常';emp.regularDate=$('ne-regular-date')?$('ne-regular-date').value:'';applyEmpStatus(emp,$('ne-status').value,$('ne-resign').value,$('ne-restype')?$('ne-restype').value:undefined);}closeM('modal-add-emp');await saveAndToast('员工信息已更新');filterEmp();return;}if(employees.find(e=>e.id===id)){toast('工号已存在');return;}employees.push((()=>{const ob={id,salaryCode:$('ne-salcode').value.trim(),name,dept:$('ne-dept').value,section:$('ne-sec').value,team:$('ne-team')?$('ne-team').value.trim():'',position:$('ne-pos').value,joinDate:$('ne-date').value,nationality:$('ne-nat').value,evalStatus:$('ne-eval-status')?$('ne-eval-status').value:'正常',regularDate:$('ne-regular-date')?$('ne-regular-date').value:''};applyEmpStatus(ob,$('ne-status').value,$('ne-resign').value,$('ne-restype')?$('ne-restype').value:undefined);return ob;})());closeM('modal-add-emp');await saveAndToast('员工已添加');filterEmp();}
 // EVALUATE
 // ====== 员工在职/离职 状态处理 ======
@@ -4721,7 +4742,7 @@ function chWeek(d){weekOff+=d;renderAttWeek();if($('att-incomplete-panel')&&$('a
 function getExpDays(wk,empId){if(expectedDays[wk]&&expectedDays[wk][empId]!==undefined)return expectedDays[wk][empId];return 6;}
 function setExpDays(wk,empId,v){if(!expectedDays[wk])expectedDays[wk]={};const n=Math.max(0,Math.min(7,parseFloat(v)||0));expectedDays[wk][empId]=n;_attAutoSave(wk);}
 function getOt(wk,empId,ds){return(overtimeData[wk]&&overtimeData[wk][empId]&&overtimeData[wk][empId][ds])||0;}
-function setOt(empId,wk,ds,v){if(!overtimeData[wk])overtimeData[wk]={};if(!overtimeData[wk][empId])overtimeData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)overtimeData[wk][empId][ds]=n;else delete overtimeData[wk][empId][ds];_attAutoSave(wk);}
+function setOt(empId,wk,ds,v){if(!overtimeData[wk])overtimeData[wk]={};if(!overtimeData[wk][empId])overtimeData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)overtimeData[wk][empId][ds]=n;else delete overtimeData[wk][empId][ds];_otDirty=true;_attAutoSave(wk);}
 function getRt(wk,empId,ds){return(lateData[wk]&&lateData[wk][empId]&&lateData[wk][empId][ds])||0;}
 function setRt(empId,wk,ds,v){if(!lateData[wk])lateData[wk]={};if(!lateData[wk][empId])lateData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)lateData[wk][empId][ds]=n;else delete lateData[wk][empId][ds];}
 // 考勤填报：按所选部门填充「科室」下拉（未选部门时列出全部科室）
@@ -4796,7 +4817,7 @@ function _attAutoSave(wk){
     if(ok){toast('✅ 考勤已自动保存');}else{toast('⚠️ 考勤自动保存失败，请手动点击"保存考勤"');}
   },800);
 }
-function setStat(s){if(!attendanceData[_pWk])attendanceData[_pWk]={};if(!attendanceData[_pWk][_pEmpId])attendanceData[_pWk][_pEmpId]={};if(s)attendanceData[_pWk][_pEmpId][_pDs]=s;else delete attendanceData[_pWk][_pEmpId][_pDs];closePicker();renderAttWeek();_attAutoSave(_pWk);}
+function setStat(s){if(!attendanceData[_pWk])attendanceData[_pWk]={};if(!attendanceData[_pWk][_pEmpId])attendanceData[_pWk][_pEmpId]={};if(s)attendanceData[_pWk][_pEmpId][_pDs]=s;else delete attendanceData[_pWk][_pEmpId][_pDs];_attDirty=true;closePicker();renderAttWeek();_attAutoSave(_pWk);}
 function closePicker(){$('status-picker').style.display='none';}
 function autoClose(e){if(!$('status-picker').contains(e.target))closePicker();}
 async function saveAtt(){clearTimeout(_attSaveT);_attSaveT=null;await saveAndToast('✅ 考勤已保存');}
@@ -4821,6 +4842,7 @@ function matchEmp(key){return employees.find(e=>e.id===key||(e.salaryCode&&e.sal
 function applyAttRowsToWeek(rows){
   const dates=getWeekDates(weekOff),wk=wKey(weekOff);
   if(!attendanceData[wk])attendanceData[wk]={};
+  _attDirty=true;
   let matched=0,unmatched=[];
   rows.forEach(r=>{
     const emp=matchEmp(r.key);
@@ -5316,13 +5338,13 @@ function renderSR(){
 
 function toggleRV(id){const el=$('rv-'+id);if(el)el.style.display=el.style.display==='none'||!el.style.display?'block':'none';}
 function openSN(empId,node){snEmpId=empId;snNode=node;const nd=getSR(empId).nodes[node]||{};$('sn-title').textContent=`考核分数 — ${node}`;$('sn-score').value=nd.score!==undefined?nd.score:'';$('sn-date').value=nd.date||'';$('sn-note').value=nd.note||'';$('modal-sn').classList.add('open');}
-async function saveSN(){const score=parseFloat($('sn-score').value);if(isNaN(score)||score<0||score>100){toast('请输入0~100分');return;}getSR(snEmpId).nodes[snNode]={score,date:$('sn-date').value,note:$('sn-note').value};closeM('modal-sn');await saveAndToast('考核分数已保存');renderSR();}
+async function saveSN(){const score=parseFloat($('sn-score').value);if(isNaN(score)||score<0||score>100){toast('请输入0~100分');return;}getSR(snEmpId).nodes[snNode]={score,date:$('sn-date').value,note:$('sn-note').value};_srDirty=true;closeM('modal-sn');await saveAndToast('考核分数已保存');renderSR();}
 function openActa(empId){actaEmpId=empId;$('acta-date').value='';$('acta-reason').value='';$('acta-pdf').value='';$('acta-pdf-list').innerHTML='';$('modal-acta').classList.add('open');}
 document.getElementById('acta-pdf').addEventListener('change',function(){$('acta-pdf-list').innerHTML=[...this.files].map(f=>`<div class="pdf-item">📄 ${f.name}</div>`).join('');});
-async function saveActa(){getSR(actaEmpId).actas.push({date:$('acta-date').value,reason:$('acta-reason').value,files:[...$('acta-pdf').files].map(f=>f.name)});closeM('modal-acta');await saveAndToast('Acta 已记录');renderSR();}
-async function delActa(empId,i){if(!confirm('确定删除？'))return;getSR(empId).actas.splice(i,1);await saveAndToast('已删除');renderSR();}
+async function saveActa(){getSR(actaEmpId).actas.push({date:$('acta-date').value,reason:$('acta-reason').value,files:[...$('acta-pdf').files].map(f=>f.name)});_srDirty=true;closeM('modal-acta');await saveAndToast('Acta 已记录');renderSR();}
+async function delActa(empId,i){if(!confirm('确定删除？'))return;getSR(empId).actas.splice(i,1);_srDirty=true;await saveAndToast('已删除');renderSR();}
 function openOpinion(empId,type){opEmpId=empId;opType=type;const op=type==='dept'?getSR(empId).deptOpinion:getSR(empId).finalOpinion;$('op-title').textContent=type==='dept'?'部门领导意见':'最终意见';$('op-lbl').textContent=type==='dept'?'部门领导意见内容':'最终意见内容';$('op-text').value=op&&op.text||'';$('op-date').value=op&&op.date||'';$('op-signer').value=op&&op.signer||'';$('modal-opinion').classList.add('open');}
-async function saveOpinion(){const sr=getSR(opEmpId);const op={text:$('op-text').value,date:$('op-date').value,signer:$('op-signer').value};if(opType==='dept')sr.deptOpinion=op;else sr.finalOpinion=op;closeM('modal-opinion');await saveAndToast('意见已保存');renderSR();}
+async function saveOpinion(){const sr=getSR(opEmpId);const op={text:$('op-text').value,date:$('op-date').value,signer:$('op-signer').value};if(opType==='dept')sr.deptOpinion=op;else sr.finalOpinion=op;_srDirty=true;closeM('modal-opinion');await saveAndToast('意见已保存');renderSR();}
 
 // ═══════════════════════════════════════════════════════════
 // 调薪台账 JS
@@ -5681,6 +5703,7 @@ async function saveLedgerEval(){
   }
 
   salaryReviews[empId]=sr;
+  _srDirty=true;
   await saveAll();
   closeM('modal-ledger-eval');
   renderLedger();
@@ -6877,6 +6900,9 @@ function handleBackupFile(e){
       // 每一条都标记为脏，否则 saveAll() 会认为没有改动而不写入，刷新后又变回旧数据
       Object.keys(dailyScores).forEach(empId=>{Object.keys(dailyScores[empId]||{}).forEach(ds=>_dirtyDaily.add(empId+'|'+ds));});
       Object.keys(monthlyScores).forEach(period=>{Object.keys(monthlyScores[period]||{}).forEach(empId=>_dirtyMonthly.add(empId+'|'+period));});
+      // 同理：考勤/调薪/加班改为按脏标记增量上传后，整份覆盖恢复时也必须显式置脏，
+      // 否则会被误判为"未改动"而跳过写入，刷新后又变回旧数据
+      _attDirty=true;_srDirty=true;_otDirty=true;
       await saveAll();
       toast('✅ 恢复成功，2秒后刷新...');
       setTimeout(()=>location.reload(),1500);
@@ -6967,7 +6993,7 @@ function defPositions(){
   ];
 }
 function getPosByName(name){return positions.find(p=>p.name===name);}
-function getKpiById(id){return kpiTemplates.find(k=>k.id===id);}
+function getKpiById(id){return kpiTemplates.find(k=>String(k.id)===String(id));}
 // Returns array of effective KPI objects for an employee: merges library KPI + per-position weight
 function getEmpKPIs(emp){
   if(!emp)return[];
