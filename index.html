@@ -2277,6 +2277,14 @@ async function _doSaveAll(fullConfig) {
     // 否则旧的本地快照可能在新数据落库前被重新拉取回来，把刚保存的修改（如
     // 新增的指标）覆盖掉，表现为"保存成功但内容又消失了"。
     _lastSavedAt = Date.now();
+    // 单独标记"本机刚保存过配置(pvs_config)"的时间：与上面的 _lastSavedAt 分开，
+    // 避免持续录入逐日数据（每次编辑都会刷新 _lastSavedAt）导致本机长期"自我抑制"
+    // pvs_config 的 Realtime 更新，从而收不到别人对指标库/员工/岗位等配置的修改。
+    // 收不到即意味着本机内存里的 kpiTemplates 等一直是旧快照；一旦本机之后又触发任意
+    // 一次全量配置保存（哪怕只是编辑员工信息），就会用这份旧快照整体覆盖数据库，把
+    // 别人期间对指标（如"班组共享"开关、目标值）的修改悄悄"改回去"——这正是
+    // "指标改了、显示已保存，过一会儿又变回旧值"的根本原因。
+    if (fullConfig) _lastConfigSavedAt = Date.now();
 
     let ok = true;
 
@@ -2406,6 +2414,9 @@ async function saveAndToast(m) {
   if(ok !== false){ _lastSavedAt = Date.now(); toast(m); }
 }
 let _lastSavedAt = 0;
+// 本机最近一次成功执行"全量配置保存"（saveConfig，写 pvs_config）的时间，
+// 单独用于 pvs_config 的 Realtime 自我抑制判断，见 _doSaveAll 中的说明。
+let _lastConfigSavedAt = 0;
 // 待写入数据库的逐日记录（"empId|date" 集合），由 saveDailyCell/saveDailyFraction 标记
 let _dirtyDaily = new Set();
 // 待写入数据库的月度评估记录（"empId|period" 集合），由 syncDailyToMonthly/saveEval 标记
@@ -7020,8 +7031,11 @@ loadAll().then(()=>{
     _sbClient.channel('pvs_config_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pvs_config' }, async () => {
         if (!currentUser) return;
-        // 本机刚保存过：跳过自己触发的 Realtime 回播，延长保护窗口
-        if (Date.now() - _lastSavedAt < 30000) { _lastSavedAt = Date.now(); return; }
+        // 本机刚保存过配置：跳过自己触发的 Realtime 回播，延长保护窗口。
+        // 注意：这里用的是专属于 pvs_config 的 _lastConfigSavedAt，而不是所有保存
+        // 操作共用的 _lastSavedAt——否则持续录入逐日数据会让本机一直"自我抑制"，
+        // 收不到别人对指标库等配置的修改，详见 _doSaveAll 中的说明。
+        if (Date.now() - _lastConfigSavedAt < 30000) { _lastConfigSavedAt = Date.now(); return; }
         // 正在主动抑制 Realtime（如刚完成配置保存）：跳过整个处理
         if (_suppressRealtime) return;
         try {
