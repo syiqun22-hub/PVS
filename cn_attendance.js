@@ -15,8 +15,59 @@ const SRC=window.CN_ATT_DATA||{year:2026,month:4,records:[]};
 const SAMPLE_ROSTER=SRC.records.map(r=>({id:String(r.id),name:r.name,dept:r.dept,section:r.section,cat:r.cat}));
 // 4 月样本考勤（按工号索引，用于给匹配到的员工预填）
 const SAMPLE_DAYS={}; SRC.records.forEach(r=>{SAMPLE_DAYS[String(r.id)]=r.days;});
-// 清空历史中方考勤数据（仅执行一次）：移除本机所有 cnAtt_* 月度缓存
-try{if(localStorage.getItem('cn_att_cleared_v10')!=='1'){Object.keys(localStorage).forEach(k=>{if(k.indexOf('cnAtt_')===0)localStorage.removeItem(k);});localStorage.setItem('cn_att_cleared_v10','1');}}catch(_){}
+
+/* ---------- 云端持久化（与主程序共用同一个 Supabase 项目）----------
+   本模块此前只把数据写在 localStorage 里：只存在当前这台电脑的这个浏览器中，
+   换设备/换浏览器/无痕模式、清缓存、浏览器自动清理长期不活跃站点的存储都会
+   导致数据"消失"。现在改为云端为权威数据源，localStorage 仅作为离线缓存/
+   乐观显示，避免数据只留在一台电脑上。
+   _sbClient / _sbWriteAllowed 由主程序更早的 <script> 声明；经典 <script>
+   之间的顶层 let/const/function 共享同一全局作用域（无需挂到 window 上），
+   与下方 sysEmployees() 读取 employees 的方式一致。 */
+function sbReady(){try{return(typeof _sbClient!=='undefined'&&_sbClient)?_sbClient:null;}catch(_){return null;}}
+function sbWriteOK(){try{return typeof _sbWriteAllowed==='function'?_sbWriteAllowed():true;}catch(_){return true;}}
+function cnMarkDirty(key,v){try{if(v)localStorage.setItem(key+'__dirty','1');else localStorage.removeItem(key+'__dirty');}catch(_){}}
+function cnIsDirty(key){try{return localStorage.getItem(key+'__dirty')==='1';}catch(_){return false;}}
+// 读取某月云端记录；未配置/网络失败时返回 null，调用方回退到本机缓存
+async function cnCloudLoad(ym){
+  const sb=sbReady();if(!sb)return null;
+  try{
+    const{data,error}=await sb.from('pvs_cn_attendance').select('data').eq('ym',ym).maybeSingle();
+    if(error){console.error('cnCloudLoad error',error);return null;}
+    return data?data.data:null;
+  }catch(e){console.error('cnCloudLoad error',e);return null;}
+}
+// 写入某月云端记录（串行队列，避免多次快速编辑并发写产生竞态）
+let _cnSaveChain=Promise.resolve();
+function cnCloudSave(ym,rows,lsk){
+  const sb=sbReady();if(!sb||!sbWriteOK())return;
+  _cnSaveChain=_cnSaveChain.catch(()=>{}).then(async()=>{
+    try{
+      const{error}=await sb.from('pvs_cn_attendance').upsert({ym,data:rows,updated_at:new Date().toISOString()},{onConflict:'ym'});
+      if(error)throw error;
+      cnMarkDirty(lsk,false);
+    }catch(e){
+      console.error('cnCloudSave error',e);
+      if(window.toast)toast('⚠️ 中方考勤云端保存失败，已暂存本机，请检查网络后重新点击"保存"');
+    }
+  });
+}
+// 启动时把本机遗留的月度数据回填云端（仅当云端该月尚无记录时才写入，避免用本机旧数据
+// 覆盖其他设备已同步的新数据）——修复此前版本只存在本机、换设备/清缓存就丢失的问题。
+async function cnSyncAllLocalToCloud(){
+  const sb=sbReady();if(!sb)return;
+  let keys=[];try{keys=Object.keys(localStorage).filter(k=>/^cnAtt_\d{4}-\d{2}$/.test(k));}catch(_){return;}
+  for(const key of keys){
+    let rows=null;try{rows=JSON.parse(localStorage.getItem(key));}catch(_){}
+    if(!rows||!rows.length)continue;
+    const ym=key.slice(6);
+    try{
+      const cloudRows=await cnCloudLoad(ym);
+      if(cloudRows&&cloudRows.length)continue;
+      cnCloudSave(ym,rows,key);
+    }catch(_){}
+  }
+}
 
 let curY,curM,DIM,WEEKID=[],RECS=[];
 // 默认月份 = 当前月的前一月
@@ -57,7 +108,8 @@ function wd(day){return new Date(curY,curM-1,day).getDay();}   // 0=周日 … 6
 const WCN=['日','一','二','三','四','五','六'];
 function buildWeekId(){WEEKID=[];}
 
-// 加载某月：localStorage 优先 → 默认月样本预填 → 空白
+// 加载某月：localStorage 缓存优先展示（快、离线可用）→ 默认月样本预填 → 空白；
+// 随后异步向云端核对该月数据，云端有数据且本机没有未同步的修改时会刷新覆盖。
 function loadMonth(){
   DIM=new Date(curY,curM,0).getDate();
   buildWeekId();
@@ -74,8 +126,38 @@ function loadMonth(){
     else if(days.length>DIM) days=days.slice(0,DIM);
     return {...r,days};
   });
+  cnRefreshFromCloud();
 }
-function persist(){try{localStorage.setItem(lsKey(),JSON.stringify(RECS.map(r=>({id:r.id,days:r.days}))));}catch(e){}}
+let _cnLoadToken=0;
+function cnRefreshFromCloud(){
+  const key=lsKey(),ym=`${curY}-${String(curM).padStart(2,'0')}`;
+  const token=++_cnLoadToken;
+  cnCloudLoad(ym).then(rows=>{
+    if(token!==_cnLoadToken)return;        // 用户已切换月份，结果已过期
+    if(cnIsDirty(key))return;              // 本机有尚未同步到云端的修改，不能用云端旧数据覆盖
+    if(!rows||!rows.length)return;         // 云端暂无该月数据（未配置/网络失败/确实还没人录过）
+    const cloudMap={};rows.forEach(r=>cloudMap[String(r.id)]=r.days);
+    RECS=RECS.map(r=>{
+      const days=cloudMap[r.id];if(!days)return r;
+      let d=days.slice();
+      if(d.length<DIM)d=d.concat(Array(DIM-d.length).fill(''));
+      else if(d.length>DIM)d=d.slice(0,DIM);
+      return {...r,days:d};
+    });
+    try{localStorage.setItem(key,JSON.stringify(RECS.map(r=>({id:r.id,days:r.days}))));}catch(e){}
+    const ana=$('cn-analysis-panel'),leave=$('cn-leave-panel');
+    if(ana&&ana.style.display!=='none')cnRenderAnalysis();
+    else if(leave&&leave.style.display!=='none')cnRenderLeave();
+    else cnRenderGrid();
+  });
+}
+function persist(){
+  const rows=RECS.map(r=>({id:r.id,days:r.days}));
+  const key=lsKey();
+  try{localStorage.setItem(key,JSON.stringify(rows));}catch(e){}
+  cnMarkDirty(key,true);
+  cnCloudSave(`${curY}-${String(curM).padStart(2,'0')}`,rows,key);
+}
 
 window.cnChMonth=function(delta){
   let m=curM+delta,y=curY; if(m>12){m=1;y++;} if(m<1){m=12;y--;}
@@ -411,7 +493,15 @@ function drawCharts(buckets,bg,bands,dist){
 
 /* ---------- 导出 / 保存 ---------- */
 window.cnSave=function(){persist();if(window.toast)toast('✅ 中方考勤已保存');};
-window.cnReset=function(){if(!confirm('确定清空本月考勤并按当前花名册重置？'))return;localStorage.removeItem(lsKey());loadMonth();cnRenderGrid();if(window.toast)toast('已重置本月考勤');};
+window.cnReset=function(){
+  if(!confirm('确定清空本月考勤并按当前花名册重置？'))return;
+  const key=lsKey(),ym=`${curY}-${String(curM).padStart(2,'0')}`;
+  localStorage.removeItem(key);cnMarkDirty(key,false);
+  loadMonth();cnRenderGrid();
+  const sb=sbReady();
+  if(sb&&sbWriteOK())sb.from('pvs_cn_attendance').delete().eq('ym',ym).then(({error})=>{if(error)console.error('cnReset cloud delete error',error);}).catch(e=>console.error('cnReset cloud delete error',e));
+  if(window.toast)toast('已重置本月考勤');
+};
 window.cnExportAnalysis=function(){
   if(typeof XLSX==='undefined'){if(window.toast)toast('导出组件未就绪');return;}
   const rows=computeAll(filtered());
@@ -558,12 +648,38 @@ function cnBuildLeaveRows(){
   return rows;
 }
 
+// 休假台账依赖全部历史月份（不只是当前打开的月份），因此需要把云端各月数据补齐进本机
+// 缓存后再统计。首次渲染先用本机现有缓存出结果（快），云端数据到位后自动重绘一次。
+let _cnLeaveCloudLoaded=false;
+async function cnPreloadAllMonthsFromCloud(){
+  const sb=sbReady();if(!sb)return;
+  _cnLeaveCloudLoaded=true;
+  try{
+    const{data,error}=await sb.from('pvs_cn_attendance').select('ym,data');
+    if(error||!data)return;
+    let changed=false;
+    data.forEach(row=>{
+      const key=`cnAtt_${row.ym}`;
+      if(cnIsDirty(key))return;   // 本机该月有未同步的修改，不能用云端数据覆盖
+      try{
+        const next=JSON.stringify(row.data||[]);
+        if(localStorage.getItem(key)!==next){localStorage.setItem(key,next);changed=true;}
+      }catch(_){}
+    });
+    if(changed){
+      const leave=$('cn-leave-panel');
+      if(leave&&leave.style.display!=='none')cnRenderLeave();
+    }
+  }catch(e){console.error('cnPreloadAllMonthsFromCloud error',e);}
+}
+
 let _cnLeaveRows=[];
 window.cnRenderLeave=function(){
   const ddf=$('cn-leave-dept-f');
   if(ddf){const cur=ddf.value;ddf.innerHTML='<option value="">全部部门</option>'+depts().map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');ddf.value=depts().includes(cur)?cur:'';}
   const dep=$('cn-leave-dept-f')?$('cn-leave-dept-f').value:'';
   const q=($('cn-leave-search')?$('cn-leave-search').value:'').trim().toLowerCase();
+  if(!_cnLeaveCloudLoaded)cnPreloadAllMonthsFromCloud();
   _cnLeaveRows=cnBuildLeaveRows();
   let rows=_cnLeaveRows;
   if(dep)rows=rows.filter(r=>r.dept===dep);
@@ -600,5 +716,8 @@ window.cnExportLeave=function(){
   XLSX.writeFile(wb,'中方驻墨休假台账.xlsx');
   if(window.toast)toast('导出成功');
 };
+
+// 模块加载时尝试把本机遗留的历史数据一次性回填云端（见上方 cnSyncAllLocalToCloud 说明）
+cnSyncAllLocalToCloud();
 
 })();

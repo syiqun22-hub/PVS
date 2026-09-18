@@ -142,7 +142,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 .tab.active{color:var(--color-text-primary);border-bottom-color:var(--color-text-primary);font-weight:500}
 .s-FI{background:#dcfce7;color:#166534}.s-A{background:#fee2e2;color:#991b1b}.s-D{background:#fef9c3;color:#854d0e}
 .s-F{background:#2a1f00;color:#fde047}.s-PSG{background:#2e0d15;color:#fda4af}.s-PCG{background:#0a2a15;color:#86efac}
-.s-VAC{background:#0f1e40;color:#93c5fd}.s-INC{background:#2e1500;color:#fdba74}.s-FJ{background:#1e0a40;color:#d8b4fe}.s-PT{background:#e0f2fe;color:#075985}.s-S{background:#fce7f3;color:#9d174d}
+.s-VAC{background:#0f1e40;color:#93c5fd}.s-INC{background:#2e1500;color:#fdba74}.s-FJ{background:#1e0a40;color:#d8b4fe}.s-PT{background:#e0f2fe;color:#075985}.s-S{background:#fce7f3;color:#9d174d}.s-TT{background:#ccfbf1;color:#0f766e}
 .s-empty{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
 .s-baja{background:repeating-linear-gradient(45deg,#1a2540,#1a2540 4px,#253456 4px,#253456 8px);color:#5a7299;cursor:not-allowed;font-style:italic;text-decoration:line-through;text-decoration-thickness:.5px}
 .att-tbl{width:100%;border-collapse:collapse;font-size:12px}
@@ -709,8 +709,13 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   </div>
   <div class="toolbar">
     <input id="emp-s" style="width:190px" placeholder="搜索姓名/工号" oninput="filterEmp()">
-    <select id="emp-df" onchange="filterEmp()" style="width:130px"><option value="">全部部门</option></select>
-    <select id="emp-sf" onchange="filterEmp()" style="width:115px"><option value="">全部状态</option></select>
+    <select id="emp-df" onchange="onEmpDeptChange()" style="width:130px"><option value="">全部部门</option></select>
+    <select id="emp-sec-f" onchange="filterEmp()" style="width:140px"><option value="">全部科室</option></select>
+    <select id="emp-sf" onchange="filterEmp()" style="width:115px">
+      <option value="">全部状态</option>
+      <option value="pending">考核待完成</option>
+      <option value="done">考核已完成</option>
+    </select>
     <select id="emp-empf" onchange="filterEmp()" style="width:100px"><option value="active">在职</option><option value="standby">待岗</option><option value="resigned">离职</option><option value="">全部</option></select>
     <select id="emp-nf" onchange="filterEmp()" style="width:110px"><option value="">全部国籍</option><option value="中国">中国</option><option value="墨西哥">墨西哥</option></select>
     <button class="btn btn-p" id="btn-add-emp" onclick="openAddEmp()"><i class="ti ti-plus"></i> 新增员工</button>
@@ -927,7 +932,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <span style="font-size:11px;color:var(--color-text-secondary);margin-right:3px">状态：</span>
       <span class="badge s-FI">FI 旷工</span><span class="badge s-A">A 出勤</span><span class="badge s-D">D 休息</span>
       <span class="badge s-F">F 法定节假日</span><span class="badge s-PSG">PSG 无薪事假</span><span class="badge s-PCG">PCG 带薪事假</span>
-      <span class="badge s-VAC">VAC 年假</span><span class="badge s-INC">INC 病假</span><span class="badge s-FJ">FJ 合理缺勤</span><span class="badge s-PT">PT 停产</span><span class="badge s-S">S 纪律停职</span>
+      <span class="badge s-VAC">VAC 年假</span><span class="badge s-INC">INC 病假</span><span class="badge s-FJ">FJ 合理缺勤</span><span class="badge s-PT">PT 停产</span><span class="badge s-S">S 纪律停职</span><span class="badge s-TT">TT 调休（不计出勤）</span>
       <span style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">校验规则：每人每周（周一~周日）须至少 2 天「D 休息」</span>
     </div>
     <div id="att-d-warn" style="display:none;margin-bottom:12px;padding:9px 14px;border-radius:8px;background:#fdecea;border:1px solid #f5b7b1;color:#c0392b;font-size:12.5px;font-weight:500"></div>
@@ -949,7 +954,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <table class="sum-tbl"><thead><tr>
         <th style="text-align:left;padding-left:8px">工号</th><th style="text-align:left">工资编码</th><th style="text-align:left">姓名</th><th style="text-align:left">部门</th>
         <th class="s-FI">FI</th><th class="s-A">A</th><th class="s-D">D</th><th class="s-F">F</th>
-        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th>合计</th>
+        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th class="s-S">S</th><th class="s-TT">TT</th><th>合计</th>
       </tr></thead><tbody id="ws-body"></tbody></table>
     </div>
   </div>
@@ -999,7 +1004,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <table class="sum-tbl"><thead><tr>
         <th>工号</th><th>工资编码</th><th>姓名</th><th>部门</th>
         <th class="s-FI">FI</th><th class="s-A">A</th><th class="s-D">D</th><th class="s-F">F</th>
-        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th>合计</th>
+        <th class="s-PSG">PSG</th><th class="s-PCG">PCG</th><th class="s-VAC">VAC</th><th class="s-INC">INC</th><th class="s-FJ">FJ</th><th class="s-PT">PT</th><th class="s-S">S</th><th class="s-TT">TT</th><th>合计</th>
       </tr></thead><tbody id="sum-body"></tbody></table>
     </div>
   </div>
@@ -1752,9 +1757,9 @@ let curY=_NY,curM=_NM,qY=_NY,qM=_NM,attHistY=_NY,attHistM=_NM,sumY=_NY,sumM=_NM,
 let weekOff=0,sortField=null,sortAsc=true;
 let kd='achieve',km='rate',snEmpId=null,snNode=null,actaEmpId=null,opEmpId=null,opType=null;
 let charts={};
-const STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT','S'];
-const STATUS_LABELS={FI:'旷工',A:'出勤',D:'休息',F:'法定节假日',PSG:'无薪事假',PCG:'带薪事假',VAC:'年假',INC:'病假',FJ:'合理缺勤',PT:'停产',S:'纪律停职'};
-const STATUS_CLS={FI:'s-FI',A:'s-A',D:'s-D',F:'s-F',PSG:'s-PSG',PCG:'s-PCG',VAC:'s-VAC',INC:'s-INC',FJ:'s-FJ',PT:'s-PT',S:'s-S'};
+const STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT','S','TT'];
+const STATUS_LABELS={FI:'旷工',A:'出勤',D:'休息',F:'法定节假日',PSG:'无薪事假',PCG:'带薪事假',VAC:'年假',INC:'病假',FJ:'合理缺勤',PT:'停产',S:'纪律停职',TT:'调休'};
+const STATUS_CLS={FI:'s-FI',A:'s-A',D:'s-D',F:'s-F',PSG:'s-PSG',PCG:'s-PCG',VAC:'s-VAC',INC:'s-INC',FJ:'s-FJ',PT:'s-PT',S:'s-S',TT:'s-TT'};
 const SCORE_NODES=['3个月','6个月','12个月','18个月','30个月'];
 
 // ── 薪资周期定义 ──────────────────────────────────────────
@@ -2106,6 +2111,13 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     updated_at timestamptz default now(),
     primary key (emp_id, period)
   );
+  -- 中方考勤填报模块（cn_attendance.js）：此前只存在浏览器 localStorage 里，换设备/
+  -- 清缓存就会丢失，现改为落库到这张表，一个月一行，覆盖网格/分析/休假台账三个 Tab。
+  create table if not exists pvs_cn_attendance (
+    ym text primary key,      -- 'YYYY-MM'
+    data jsonb,                -- [{id, days:[...]}, ...]
+    updated_at timestamptz default now()
+  );
   alter publication supabase_realtime add table pvs_config;
   alter publication supabase_realtime add table pvs_daily;
   alter publication supabase_realtime add table pvs_attendance;
@@ -2156,7 +2168,7 @@ async function _fetchAllRows(table, columns) {
 // ---- 颗粒化存储函数 ----
 
 async function saveConfig(items) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   try {
     items = items || [
       { id: 'employees', value: employees },
@@ -2179,7 +2191,7 @@ async function saveConfig(items) {
 }
 
 async function saveDaily(empId, date) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   try {
     const data = (dailyScores[empId] && dailyScores[empId][date]) || null;
     const { error } = await _sbClient.from('pvs_daily').upsert(
@@ -2192,7 +2204,7 @@ async function saveDaily(empId, date) {
 }
 
 async function saveAttendance(weekKey, empId, date, status) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   try {
     const { error } = await _sbClient.from('pvs_attendance').upsert(
       { week_key: weekKey, emp_id: empId, date, status },
@@ -2204,7 +2216,7 @@ async function saveAttendance(weekKey, empId, date, status) {
 }
 
 async function saveSalaryReview(empId) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   try {
     const data = salaryReviews[empId] || null;
     const { error } = await _sbClient.from('pvs_salary_reviews').upsert(
@@ -2217,7 +2229,7 @@ async function saveSalaryReview(empId) {
 }
 
 async function saveOvertime(empId, period) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   try {
     const data = (overtimeData[period] && overtimeData[period][empId]) || null;
     const { error } = await _sbClient.from('pvs_overtime').upsert(
@@ -2230,7 +2242,7 @@ async function saveOvertime(empId, period) {
 }
 
 async function saveMonthly(empId, period) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   try {
     const data = (monthlyScores[period] && monthlyScores[period][empId]) || null;
     const { error } = await _sbClient.from('pvs_monthly').upsert(
@@ -2268,9 +2280,10 @@ async function _doSaveAll(fullConfig) {
   try {
     if (_suspectEmptyLoad) {
       toast('⚠️ 未能确认已读取到真实数据，保存已禁用，请先刷新页面');
+      _setSaveStatus('error');
       return false;
     }
-    if (!_sbWriteAllowed()) { return true; }
+    if (!_sbWriteAllowed()) { _setSaveStatus('error'); return false; }
     _setSaveStatus('saving');
     // 提前标记保存时间：写入过程中（网络往返期间）若收到自己这次写入触发的
     // Realtime 通知，靠这个时间戳判断"是自己刚保存的"而跳过重新拉取覆盖，
@@ -2412,6 +2425,11 @@ async function saveAndToast(m) {
   // 保存完成后再次延长抑制窗口，防止 Supabase 延迟的 Realtime 事件在保存后覆盖内存
   _suppressRealtimeFor(30000);
   if(ok !== false){ _lastSavedAt = Date.now(); toast(m); }
+  // ok===false：数据未真正写入数据库，绝不能显示"m"这类成功文案（此前的 bug：
+  // 保存被 _sbWriteAllowed() 拦截时仍返回“成功”，导致界面提示已保存、实际数据
+  // 只留在内存里，刷新/换设备后就"凭空消失"——这正是本次修复的问题）。
+  else { toast('❌ 保存失败："'+m+'" 未写入数据库，请勿刷新页面，先检查网络/顶部红色提示后重试'); }
+  return ok;
 }
 let _lastSavedAt = 0;
 // 本机最近一次成功执行"全量配置保存"（saveConfig，写 pvs_config）的时间，
@@ -2444,7 +2462,9 @@ function _setSaveStatus(state){
 // 有未落库的修改（脏标记或正在等待防抖计时器触发）时，离开/关闭页面前用浏览器
 // 原生确认框拦一下，避免编辑完就切走/关标签页导致数据静默丢失
 window.addEventListener('beforeunload', function(e){
-  if(_dirtyDaily.size>0 || _qDailySaveT){
+  // _attPendingWk 非空 = 考勤/加班/迟到还有防抖计时器没触发、或触发了但保存失败正在退避
+  // 重试中，此时数据只存在内存里，跟逐日打分一样需要拦截，否则关掉页面就真丢了。
+  if(_dirtyDaily.size>0 || _qDailySaveT || _attPendingWk){
     e.preventDefault();
     e.returnValue='';
     return '';
@@ -2460,29 +2480,48 @@ function _suppressRealtimeFor(ms) {
 }
 
 async function saveAttendanceWeekOnly(weekKey) {
-  if (!_sbWriteAllowed()) return true;
+  if (!_sbWriteAllowed()) return false;
   _lastSavedAt = Date.now();
+  _setSaveStatus('saving');
   try {
+    let allOk = true;
     const wk = attendanceData[weekKey] || {};
-    const { error } = await _sbClient.from('pvs_config').upsert(
+    const { data: r1, error } = await _sbClient.from('pvs_config').upsert(
       [{ id: 'att_' + weekKey, value: wk }], { onConflict: 'id' }
-    );
-    if (error) { console.error('saveAttWeekOnly error:', error); toast('⚠️ 写入失败：' + error.message); return false; }
-    // 同步保存 expectedDays（应出勤天数，防止导入后切换页面丢失）
-    const { error: edErr } = await _sbClient.from('pvs_config').upsert(
-      [{ id: 'expectedDays', value: expectedDays }], { onConflict: 'id' }
-    );
-    if (edErr) console.error('saveAttWeekOnly expectedDays error', edErr);
-    // 同步保存 lateData
-    if (Object.keys(lateData).length) {
-      const { error: ldErr } = await _sbClient.from('pvs_config').upsert(
-        [{ id: 'lateData', value: lateData }], { onConflict: 'id' }
-      );
-      if (ldErr) console.error('saveAttWeekOnly lateData error', ldErr);
+    ).select('id');
+    if (error || !r1 || r1.length !== 1) { console.error('saveAttWeekOnly error:', error); allOk = false; }
+
+    // 加班（右侧 OT 小输入框，setOt() 写入 overtimeData[weekKey]）此前只在内存里标记
+    // _otDirty=true，这个防抖自动保存从未真正把它写进 pvs_overtime 表——只有恰好之后
+    // 又触发了一次跟考勤无关的全量保存（比如编辑了员工信息）才会顺带补写。如果当天
+    // 只填了加班/迟到，没做任何其它操作，编辑内容就会一直停留在内存里，刷新页面后
+    // "凭空消失"。现在跟考勤状态一起随同一次防抖自动保存原子落库。
+    const otWk = overtimeData[weekKey] || {};
+    const otRows = Object.keys(otWk).map(empId => ({ emp_id: empId, period: weekKey, data: otWk[empId], updated_at: new Date().toISOString() }));
+    if (otRows.length) {
+      const { data: r2, error: otErr } = await _sbClient.from('pvs_overtime').upsert(otRows, { onConflict: 'emp_id,period' }).select('emp_id,period');
+      if (otErr || !r2 || r2.length !== otRows.length) { console.error('saveAttWeekOnly overtime error', otErr); allOk = false; }
     }
+
+    // 同步保存 expectedDays（应出勤天数，防止导入后切换页面丢失）
+    const { data: r3, error: edErr } = await _sbClient.from('pvs_config').upsert(
+      [{ id: 'expectedDays', value: expectedDays }], { onConflict: 'id' }
+    ).select('id');
+    if (edErr || !r3 || r3.length !== 1) { console.error('saveAttWeekOnly expectedDays error', edErr); allOk = false; }
+
+    // 同步保存 lateData（迟到分钟数，setRt() 写入）：此前 setRt() 编辑后完全不会触发
+    // 任何保存调用，现已让它跟考勤状态共用同一个防抖入口（见 setRt 定义处的修改）。
+    if (Object.keys(lateData).length) {
+      const { data: r4, error: ldErr } = await _sbClient.from('pvs_config').upsert(
+        [{ id: 'lateData', value: lateData }], { onConflict: 'id' }
+      ).select('id');
+      if (ldErr || !r4 || r4.length !== 1) { console.error('saveAttWeekOnly lateData error', ldErr); allOk = false; }
+    }
+
     _lastSavedAt = Date.now();
-    return true;
-  } catch(e) { console.error('saveAttWeekOnly error', e); return false; }
+    _setSaveStatus(allOk ? 'saved' : 'error');
+    return allOk;
+  } catch(e) { console.error('saveAttWeekOnly error', e); _setSaveStatus('error'); return false; }
 }
 
 async function loadAll(){
@@ -2498,8 +2537,14 @@ async function loadAll(){
     } else {
       var eR,dR,secR,kR,pR,aR,attR,srR,otR,edR,dsdR,ldR,msR,legacyMS;
 
-      // 从 pvs_config 加载配置
-      const cfgRows = await _fetchAllRows('pvs_config', 'id,value');
+      // 从 pvs_config 加载配置。读取为空时先重试几次再下结论：免费版 Supabase 项目
+      // 长时间无请求会自动暂停，首次唤醒往往需要几秒钟，若第一次请求恰好落在这段
+      // 时间内很容易读到空结果，被误判为"账套为空"从而把当天的保存整个禁用掉。
+      let cfgRows = await _fetchAllRows('pvs_config', 'id,value');
+      for (let _retry = 0; (!cfgRows || !cfgRows.length) && _retry < 3; _retry++) {
+        await new Promise(r => setTimeout(r, 1500 * (_retry + 1)));
+        cfgRows = await _fetchAllRows('pvs_config', 'id,value');
+      }
       if (cfgRows && cfgRows.length) {
         const cfg = {};
         cfgRows.forEach(r => { cfg[r.id] = r.value; });
@@ -3981,6 +4026,7 @@ async function importActualScores(event){
 // EMPLOYEES
 function initAllFilters(){
   [$('emp-df'),$('q-dept'),$('att-dept-f'),$('att-hist-dept'),$('sum-dept'),$('sr-dept')].forEach(sel=>{if(sel&&sel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});});
+  fillEmpSecFilter();
   // Lock dept filters for non-admin users
   if(currentUser&&currentUser.role!=='admin'){
     ['emp-df','q-dept','att-dept-f','att-hist-dept','sum-dept','sr-dept','dept-filter'].forEach(id=>{const e=$(id);if(e){e.value=currentUser.dept;e.disabled=true;}});
@@ -3990,11 +4036,25 @@ function initAllFilters(){
     }
   }
 }
+// 员工信息页：按所选部门填充「科室」下拉（未选部门时列出全部科室），与考勤填报页
+// 的 fillAttSecFilter() 是同一套模式，只是这里覆盖全部员工（不限墨方）。
+function fillEmpSecFilter(){
+  const sel=$('emp-sec-f');if(!sel)return;
+  const dF=$('emp-df')?$('emp-df').value:'';const cur=sel.value;
+  let emps=allEmps();if(dF)emps=emps.filter(e=>e.dept===dF);
+  const names=[...new Set(emps.map(e=>e.section).filter(Boolean))].sort();
+  sel.innerHTML='';
+  const o0=document.createElement('option');o0.value='';o0.textContent='全部科室';sel.appendChild(o0);
+  names.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+  sel.value=names.includes(cur)?cur:'';
+}
+function onEmpDeptChange(){fillEmpSecFilter();filterEmp();}
 function filterEmp(){
   const s=($('emp-s').value||'').toLowerCase(),dept=$('emp-df').value,status=$('emp-sf').value;
+  const secF=($('emp-sec-f')&&$('emp-sec-f').value)||'';
   const natF=($('emp-nf')&&$('emp-nf').value)||'';
   const empf=($('emp-empf')&&$('emp-empf').value!==undefined)?$('emp-empf').value:'active';
-  let list=allEmps().filter(e=>{if(s&&!e.name.toLowerCase().includes(s)&&!e.id.toLowerCase().includes(s))return false;if(dept&&e.dept!==dept)return false;if(natF&&empNat(e)!==natF)return false;if(empf==='active'&&(isResigned(e)||isStandby(e)))return false;if(empf==='standby'&&!isStandby(e))return false;if(empf==='resigned'&&!isResigned(e))return false;const ms=getMS(e.id);if(status==='done'&&!ms.done)return false;if(status==='pending'&&ms.done)return false;return true;});
+  let list=allEmps().filter(e=>{if(s&&!e.name.toLowerCase().includes(s)&&!e.id.toLowerCase().includes(s))return false;if(dept&&e.dept!==dept)return false;if(secF&&e.section!==secF)return false;if(natF&&empNat(e)!==natF)return false;if(empf==='active'&&(isResigned(e)||isStandby(e)))return false;if(empf==='standby'&&!isStandby(e))return false;if(empf==='resigned'&&!isResigned(e))return false;const ms=getMS(e.id);if(status==='done'&&!ms.done)return false;if(status==='pending'&&ms.done)return false;return true;});
   const isAdmin=currentUser&&currentUser.role==='admin';
   $('emp-table').innerHTML=list.map(e=>{
     const ms=getMS(e.id);const salGrade=getSalaryGrade(e);
@@ -4755,7 +4815,7 @@ function setExpDays(wk,empId,v){if(!expectedDays[wk])expectedDays[wk]={};const n
 function getOt(wk,empId,ds){return(overtimeData[wk]&&overtimeData[wk][empId]&&overtimeData[wk][empId][ds])||0;}
 function setOt(empId,wk,ds,v){if(!overtimeData[wk])overtimeData[wk]={};if(!overtimeData[wk][empId])overtimeData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)overtimeData[wk][empId][ds]=n;else delete overtimeData[wk][empId][ds];_otDirty=true;_attAutoSave(wk);}
 function getRt(wk,empId,ds){return(lateData[wk]&&lateData[wk][empId]&&lateData[wk][empId][ds])||0;}
-function setRt(empId,wk,ds,v){if(!lateData[wk])lateData[wk]={};if(!lateData[wk][empId])lateData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)lateData[wk][empId][ds]=n;else delete lateData[wk][empId][ds];}
+function setRt(empId,wk,ds,v){if(!lateData[wk])lateData[wk]={};if(!lateData[wk][empId])lateData[wk][empId]={};const n=Math.max(0,Math.min(24,parseFloat(v)||0));if(n>0)lateData[wk][empId][ds]=n;else delete lateData[wk][empId][ds];_attAutoSave(wk);}
 // 考勤填报：按所选部门填充「科室」下拉（未选部门时列出全部科室）
 function fillAttSecFilter(){
   const sel=$('att-sec-f');if(!sel)return;
@@ -4818,23 +4878,43 @@ function openPicker(empId,wk,ds,event){
   picker.style.display='block';picker.style.top=Math.min(rect.bottom+4,window.innerHeight-260)+'px';picker.style.left=Math.min(rect.left,window.innerWidth-240)+'px';
   setTimeout(()=>document.addEventListener('click',autoClose,{once:true,capture:true}),20);
 }
-let _attSaveT=null;
+let _attSaveT=null,_attRetryT=null,_attRetryDelay=0;
+// 最近一次待保存/重试中的周 key：非 null 表示考勤/加班/迟到数据还没真正落库，
+// beforeunload 用它拦截误关页面，联网恢复后也用它触发立即重试。
+let _attPendingWk=null;
 function _attAutoSave(wk){
   // 立即更新时间戳，防止 Realtime 通知在保存完成前覆盖刚填的数据
   _lastSavedAt=Date.now();
-  clearTimeout(_attSaveT);
-  _attSaveT=setTimeout(async()=>{
-    const ok=await saveAttendanceWeekOnly(wk);
-    if(ok){toast('✅ 考勤已自动保存');}else{toast('⚠️ 考勤自动保存失败，请手动点击"保存考勤"');}
-  },800);
+  _attPendingWk=wk;
+  clearTimeout(_attSaveT);clearTimeout(_attRetryT);_attRetryDelay=0;
+  _attSaveT=setTimeout(()=>_attAttemptSave(wk),800);
 }
+async function _attAttemptSave(wk){
+  _attSaveT=null;
+  const ok=await saveAttendanceWeekOnly(wk);
+  if(ok){
+    _attPendingWk=null;_attRetryDelay=0;
+    toast('✅ 考勤已自动保存');
+  }else{
+    // 失败后自动退避重试，而不是只弹一次提示后就放着不管——用户很容易没注意到那条
+    // toast，编辑内容会一直停留在内存里没有真正落库，刷新/换设备后就"消失"了。
+    _attRetryDelay=_attRetryDelay?Math.min(_attRetryDelay*2,60000):5000;
+    toast(`⚠️ 考勤自动保存失败，${Math.round(_attRetryDelay/1000)}秒后自动重试（也可手动点击"保存考勤"）`);
+    clearTimeout(_attRetryT);
+    _attRetryT=setTimeout(()=>_attAttemptSave(wk),_attRetryDelay);
+  }
+}
+// 网络恢复后立即重试一次，不必等退避计时器走完
+window.addEventListener('online',()=>{
+  if(_attPendingWk){clearTimeout(_attRetryT);_attAttemptSave(_attPendingWk);}
+});
 function setStat(s){if(!attendanceData[_pWk])attendanceData[_pWk]={};if(!attendanceData[_pWk][_pEmpId])attendanceData[_pWk][_pEmpId]={};if(s)attendanceData[_pWk][_pEmpId][_pDs]=s;else delete attendanceData[_pWk][_pEmpId][_pDs];_attDirty=true;closePicker();renderAttWeek();_attAutoSave(_pWk);}
 function closePicker(){$('status-picker').style.display='none';}
 function autoClose(e){if(!$('status-picker').contains(e.target))closePicker();}
-async function saveAtt(){clearTimeout(_attSaveT);_attSaveT=null;await saveAndToast('✅ 考勤已保存');}
+async function saveAtt(){clearTimeout(_attSaveT);_attSaveT=null;clearTimeout(_attRetryT);_attRetryT=null;_attRetryDelay=0;const ok=await saveAndToast('✅ 考勤已保存');if(ok!==false)_attPendingWk=null;}
 function cnSave(){saveAtt();}
 // ATTENDANCE PASTE / IMPORT
-const VALID_STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT','S'];
+const VALID_STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT','S','TT'];
 function openAttPaste(){$('att-paste-area').value='';$('att-paste-preview').textContent='';$('modal-att-paste').classList.add('open');setTimeout(()=>$('att-paste-area').focus(),50);}
 function parseAttRows(text){
   const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
