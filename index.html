@@ -731,6 +731,11 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
 <!-- TURNOVER ANALYSIS (离职率分析) -->
 <div id="page-turnover" class="page">
   <div class="page-title">离职率分析 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅墨西哥工厂员工 · 以科室为单位（无科室按部门）</span></div>
+  <div class="tabs" style="margin-bottom:14px">
+    <button class="tab active" id="to-tab-month" onclick="switchToTab('month',this)">月度离职率</button>
+    <button class="tab" id="to-tab-week" onclick="switchToTab('week',this)">周度离职率</button>
+  </div>
+  <div id="to-panel-month">
   <div class="toolbar" style="align-items:center">
     <button class="btn btn-sm" onclick="toChMonth(-1)"><i class="ti ti-chevron-left"></i></button>
     <span id="to-month-lbl" style="font-weight:600;min-width:96px;text-align:center">—</span>
@@ -781,6 +786,24 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div style="overflow-x:auto"><table><thead><tr>
       <th>工号</th><th>姓名</th><th>部门</th><th>科室</th><th>岗位</th><th>入职日期</th><th>离职日期</th><th>离职类型</th><th>工龄</th>
     </tr></thead><tbody id="to-resign-table"></tbody></table></div>
+  </div>
+  </div>
+  <div id="to-panel-week" style="display:none">
+  <div class="toolbar" style="align-items:center">
+    <button class="btn btn-sm" onclick="wtoChMonth(-1)"><i class="ti ti-chevron-left"></i></button>
+    <span id="wto-month-lbl" style="font-weight:600;min-width:96px;text-align:center">—</span>
+    <button class="btn btn-sm" onclick="wtoChMonth(1)"><i class="ti ti-chevron-right"></i></button>
+    <select id="wto-week-f" onchange="onWtoWeekChange()" style="width:190px"></select>
+    <select id="wto-dept-f" onchange="renderTurnoverWeek()" style="width:150px"><option value="">全部部门</option></select>
+  </div>
+  <div id="wto-kpi" class="g5" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px"></div>
+  <div class="card">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">各科室离职率（<span id="wto-week-range">本周</span>）</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th style="text-align:left">部门</th><th style="text-align:left">科室</th>
+      <th>期初人数</th><th>入职</th><th>离职</th><th>期末人数</th><th>期间均人数</th><th>当周离职率</th>
+    </tr></thead><tbody id="wto-table"></tbody></table></div>
+  </div>
   </div>
 </div>
 <!-- ORG MANAGEMENT (部门 / 科室 / 岗位) -->
@@ -1033,6 +1056,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <button class="month-btn" onclick="chAnaWk(1)">›</button>
       <button class="btn btn-sm" style="margin-left:6px" onclick="anaWeekOff=0;renderAttAnalysis()">本周</button>
     </div>
+    <button class="btn btn-sm" id="ana-lock-btn" onclick="toggleAttLock()" title="封账后，本周的考勤分析结果将被冻结，即使相关员工的在职状态/部门/考勤记录后续发生变化，也不再影响本周已生成的统计结果"><i class="ti ti-lock"></i> 封账</button>
+    <span id="ana-lock-badge" style="display:none;align-items:center;gap:4px;font-size:11px;color:#856404;background:#fff8e1;border:1px solid #ffe58f;border-radius:var(--border-radius-md);padding:5px 10px"></span>
     <select id="ana-dept-f" onchange="renderAttAnalysis()" style="width:140px"><option value="">全部科室</option></select>
     <label id="ana-excl-wrap" title="在职但本周无任何考勤记录的员工，视为尚未填报，不计入出勤率与旷工占比" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:5px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md)">
       <input type="checkbox" id="ana-excl-blank" checked="" onchange="anaExclBlank=this.checked;renderAttAnalysis()" style="cursor:pointer;margin:0">
@@ -1750,7 +1775,7 @@ function applyI18n(){
   updateMonthLabels();
 }
 // STATE
-let employees=[],departments=[],sections=[],kpiTemplates=[],positions=[],accounts=[],monthlyScores={},attendanceData={},salaryReviews={},overtimeData={},dailyScores={},expectedDays={},lateData={};
+let employees=[],departments=[],sections=[],kpiTemplates=[],positions=[],accounts=[],monthlyScores={},attendanceData={},salaryReviews={},overtimeData={},dailyScores={},expectedDays={},lateData={},attLocks={};
 let currentUser=null,currentEvalEmp=null,editingKPIId=null,editingPosId=null,editingKPIPosId=null,editingSectionId=null,editingAccId=null,cpwId=null,importRows=[],selExpNum=1;
 const _NOW=new Date(),_NY=_NOW.getFullYear(),_NM=_NOW.getMonth()+1;
 let curY=_NY,curM=_NM,qY=_NY,qM=_NM,attHistY=_NY,attHistM=_NM,sumY=_NY,sumM=_NM,deptY=_NY,deptM=_NM;
@@ -2179,6 +2204,7 @@ async function saveConfig(items) {
       { id: 'accounts', value: accounts },
       { id: 'expectedDays', value: expectedDays },
       { id: 'lateData', value: lateData },
+      { id: 'attLocks', value: attLocks },
     ];
     const { data: savedRows, error } = await _sbClient.from('pvs_config').upsert(items, { onConflict: 'id' }).select('id');
     if (error) { console.error('saveConfig error', error); return false; }
@@ -2529,13 +2555,13 @@ async function loadAll(){
   try{
     if(window.__EMBEDDED_SNAPSHOT){
       const snap=window.__EMBEDDED_SNAPSHOT;
-      employees=snap.employees||defEmployees();departments=snap.departments||defDepts();sections=snap.sections||defSections();kpiTemplates=snap.kpiTemplates||defKPIs();positions=snap.positions||defPositions();accounts=snap.accounts||defAccounts();monthlyScores=snap.monthlyScores||{};attendanceData=snap.attendanceData||{};salaryReviews=snap.salaryReviews||{};overtimeData=snap.overtimeData||{};dailyScores=snap.dailyScores||{};expectedDays=snap.expectedDays||{};lateData=snap.lateData||{};
+      employees=snap.employees||defEmployees();departments=snap.departments||defDepts();sections=snap.sections||defSections();kpiTemplates=snap.kpiTemplates||defKPIs();positions=snap.positions||defPositions();accounts=snap.accounts||defAccounts();monthlyScores=snap.monthlyScores||{};attendanceData=snap.attendanceData||{};salaryReviews=snap.salaryReviews||{};overtimeData=snap.overtimeData||{};dailyScores=snap.dailyScores||{};expectedDays=snap.expectedDays||{};lateData=snap.lateData||{};attLocks=snap.attLocks||{};
     } else if(SUPABASE_URL.includes('你的项目ID')){
       hideLoading();
       document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa"><div style="background:#162145;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)"><div style="font-size:32px;margin-bottom:12px">⚙️</div><div style="font-size:18px;font-weight:600;margin-bottom:10px">请先配置 Supabase</div><div style="font-size:13px;color:#666;line-height:1.7">打开 index.html 文件，找到顶部的<br><code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_URL</code> 和 <code style="background:#f1f3f5;padding:2px 6px;border-radius:4px">SUPABASE_ANON_KEY</code><br>填入你的 Supabase 项目信息后重新上传。</div></div></div>`;
       return;
     } else {
-      var eR,dR,secR,kR,pR,aR,attR,srR,otR,edR,dsdR,ldR,msR,legacyMS;
+      var eR,dR,secR,kR,pR,aR,attR,srR,otR,edR,dsdR,ldR,alR,msR,legacyMS;
 
       // 从 pvs_config 加载配置。读取为空时先重试几次再下结论：免费版 Supabase 项目
       // 长时间无请求会自动暂停，首次唤醒往往需要几秒钟，若第一次请求恰好落在这段
@@ -2549,7 +2575,7 @@ async function loadAll(){
         const cfg = {};
         cfgRows.forEach(r => { cfg[r.id] = r.value; });
         eR=cfg.employees;dR=cfg.departments;secR=cfg.sections;kR=cfg.kpiTemplates;
-        pR=cfg.positions;aR=cfg.accounts;edR=cfg.expectedDays;ldR=cfg.lateData;
+        pR=cfg.positions;aR=cfg.accounts;edR=cfg.expectedDays;ldR=cfg.lateData;alR=cfg.attLocks;
         legacyMS=cfg.monthlyScores; // 旧版整块存储的月度评估数据，仅用于一次性迁移
       }
 
@@ -2591,7 +2617,7 @@ async function loadAll(){
         _suspectEmptyLoad = true;
         console.error('[SB] 未读取到 pvs_config.employees，本次加载不会自动写回数据库（避免覆盖真实数据）。');
       }
-      employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};
+      employees=eR||defEmployees();departments=dR||defDepts();sections=secR||defSections();kpiTemplates=kR||defKPIs();positions=pR||defPositions();accounts=aR||defAccounts();attendanceData=attR||{};salaryReviews=srR||{};overtimeData=otR||{};dailyScores=dsdR||{};expectedDays=edR||{};lateData=ldR||{};attLocks=alR||{};
       monthlyScores=msR||{};
       _dirtyDaily.clear(); // dailyScores 已从数据库重新加载，内存中旧的脏标记已失效，清除避免把旧数据重新写回
       _dirtyMonthly.clear();
@@ -2639,7 +2665,7 @@ async function loadAll(){
     if(dedupeIds(positions,'P'))_idFixed=true;
     if(dedupeIds(sections,'SEC'))_idFixed=true;
     if(_idFixed&&!_suspectEmptyLoad)await saveAll();
-  }catch(e){console.error(e);_suspectEmptyLoad=true;employees=defEmployees();departments=defDepts();sections=defSections();kpiTemplates=defKPIs();positions=defPositions();accounts=defAccounts();monthlyScores={};attendanceData={};salaryReviews={};overtimeData={};dailyScores={};expectedDays={};lateData={};}
+  }catch(e){console.error(e);_suspectEmptyLoad=true;employees=defEmployees();departments=defDepts();sections=defSections();kpiTemplates=defKPIs();positions=defPositions();accounts=defAccounts();monthlyScores={};attendanceData={};salaryReviews={};overtimeData={};dailyScores={};expectedDays={};lateData={};attLocks={};}
   hideLoading();
   if(_suspectEmptyLoad)showDataLoadWarning();
 }
@@ -5044,26 +5070,89 @@ function chAnaWk(d){anaWeekOff+=d;renderAttAnalysis();}
 function setAnaGrp(g){anaGrp=g;const d=$('ana-grp-dept'),s=$('ana-grp-sec');[d,s].forEach(b=>{b.style.background='';b.style.color='';b.style.borderColor='';});const act=g==='dept'?d:s;act.style.background='var(--color-text-primary)';act.style.color='var(--color-background-primary)';act.style.borderColor='var(--color-text-primary)';renderAttAnalysis();}
 // 判断某员工在某周是否填报了任何考勤（任一单元格有状态即视为有记录）
 function hasWeekAtt(wk,empId){const row=attendanceData[wk]&&attendanceData[wk][empId];if(!row)return false;return Object.keys(row).some(k=>{const v=row[k];return v!==undefined&&v!==null&&v!=='';});}
+
+// ── 考勤分析「封账」：某周封账后，该周的统计结果被冻结为封账时刻的快照，
+// 此后无论该周涉及的员工在职状态（如离职）、部门/科室归属、考勤记录或应出勤天数
+// 是否被修改，都不再影响该周已生成的分析结果。──
+function isWeekLocked(wkOff){return !!attLocks[wKey(wkOff)];}
+// 封账时/未封账时，都返回用于该周统计的"候选员工"列表（含 id / dept / section 字段）：
+// 未封账 → 当前实时的技能职墨方在职员工；已封账 → 封账时刻冻结的员工快照。
+function weekVisibleEmps(wkOff){
+  const wk=wKey(wkOff);
+  const lock=attLocks[wk];
+  if(lock&&lock.emps)return lock.emps.map(r=>({id:r.id,dept:r.dept,section:r.sec}));
+  return mxEmps().filter(isSkillPos);
+}
 function computeWeekStats(emps,wkOff){
   const dates=getWeekDates(wkOff),wk=wKey(wkOff);
+  const lock=attLocks[wk];
   let aDays=0,fiDays=0,expTotal=0,counted=0,excluded=0;
-  emps.forEach(e=>{
-    if(anaExclBlank&&!hasWeekAtt(wk,e.id)){excluded++;return;}   // 在职但本周无考勤记录 → 不参与统计
-    counted++;
-    const expD=getExpDays(wk,e.id);expTotal+=expD;
-    const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
-    dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;});
-  });
+  if(lock&&lock.emps){
+    const frozenById={};lock.emps.forEach(r=>frozenById[r.id]=r);
+    emps.forEach(e=>{
+      const r=frozenById[e.id];
+      if(!r||(anaExclBlank&&!r.hasAtt)){excluded++;return;}
+      counted++;expTotal+=r.expDays;aDays+=r.aDays;fiDays+=r.fiDays;
+    });
+  }else{
+    emps.forEach(e=>{
+      if(anaExclBlank&&!hasWeekAtt(wk,e.id)){excluded++;return;}   // 在职但本周无考勤记录 → 不参与统计
+      counted++;
+      const expD=getExpDays(wk,e.id);expTotal+=expD;
+      const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
+      dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;});
+    });
+  }
   const absDays=Math.max(0,expTotal-aDays);
   const attRate=expTotal>0?aDays/expTotal*100:0;
   const fiRate=expTotal>0?fiDays/expTotal*100:0;
   return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate};
 }
+async function lockAttWeek(){
+  if(!canEdit()){toast('无权限');return;}
+  const wk=wKey(anaWeekOff);
+  if(attLocks[wk]){toast('本周已封账');return;}
+  if(!confirm(`确定要封账「${wLabel(anaWeekOff)}」吗？\n封账后本周的考勤分析结果将被冻结，此后即使相关员工的在职状态、部门/科室、考勤记录发生变化，也不会再影响本周已生成的统计结果（可由管理员解封）。`))return;
+  const dates=getWeekDates(anaWeekOff);
+  const emps=mxEmps().filter(isSkillPos);
+  const rec=emps.map(e=>{
+    const hasAtt=hasWeekAtt(wk,e.id);
+    const expDays=getExpDays(wk,e.id);
+    const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
+    let aDays=0,fiDays=0;
+    dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;});
+    return {id:e.id,dept:e.dept||'未分配',sec:(e.section&&e.section!==e.dept)?e.section:'',hasAtt,aDays,fiDays,expDays};
+  });
+  attLocks[wk]={lockedAt:new Date().toISOString(),lockedBy:(currentUser&&currentUser.displayName)||'',emps:rec};
+  await saveAndToast('已封账：'+wLabel(anaWeekOff));
+  renderAttAnalysis();
+}
+async function unlockAttWeek(){
+  if(!canEdit()){toast('无权限');return;}
+  const wk=wKey(anaWeekOff);
+  if(!attLocks[wk])return;
+  if(!confirm(`确定要解封「${wLabel(anaWeekOff)}」吗？解封后本周数据将恢复为按当前实时数据计算。`))return;
+  delete attLocks[wk];
+  await saveAndToast('已解封：'+wLabel(anaWeekOff));
+  renderAttAnalysis();
+}
+function toggleAttLock(){if(isWeekLocked(anaWeekOff))unlockAttWeek();else lockAttWeek();}
 function renderAttAnalysis(){
   const dfSel=$('ana-dept-f');if(dfSel&&dfSel.options.length<=1){const allSecs=new Set();mxEmps().filter(isSkillPos).forEach(e=>{if(e.section)allSecs.add(e.section);});[...allSecs].sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;dfSel.appendChild(o);});}
   $('ana-week-lbl').textContent=wLabel(anaWeekOff);
   const secF=$('ana-dept-f').value;
-  let emps=mxEmps().filter(isSkillPos);if(secF)emps=emps.filter(e=>e.section===secF);
+  let emps=weekVisibleEmps(anaWeekOff);if(secF)emps=emps.filter(e=>e.section===secF);
+  const _locked=isWeekLocked(anaWeekOff);
+  const _lockBtn=$('ana-lock-btn'),_lockBadge=$('ana-lock-badge');
+  if(_lockBtn){_lockBtn.style.display=canEdit()?'':'none';_lockBtn.innerHTML=_locked?'<i class="ti ti-lock-open"></i> 解封':'<i class="ti ti-lock"></i> 封账';}
+  if(_lockBadge){
+    if(_locked){
+      const _li=attLocks[wKey(anaWeekOff)]||{};
+      _lockBadge.style.display='inline-flex';
+      _lockBadge.title='封账时间：'+(_li.lockedAt?new Date(_li.lockedAt).toLocaleString('zh-CN'):'—')+(_li.lockedBy?'　操作人：'+_li.lockedBy:'');
+      _lockBadge.innerHTML='<i class="ti ti-lock"></i> 已封账';
+    }else{_lockBadge.style.display='none';}
+  }
   // 按部门→科室分组
   const byDept={};
   emps.forEach(e=>{
@@ -5165,9 +5254,9 @@ function drawAnaCharts(rows){
   // chart2: FI rate
   const c2=$('anaChart2').getContext('2d');if(charts.ana2)charts.ana2.destroy();
   charts.ana2=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:tLabel('旷工占比'),data:fiData,backgroundColor:fiData.map(v=>v<=1?'#22c55e':v<=3?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>'旷工占比：'+ctx.parsed.y+'%'}}}}});
-  // chart3: last 6 weeks combo (factory-wide)
-  const visAll=mxEmps().filter(isSkillPos);
-  const last6=[];for(let i=5;i>=0;i--){const off=anaWeekOff-i;const ds=getWeekDates(off);const lbl=`${ds[0].getMonth()+1}/${ds[0].getDate()}~${ds[6].getMonth()+1}/${ds[6].getDate()}`;const st=computeWeekStats(visAll,off);last6.push({lbl,att:+st.attRate.toFixed(2),fi:+st.fiRate.toFixed(2)});}
+  // chart3: last 6 weeks combo (factory-wide)；每周各自取该周的候选员工（已封账的周用封账快照，
+  // 避免用当前员工名单去套用历史周次导致离职员工被整体剔除）
+  const last6=[];for(let i=5;i>=0;i--){const off=anaWeekOff-i;const ds=getWeekDates(off);const lbl=`${ds[0].getMonth()+1}/${ds[0].getDate()}~${ds[6].getMonth()+1}/${ds[6].getDate()}`;const st=computeWeekStats(weekVisibleEmps(off),off);last6.push({lbl,att:+st.attRate.toFixed(2),fi:+st.fiRate.toFixed(2)});}
   const c3=$('anaChart3').getContext('2d');if(charts.ana3)charts.ana3.destroy();
   charts.ana3=new Chart(c3,{type:'bar',data:{labels:last6.map(x=>x.lbl),datasets:[
     {type:'bar',label:tLabel('出勤率'),data:last6.map(x=>x.att),backgroundColor:'#3b82f6',borderRadius:4,yAxisID:'y',order:2},
@@ -5247,7 +5336,7 @@ window.chartToImg=function(chart,caption){if(!chart)return null;try{return{src:c
 
 function exportAttAnalysisPDF(){
   const E=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const secF=$('ana-dept-f').value;let emps=mxEmps().filter(isSkillPos);if(secF)emps=emps.filter(e=>e.section===secF);
+  const secF=$('ana-dept-f').value;let emps=weekVisibleEmps(anaWeekOff);if(secF)emps=emps.filter(e=>e.section===secF);
   // 按部门→科室分组（与页面表格一致，参照离职率分析的报表结构）
   const byDept={};
   emps.forEach(e=>{
@@ -5283,7 +5372,7 @@ function exportAttAnalysisPDF(){
   html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td style="text-align:left"></td><td>${tot.emp}</td><td>${tot.aDays}</td><td>${tot.expTotal}</td><td>${tot.attRate.toFixed(1)}%</td><td>${tot.absDays}</td><td>${tot.fiDays}</td><td>${tot.fiRate.toFixed(2)}%</td></tr></tbody></table>`;
   buildPDFReport({
     title:'考勤分析报表',
-    meta:`统计周期：${wLabel(anaWeekOff)}　·　以科室为单位（无科室按部门）${secF?'　·　科室：'+secF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
+    meta:`统计周期：${wLabel(anaWeekOff)}${isWeekLocked(anaWeekOff)?'　·　🔒 本周已封账':''}　·　以科室为单位（无科室按部门）${secF?'　·　科室：'+secF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
     sections:[
       {kind:'kpi',cards:[
         {label:'统计人数',value:tot.emp+' 人'},
@@ -5299,7 +5388,7 @@ function exportAttAnalysisPDF(){
   toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
 }
 function exportAttAnalysis(){
-  const secF=$('ana-dept-f').value;let emps=mxEmps().filter(isSkillPos);if(secF)emps=emps.filter(e=>e.section===secF);
+  const secF=$('ana-dept-f').value;let emps=weekVisibleEmps(anaWeekOff);if(secF)emps=emps.filter(e=>e.section===secF);
   const groups={};
   if(anaGrp==='dept'){emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});}
   else{emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]=[];groups[k].push(e);});}
@@ -6905,7 +6994,7 @@ async function exportOfflineHTML(){
   try{
     const snap={
       employees,departments,sections,kpiTemplates,positions,accounts,
-      monthlyScores,attendanceData,salaryReviews,overtimeData,dailyScores,expectedDays,lateData,lateData,
+      monthlyScores,attendanceData,salaryReviews,overtimeData,dailyScores,expectedDays,lateData,attLocks,
       _savedAt:Date.now()
     };
     const snapScript=`<script>window.__EMBEDDED_SNAPSHOT=${JSON.stringify(snap)};<\/script>`;
@@ -6943,7 +7032,7 @@ function exportBackup(){
     exportedAt:new Date().toISOString(),
     employees,departments,sections,kpiTemplates,positions,accounts,
     monthlyScores,attendanceData,salaryReviews,
-    overtimeData,dailyScores,expectedDays
+    overtimeData,dailyScores,expectedDays,lateData,attLocks
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -6986,7 +7075,7 @@ function handleBackupFile(e){
       salaryReviews=data.salaryReviews||{};
       overtimeData=data.overtimeData||{};
       dailyScores=data.dailyScores||{};
-      expectedDays=data.expectedDays||{};lateData=data.lateData||{};
+      expectedDays=data.expectedDays||{};lateData=data.lateData||{};attLocks=data.attLocks||{};
       // pvs_daily/pvs_monthly 是按"脏记录"增量写入的，整份覆盖时必须把恢复出来的
       // 每一条都标记为脏，否则 saveAll() 会认为没有改动而不写入，刷新后又变回旧数据
       Object.keys(dailyScores).forEach(empId=>{Object.keys(dailyScores[empId]||{}).forEach(ds=>_dirtyDaily.add(empId+'|'+ds));});
@@ -7131,6 +7220,7 @@ loadAll().then(()=>{
             if (cfg.positions) positions = cfg.positions;
             if (cfg.expectedDays) expectedDays = cfg.expectedDays;
             if (cfg.lateData) lateData = cfg.lateData;
+            if (cfg.attLocks) attLocks = cfg.attLocks;
             // handle attendance week keys
             cfgRows.forEach(r => {
               if (r.id && r.id.startsWith('att_week_')) {
@@ -8290,6 +8380,16 @@ const ES_DICT={
 '科室近 6 个月离职率趋势':'Tendencia rotación por sección (6 meses)',
 '离职人数':'N.º de bajas',
 '入职人数':'N.º de ingresos',
+// ── 周度离职率 tab ──
+'月度离职率':'Rotación mensual',
+'周度离职率':'Rotación semanal',
+'各科室离职率':'Tasa de rotación por sección',
+'期初人数':'Personal inicio periodo',
+'期末人数':'Personal fin periodo',
+'期间均人数':'Promedio del periodo',
+'当周离职率':'Rotación de la semana',
+'当周离职率（工厂整体）':'Rotación de la semana (planta)',
+'本周暂无数据':'Sin datos esta semana',
 '本月暂无数据':'Sin datos este mes',
 '本月':'mes actual',
 '部门汇总':'Total departamento',
@@ -8414,6 +8514,10 @@ const ES_DICT={
 '天，须至少 2 天':'días, se requieren al menos 2 días',
 '按人均每周加班时数':'Por horas extra promedio semanal por persona',
 '排除无考勤记录员工':'Excluir empleados sin registro de asistencia',
+'封账':'Cerrar periodo',
+'解封':'Reabrir periodo',
+'已封账':'Periodo cerrado',
+'本周已封账':'Periodo cerrado',
 '旷工总天数(FI)':'Total de días de ausencia injustificada (FI)',
 '显示更多员工（还有':'Mostrar más empleados (quedan',
 '假期开始（前V）':'Inicio de vacaciones (V anterior)',
@@ -9340,6 +9444,12 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
       sel.value=cur;}
     renderTurnover();
     renderResignList();
+    // 若当前停留在「周度离职率」tab，一并刷新，避免切页再回来后数据未同步
+    const wp=$('to-panel-week');
+    if(wp&&wp.style.display!=='none'){
+      if(wtoY===null){const[y,m]=nowYM();wtoY=y;wtoM=m;}
+      refreshWtoWeeks();
+    }
   }
 
   function curEmps(){
@@ -9463,6 +9573,115 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
   function toChMonth(d){let y=toY,m=toM+d;while(m<1){m+=12;y--;}while(m>12){m-=12;y++;}toY=y;toM=m;renderTurnover();}
 
+  // ---------- 周度离职率（本模块新增 tab） ----------
+  // 口径与月度完全一致：期初=上周末（即本周开始日前一天）在职人数，期末=本周结束日在职人数，
+  // 期间均人数=(期初+期末)/2，当周离职率=当周离职人数/期间均人数。
+  let wtoY=null,wtoM=null,wtoWeeks=[],wtoWeekIdx=0;
+
+  function switchToTab(tab,el){
+    document.querySelectorAll('#page-turnover > .tabs .tab').forEach(b=>b.classList.remove('active'));
+    el.classList.add('active');
+    $('to-panel-month').style.display=tab==='month'?'block':'none';
+    $('to-panel-week').style.display=tab==='week'?'block':'none';
+    if(tab==='week'){
+      if(wtoY===null){const[y,m]=nowYM();wtoY=y;wtoM=m;}
+      refreshWtoWeeks();
+    }
+  }
+
+  function weekStat(emps,ws,we){
+    const dayBefore=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()-1);
+    let start=0,hires=0,resigns=0,end=0;
+    emps.forEach(e=>{
+      if(employedOn(e,dayBefore))start++;
+      if(employedOn(e,we))end++;
+      if(joinedIn(e,ws,we))hires++;
+      if(resignedIn(e,ws,we))resigns++;
+    });
+    const avg=(start+end)/2;
+    const rate=avg>0?(resigns/avg*100):null;
+    return {start,hires,resigns,end,avg,rate};
+  }
+
+  // 某月内的自然周（周一~周日）列表：从「覆盖 1 号所在的那个周一」开始，
+  // 到周一超出月末为止；与考勤分析模块的周定义（周一起始）保持一致。
+  function monthWeeks(y,m){
+    const last=new Date(y,m,0);
+    const d0=new Date(y,m-1,1);
+    const dow=d0.getDay();const diff=dow===0?-6:1-dow;
+    let d=new Date(d0.getFullYear(),d0.getMonth(),d0.getDate()+diff);
+    const weeks=[];
+    while(d<=last){
+      const we=new Date(d.getFullYear(),d.getMonth(),d.getDate()+6);
+      weeks.push({start:new Date(d),end:we});
+      d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+7);
+    }
+    return weeks;
+  }
+  function wDateStr(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
+  function wtoLbl(wk,idx){return `第${idx+1}周 (${pad2(wk.start.getMonth()+1)}/${pad2(wk.start.getDate())}~${pad2(wk.end.getMonth()+1)}/${pad2(wk.end.getDate())})`;}
+
+  function buildDeptRowsWeek(emps,ws,we){
+    const byDept={};
+    emps.forEach(e=>{const d=gDept(e);if(!byDept[d])byDept[d]={dept:d,emps:[],secs:{}};byDept[d].emps.push(e);
+      const sec=effSec(e);const sk=sec||'__none__';
+      if(!byDept[d].secs[sk])byDept[d].secs[sk]={sec:sec||'部门直属',emps:[]};
+      byDept[d].secs[sk].emps.push(e);});
+    const deptList=Object.values(byDept).map(d=>({...d,st:weekStat(d.emps,ws,we)}))
+      .sort((a,b)=>(b.st.rate||0)-(a.st.rate||0)||b.st.resigns-a.st.resigns||b.st.start-a.st.start);
+    const out=[];
+    deptList.forEach(d=>{
+      const hasRealSections=Object.keys(d.secs).some(k=>k!=='__none__');
+      if(hasRealSections){
+        out.push({dept:d.dept,sec:'部门汇总',isDept:true,st:d.st});
+        Object.values(d.secs).map(s=>({sec:s.sec,st:weekStat(s.emps,ws,we)}))
+          .sort((a,b)=>(b.st.rate||0)-(a.st.rate||0)||b.st.resigns-a.st.resigns)
+          .forEach(s=>out.push({dept:d.dept,sec:s.sec,isDept:false,st:s.st}));
+      }else{
+        out.push({dept:d.dept,sec:'',isDept:true,single:true,st:d.st});
+      }
+    });
+    return out;
+  }
+
+  function refreshWtoWeeks(){
+    $('wto-month-lbl').textContent=mLbl(wtoY,wtoM);
+    // 部门下拉（与月度 tab 共用同一份部门列表）
+    const sel=$('wto-dept-f');
+    if(sel){const cur=sel.value;const depts=[...new Set(mxAll().map(gDept))].sort();
+      sel.innerHTML='<option value="">全部部门</option>'+depts.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');
+      sel.value=cur;}
+    wtoWeeks=monthWeeks(wtoY,wtoM);
+    let defaultIdx=wtoWeeks.length-1;
+    const today=new Date();today.setHours(0,0,0,0);
+    const idx=wtoWeeks.findIndex(w=>today>=w.start&&today<=w.end);
+    if(idx>=0)defaultIdx=idx;
+    wtoWeekIdx=Math.max(0,Math.min(defaultIdx,wtoWeeks.length-1));
+    const wsel=$('wto-week-f');
+    if(wsel){wsel.innerHTML=wtoWeeks.map((w,i)=>`<option value="${i}">${esc(wtoLbl(w,i))}</option>`).join('');wsel.value=String(wtoWeekIdx);}
+    renderTurnoverWeek();
+  }
+  function onWtoWeekChange(){const sel=$('wto-week-f');wtoWeekIdx=sel?(parseInt(sel.value,10)||0):0;renderTurnoverWeek();}
+  function wtoChMonth(d){let y=wtoY,m=wtoM+d;while(m<1){m+=12;y--;}while(m>12){m-=12;y++;}wtoY=y;wtoM=m;refreshWtoWeeks();}
+
+  function renderTurnoverWeek(){
+    if(!wtoWeeks.length)return;
+    const wk=wtoWeeks[wtoWeekIdx];if(!wk)return;
+    $('wto-week-range').textContent=wDateStr(wk.start)+' ~ '+wDateStr(wk.end);
+    const dF=$('wto-dept-f')?$('wto-dept-f').value:'';
+    const emps=mxAll().filter(e=>!dF||gDept(e)===dF);
+    const agg=weekStat(emps,wk.start,wk.end);
+    const cards=[
+      {l:'期初人数',v:agg.start,c:'var(--color-text-primary)'},
+      {l:'入职人数',v:agg.hires,c:'#1f8a5b'},
+      {l:'离职人数',v:agg.resigns,c:'#c0392b'},
+      {l:'期末人数',v:agg.end,c:'var(--color-text-primary)'},
+      {l:'当周离职率（工厂整体）',v:rateTxt(agg.rate),c:'#b9770e'}
+    ];
+    $('wto-kpi').innerHTML=cards.map(c=>`<div class="card" style="margin:0;padding:14px 16px"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">${c.l}</div><div style="font-size:26px;font-weight:600;color:${c.c}">${c.v}</div></div>`).join('');
+    $('wto-table').innerHTML=buildDeptRowsWeek(emps,wk.start,wk.end).map(rowHtml).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--color-text-tertiary);padding:18px">本周暂无数据</td></tr>`;
+  }
+
   function exportTurnover(){
     if(typeof XLSX==='undefined'){if(window.toast)toast('导出组件未就绪');return;}
     const emps=curEmps();
@@ -9545,6 +9764,10 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   window.toChMonth=toChMonth;
   window.exportTurnover=exportTurnover;
   window.exportTurnoverPDF=exportTurnoverPDF;
+  window.switchToTab=switchToTab;
+  window.wtoChMonth=wtoChMonth;
+  window.onWtoWeekChange=onWtoWeekChange;
+  window.renderTurnoverWeek=renderTurnoverWeek;
 })();
 </script>
 
