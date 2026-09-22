@@ -350,6 +350,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div class="nav-item" onclick="showPage('attendance',this)"><i class="ti ti-calendar-check"></i>墨方考勤填报</div>
     <div class="nav-item" data-role="admin" onclick="showPage('att-analysis',this)"><i class="ti ti-chart-histogram"></i>考勤分析</div>
     <div class="nav-item" data-role="admin" onclick="showPage('att-summary',this)"><i class="ti ti-report"></i>月度汇总</div>
+    <div class="nav-item" data-role="admin" onclick="showPage('ot-analysis',this)"><i class="ti ti-clock-hour-4"></i>加班分析</div>
     <div class="nav-sec" data-role="admin">考勤管理 · 中方</div>
     <div class="nav-item" data-role="admin" onclick="showPage('cn-attendance',this)"><i class="ti ti-user-check"></i>中方考勤填报</div>
     <div class="nav-sec" data-role="admin">调薪管理</div>
@@ -944,8 +945,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <input id="att-search" placeholder="搜索工号 / 姓名" oninput="renderAttWeek()" style="width:150px">
         <button class="btn btn-sm" id="att-search-clear" onclick="document.getElementById('att-search').value='';renderAttWeek()" title="清除搜索" style="display:none"><i class="ti ti-x"></i></button>
         <button class="btn" onclick="openAttPaste()" title="从 Excel 粘贴整周考勤"><i class="ti ti-clipboard"></i> 粘贴录入</button>
-        <button class="btn" onclick="document.getElementById('att-file').click()" title="导入 Excel 考勤数据"><i class="ti ti-upload"></i> 导入Excel</button>
-        <button class="btn btn-sm" onclick="dlAttTpl()" title="下载考勤导入模板"><i class="ti ti-download"></i> 模板</button>
+        <button class="btn" onclick="document.getElementById('att-file').click()" title="导入 Excel 考勤数据（模板中 OT周一~OT周日 列可选，用于批量导入加班小时数）"><i class="ti ti-upload"></i> 导入Excel</button>
+        <button class="btn btn-sm" onclick="dlAttTpl()" title="下载考勤导入模板（含加班列，可选填）"><i class="ti ti-download"></i> 模板</button>
         <input type="file" id="att-file" accept=".xlsx,.xls" style="display:none" onchange="handleAttFile(event)">
         <button class="btn btn-sm" id="att-sort-fi-btn" onclick="toggleAttSortFI()" title="按FI数量排序"><i class="ti ti-arrows-sort"></i> FI排序</button>
         <button class="btn btn-p" onclick="saveAtt()"><i class="ti ti-check"></i><span data-i18n="btn_save_att">保存考勤</span></button>
@@ -1092,6 +1093,65 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <div class="card">
     <div class="card-header"><div class="card-title">工厂近6周 — 出勤率 vs 旷工占比</div><div style="font-size:11px;color:var(--color-text-tertiary)">条状：出勤率 · 折线：旷工占比</div></div>
     <div style="position:relative;height:320px"><canvas id="anaChart3"></canvas></div>
+  </div>
+</div>
+<!-- OT ANALYSIS (加班分析 · 墨方 · 按工序) -->
+<div id="page-ot-analysis" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+    <div class="page-title" style="margin-bottom:0">加班分析 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅岗位类型为「技能职」的员工 · 按工序统计</span></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="exportOtAnalysis()"><i class="ti ti-file-spreadsheet"></i> 导出Excel</button>
+      <button class="btn" onclick="exportOtAnalysisPDF()"><i class="ti ti-file-type-pdf"></i> 导出PDF</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="week-nav" style="display:flex;align-items:center;gap:6px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:4px 8px">
+      <button class="month-btn" onclick="chOtWk(-1)">‹</button>
+      <div style="font-size:13px;font-weight:500;min-width:200px;text-align:center" id="ot-week-lbl"></div>
+      <button class="month-btn" onclick="chOtWk(1)">›</button>
+      <button class="btn btn-sm" style="margin-left:6px" onclick="otWeekOff=0;renderOtAnalysis()">本周</button>
+    </div>
+    <select id="ot-dept-f" onchange="renderOtAnalysis()" style="width:140px"><option value="">全部部门</option></select>
+    <select id="ot-proc-f" onchange="renderOtAnalysis()" style="width:140px"><option value="">全部工序</option></select>
+    <div style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">工作日加班（延时）/ 周末加班：按日期自动判断　·　单位：小时</div>
+  </div>
+
+  <div class="g4" id="ot-stat-cards" style="margin-bottom:14px"></div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">各工序加班汇总 — <span id="ot-tbl-week"></span></div></div>
+    <div style="overflow-x:auto">
+      <table style="width:100%"><thead><tr>
+        <th style="text-align:left">工序</th><th style="text-align:right">人数</th><th style="text-align:right">参与加班</th>
+        <th style="text-align:right">工作日加班(h)</th><th style="text-align:right">周末加班(h)</th><th style="text-align:right">加班合计(h)</th><th style="text-align:right">人均加班(h)</th>
+      </tr></thead><tbody id="ot-tbl-body"></tbody></table>
+    </div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">各工序加班时长对比</div></div>
+      <div style="position:relative;height:280px"><canvas id="otChart1"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">各工序人均加班对比</div></div>
+      <div style="position:relative;height:280px"><canvas id="otChart2"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">工厂近6周加班趋势</div><div style="font-size:11px;color:var(--color-text-tertiary)">堆叠柱：工作日加班 + 周末加班</div></div>
+    <div style="position:relative;height:320px"><canvas id="otChart3"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;font-weight:600">高强度加班预警名单 <span id="ot-warn-count" style="font-weight:400;color:var(--color-text-tertiary)"></span></div>
+      <div style="font-size:11px;color:var(--color-text-tertiary)">墨西哥《联邦劳动法》第66条：加班每周不超过 9 小时（3小时/天 × 3天），超出视为高强度预警</div>
+    </div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>工号</th><th>姓名</th><th>部门</th><th>科室</th><th>工序</th><th>岗位</th><th>工作日加班(h)</th><th>周末加班(h)</th><th>合计(h)</th>
+    </tr></thead><tbody id="ot-warn-table"></tbody></table></div>
   </div>
 </div>
 <!-- CHINA-SIDE ATTENDANCE -->
@@ -4960,16 +5020,29 @@ function applyAttRowsToWeek(rows){
   const dates=getWeekDates(weekOff),wk=wKey(weekOff);
   if(!attendanceData[wk])attendanceData[wk]={};
   _attDirty=true;
-  let matched=0,unmatched=[];
+  let matched=0,unmatched=[],otMatched=0;
   rows.forEach(r=>{
     const emp=matchEmp(r.key);
     if(!emp){unmatched.push(r.key);return;}
     if(!attendanceData[wk][emp.id])attendanceData[wk][emp.id]={};
     r.statuses.forEach((s,i)=>{if(s&&dates[i])attendanceData[wk][emp.id][dStr(dates[i])]=s;});
     if(r.expDays!==undefined&&r.expDays!==null&&String(r.expDays).trim()!=='')setExpDays(wk,emp.id,r.expDays);
+    if(r.otHours){
+      let any=false;
+      r.otHours.forEach((h,i)=>{
+        if(h==null||!dates[i])return;
+        any=true;
+        const n=Math.max(0,Math.min(24,h));
+        if(!overtimeData[wk])overtimeData[wk]={};
+        if(!overtimeData[wk][emp.id])overtimeData[wk][emp.id]={};
+        const ds=dStr(dates[i]);
+        if(n>0)overtimeData[wk][emp.id][ds]=n;else delete overtimeData[wk][emp.id][ds];
+      });
+      if(any){_otDirty=true;otMatched++;}
+    }
     matched++;
   });
-  return{matched,unmatched};
+  return{matched,unmatched,otMatched};
 }
 async function applyAttPaste(){
   const text=$('att-paste-area').value;
@@ -4996,21 +5069,28 @@ function handleAttFile(e){
       const ws=wb.Sheets[wb.SheetNames[0]];
       const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       const header=aoa[0]||[];
-      let expIdx=-1;
-      header.forEach((h,i)=>{if(/应出勤|esperad|requerid|días requer/i.test(String(h||'')))expIdx=i;});
+      let expIdx=-1;const otIdx=[];
+      header.forEach((h,i)=>{
+        const hs=String(h||'').trim();
+        if(/应出勤|esperad|requerid|días requer/i.test(hs))expIdx=i;
+        else if(/^OT|加班/i.test(hs))otIdx.push(i);
+      });
       const dataRows=aoa.filter(row=>{const first=String(row[0]||'').trim();if(!first)return false;return !/^(工号|工资系统编码|工号或工资系统编码|应出勤|ID Empleado|ID o|Salary Code|Días)/i.test(first);});
       const rows=dataRows.map(row=>{
         const key=String(row[0]||'').trim();
         const dayCols=[];
-        for(let i=1;i<=8&&dayCols.length<7;i++){if(i===expIdx)continue;dayCols.push(i);}
+        for(let i=1;i<=8&&dayCols.length<7;i++){if(i===expIdx||otIdx.includes(i))continue;dayCols.push(i);}
         const statuses=dayCols.map(ci=>{const v=String(row[ci]||'').trim().toUpperCase();return VALID_STATUSES.includes(v)?v:null;});
         const expDays=expIdx>=0?row[expIdx]:null;
-        return{key,statuses,expDays};
+        // 加班列（可选）：模板里按周一~周日顺序排列，缺省/空白视为该日无加班
+        const otHours=otIdx.length?otIdx.slice(0,7).map(ci=>{const raw=String(row[ci]||'').trim();if(raw==='')return null;const n=parseFloat(raw);return isNaN(n)?null:n;}):null;
+        return{key,statuses,expDays,otHours};
       }).filter(r=>r.key);
       if(!rows.length){toast('未读到任何有效行');e.target.value='';return;}
       const weekKey=wKey(weekOff);
-      const{matched,unmatched}=applyAttRowsToWeek(rows);
+      const{matched,unmatched,otMatched}=applyAttRowsToWeek(rows);
       let msg=`已导入 ${matched} 名员工本周考勤`;
+      if(otMatched)msg+=`，其中 ${otMatched} 人含加班数据`;
       if(unmatched.length)msg+=`，${unmatched.length} 个未匹配`;
       _suppressRealtimeFor(30000);
       showLoading('正在保存考勤数据…');
@@ -5024,10 +5104,10 @@ function handleAttFile(e){
   r.readAsArrayBuffer(f);
 }
 function dlAttTpl(){
-  const h=['工号或工资系统编码','应出勤天数','周一','周二','周三','周四','周五','周六','周日'];
+  const h=['工号或工资系统编码','应出勤天数','周一','周二','周三','周四','周五','周六','周日','OT周一','OT周二','OT周三','OT周四','OT周五','OT周六','OT周日'];
   const sample=[
-    ['E1001',6,'A','A','A','A','A','D','D'],
-    ['E1002',6,'A','FI','A','A','A','D','D'],
+    ['E1001',6,'A','A','A','A','A','D','D',2,'',1.5,'','','',''],
+    ['E1002',6,'A','FI','A','A','A','D','D','','','','','','',''],
   ];
   const ws=XLSX.utils.aoa_to_sheet([h,...sample]);
   const wb=XLSX.utils.book_new();
@@ -5400,6 +5480,167 @@ function exportAttAnalysis(){
   XLSX.utils.book_append_sheet(wb,ws,wLabel(anaWeekOff).replace(/\//g,'-'));
   XLSX.writeFile(wb,`考勤分析_${wKey(anaWeekOff).replace('week_','')}.xlsx`);toast('导出成功');
 }
+
+// ============ 加班分析（墨方 · 按工序） ============
+// 数据来源：墨方考勤填报页面已录入的 overtimeData[周key][工号][日期]=小时数，本模块只做统计展示。
+// 工序取自员工当前岗位的 process 字段（组织岗位管理中可选填），未配置工序的岗位归入"未分类工序"。
+// 高强度预警口径：墨西哥《联邦劳动法》第66条，加班上限为 3 小时/天 × 3 天/周 = 9 小时/周。
+const OT_WEEKLY_LIMIT=9;
+let otWeekOff=0;
+function chOtWk(d){otWeekOff+=d;renderOtAnalysis();}
+function empProcess(e){const p=positions.find(p=>p.name===(e&&e.position));return(p&&p.process)?p.process:'';}
+// 某员工在指定周内的加班小时数，按日期拆分为工作日（延时）/ 周末
+function empWeekOt(e,wkOff){
+  const dates=getWeekDates(wkOff),wk=wKey(wkOff);
+  let wd=0,we=0;
+  dates.forEach(d=>{
+    const h=getOt(wk,e.id,dStr(d));if(!h)return;
+    const dow=d.getDay();
+    if(dow===0||dow===6)we+=h;else wd+=h;
+  });
+  return{wd,we,total:wd+we};
+}
+function weekOtStat(emps,wkOff){
+  let weekday=0,weekend=0,participants=0;const perEmp=[];
+  emps.forEach(e=>{
+    const o=empWeekOt(e,wkOff);
+    if(o.total>0)participants++;
+    weekday+=o.wd;weekend+=o.we;
+    perEmp.push({emp:e,wd:o.wd,we:o.we,total:o.total});
+  });
+  const total=weekday+weekend;
+  return{emp:emps.length,participants,weekday,weekend,total,avg:emps.length?total/emps.length:0,perEmp};
+}
+function buildProcessRows(emps,wkOff){
+  const groups={};
+  emps.forEach(e=>{const proc=empProcess(e)||'未分类工序';if(!groups[proc])groups[proc]=[];groups[proc].push(e);});
+  return Object.keys(groups).map(proc=>({proc,...weekOtStat(groups[proc],wkOff)})).sort((a,b)=>b.total-a.total);
+}
+function otEmps(){
+  const dates=getWeekDates(otWeekOff);
+  return mxEmpsForWeek(dates[0],dates[6]).filter(isSkillPos);
+}
+function renderOtAnalysis(){
+  $('ot-week-lbl').textContent=wLabel(otWeekOff);
+  $('ot-tbl-week').textContent=wLabel(otWeekOff);
+  const dfSel=$('ot-dept-f');
+  if(dfSel&&dfSel.options.length<=1){const depts=[...new Set(otEmps().map(e=>e.dept||'未分配'))].sort();depts.forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;dfSel.appendChild(o);});}
+  const pfSel=$('ot-proc-f');
+  if(pfSel&&pfSel.options.length<=1){const procs=[...new Set(positions.map(p=>p.process).filter(Boolean))].sort();procs.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;pfSel.appendChild(o);});pfSel.innerHTML+='<option value="未分类工序">未分类工序</option>';}
+  const dF=dfSel?dfSel.value:'',pF=pfSel?pfSel.value:'';
+  let emps=otEmps();
+  if(dF)emps=emps.filter(e=>(e.dept||'未分配')===dF);
+  if(pF)emps=emps.filter(e=>(empProcess(e)||'未分类工序')===pF);
+
+  const rows=buildProcessRows(emps,otWeekOff);
+  const all=weekOtStat(emps,otWeekOff);
+  const overLimit=all.perEmp.filter(p=>p.total>OT_WEEKLY_LIMIT).length;
+
+  $('ot-stat-cards').innerHTML=[
+    {l:'加班总时长',v:all.total.toFixed(1)+' h',s:`工作日 ${all.weekday.toFixed(1)}h · 周末 ${all.weekend.toFixed(1)}h`,c:'#0c63e4'},
+    {l:'参与加班人数',v:all.participants,s:`共 ${all.emp} 人 · ${rows.length} 个工序`,c:'var(--color-text-primary)'},
+    {l:'人均加班时长',v:all.avg.toFixed(1)+' h',s:'加班总时长 / 统计人数',c:'#1f8a5b'},
+    {l:'高强度加班预警',v:overLimit,s:`单周加班 > ${OT_WEEKLY_LIMIT}h 的人数`,c:overLimit>0?'#c0392b':'var(--color-text-tertiary)'},
+  ].map(x=>`<div class="stat-mini"><div class="stat-mini-lbl">${x.l}</div><div class="stat-mini-val" style="color:${x.c}">${x.v}</div><div class="stat-mini-sub">${x.s}</div></div>`).join('');
+
+  $('ot-tbl-body').innerHTML=rows.map(r=>{
+    const avg=r.emp?r.total/r.emp:0;
+    const hot=avg>OT_WEEKLY_LIMIT;
+    return `<tr><td style="text-align:left"><strong>${esc9(r.proc)}</strong></td><td style="text-align:right;font-family:monospace">${r.emp}</td><td style="text-align:right;font-family:monospace">${r.participants}</td>`+
+      `<td style="text-align:right;font-family:monospace">${r.weekday.toFixed(1)}</td><td style="text-align:right;font-family:monospace">${r.weekend.toFixed(1)}</td>`+
+      `<td style="text-align:right;font-family:monospace;font-weight:600">${r.total.toFixed(1)}</td>`+
+      `<td style="text-align:right;font-family:monospace;color:${hot?'#c0392b':'inherit'};font-weight:${hot?600:400}">${avg.toFixed(1)}</td></tr>`;
+  }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--color-text-tertiary);padding:40px">本周暂无数据</td></tr>';
+
+  drawOtCharts(rows);
+
+  // 高强度加班预警名单：按当周加班合计降序，仅列出有加班记录的员工
+  const warnList=all.perEmp.filter(p=>p.total>0).sort((a,b)=>b.total-a.total).slice(0,15);
+  $('ot-warn-count').textContent=`（本周共 ${overLimit} 人超过 ${OT_WEEKLY_LIMIT}h，显示前 ${warnList.length} 名）`;
+  $('ot-warn-table').innerHTML=warnList.map(p=>{
+    const e=p.emp,hot=p.total>OT_WEEKLY_LIMIT;
+    return `<tr${hot?' style="background:#fdecea"':''}><td style="font-family:monospace;font-size:12px">${esc9(e.id)}</td><td><strong>${esc9(e.name)}</strong></td><td>${esc9(e.dept||'-')}</td><td>${esc9(e.section||'-')}</td><td>${esc9(empProcess(e)||'未分类工序')}</td><td>${esc9(e.position||'-')}</td>`+
+      `<td style="text-align:right;font-family:monospace">${p.wd.toFixed(1)}</td><td style="text-align:right;font-family:monospace">${p.we.toFixed(1)}</td>`+
+      `<td style="text-align:right;font-family:monospace;font-weight:600;color:${hot?'#c0392b':'inherit'}">${p.total.toFixed(1)}</td></tr>`;
+  }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:18px">本周暂无加班记录</td></tr>';
+}
+function esc9(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function drawOtCharts(rows){
+  try{
+  if(typeof Chart==='undefined')return;
+  const labels=rows.map(r=>tLabel(r.proc));
+  const totalData=rows.map(r=>+r.total.toFixed(1));
+  const avgData=rows.map(r=>+(r.emp?r.total/r.emp:0).toFixed(1));
+  const baseOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true},x:{ticks:{font:{size:11}}}}};
+  const c1=$('otChart1').getContext('2d');if(charts.ot1)charts.ot1.destroy();
+  charts.ot1=new Chart(c1,{type:'bar',data:{labels,datasets:[{label:tLabel('加班合计'),data:totalData,backgroundColor:'#0c63e4',borderRadius:4}]},options:{...baseOpts,plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>ctx.parsed.y+' h'}}},scales:{...baseOpts.scales,y:{...baseOpts.scales.y,title:{display:true,text:'小时'}}}}});
+  const c2=$('otChart2').getContext('2d');if(charts.ot2)charts.ot2.destroy();
+  charts.ot2=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:tLabel('人均加班'),data:avgData,backgroundColor:avgData.map(v=>v>OT_WEEKLY_LIMIT?'#ef4444':v>OT_WEEKLY_LIMIT*0.6?'#f59e0b':'#22c55e'),borderRadius:4}]},options:{...baseOpts,plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>ctx.parsed.y+' h/人'}}},scales:{...baseOpts.scales,y:{...baseOpts.scales.y,title:{display:true,text:'小时/人'}}}}});
+  // chart3: 近6周趋势（堆叠：工作日+周末），每周各自取该周的候选员工，避免用当前名单套用历史周次
+  const last6=[];for(let i=5;i>=0;i--){
+    const off=otWeekOff-i;const ds=getWeekDates(off);const lbl=`${ds[0].getMonth()+1}/${ds[0].getDate()}~${ds[6].getMonth()+1}/${ds[6].getDate()}`;
+    const es=mxEmpsForWeek(ds[0],ds[6]).filter(isSkillPos);const st=weekOtStat(es,off);
+    last6.push({lbl,wd:+st.weekday.toFixed(1),we:+st.weekend.toFixed(1)});
+  }
+  const c3=$('otChart3').getContext('2d');if(charts.ot3)charts.ot3.destroy();
+  charts.ot3=new Chart(c3,{type:'bar',data:{labels:last6.map(x=>x.lbl),datasets:[
+    {label:tLabel('工作日加班'),data:last6.map(x=>x.wd),backgroundColor:'#3b82f6',stack:'ot',borderRadius:4},
+    {label:tLabel('周末加班'),data:last6.map(x=>x.we),backgroundColor:'#f59e0b',stack:'ot',borderRadius:4},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+'：'+ctx.parsed.y+' h'}}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,title:{display:true,text:'小时'}}}}});
+  requestAnimationFrame(()=>{[charts.ot1,charts.ot2,charts.ot3].forEach(c=>{if(c)c.resize();});});
+  }catch(err){
+    console.error('drawOtCharts error',err);
+    ['otChart1','otChart2','otChart3'].forEach(id=>{const cv=$(id);if(cv&&cv.parentNode)cv.parentNode.innerHTML=`<div style="padding:20px;text-align:center;color:#dc3545;font-size:12px">图表渲染出错：${err.message}</div>`;});
+  }
+}
+function exportOtAnalysis(){
+  const dF=$('ot-dept-f')?$('ot-dept-f').value:'',pF=$('ot-proc-f')?$('ot-proc-f').value:'';
+  let emps=otEmps();if(dF)emps=emps.filter(e=>(e.dept||'未分配')===dF);if(pF)emps=emps.filter(e=>(empProcess(e)||'未分类工序')===pF);
+  const rows=buildProcessRows(emps,otWeekOff);
+  const aoa=[['工序','人数','参与加班人数','工作日加班(h)','周末加班(h)','加班合计(h)','人均加班(h)'],
+    ...rows.map(r=>[r.proc,r.emp,r.participants,+r.weekday.toFixed(1),+r.weekend.toFixed(1),+r.total.toFixed(1),+(r.emp?r.total/r.emp:0).toFixed(1)])];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),wLabel(otWeekOff).replace(/\//g,'-')+'加班汇总');
+  const all=weekOtStat(emps,otWeekOff);
+  const detail=[['工号','姓名','部门','科室','工序','岗位','工作日加班(h)','周末加班(h)','合计(h)']];
+  all.perEmp.filter(p=>p.total>0).sort((a,b)=>b.total-a.total).forEach(p=>{const e=p.emp;detail.push([e.id,e.name,e.dept||'',e.section||'',empProcess(e)||'未分类工序',e.position||'',+p.wd.toFixed(1),+p.we.toFixed(1),+p.total.toFixed(1)]);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(detail),'加班明细');
+  XLSX.writeFile(wb,`加班分析_${wKey(otWeekOff).replace('week_','')}.xlsx`);toast('导出成功');
+}
+function exportOtAnalysisPDF(){
+  if(typeof window.buildPDFReport!=='function'){toast('PDF 组件未就绪');return;}
+  const dF=$('ot-dept-f')?$('ot-dept-f').value:'',pF=$('ot-proc-f')?$('ot-proc-f').value:'';
+  let emps=otEmps();if(dF)emps=emps.filter(e=>(e.dept||'未分配')===dF);if(pF)emps=emps.filter(e=>(empProcess(e)||'未分类工序')===pF);
+  const rows=buildProcessRows(emps,otWeekOff);
+  const all=weekOtStat(emps,otWeekOff);
+  const overLimit=all.perEmp.filter(p=>p.total>OT_WEEKLY_LIMIT).length;
+  let html='<table><thead><tr><th>工序</th><th>人数</th><th>参与加班</th><th>工作日加班(h)</th><th>周末加班(h)</th><th>加班合计(h)</th><th>人均加班(h)</th></tr></thead><tbody>';
+  rows.forEach(r=>{html+=`<tr><td style="text-align:left">${esc9(r.proc)}</td><td>${r.emp}</td><td>${r.participants}</td><td>${r.weekday.toFixed(1)}</td><td>${r.weekend.toFixed(1)}</td><td>${r.total.toFixed(1)}</td><td>${(r.emp?r.total/r.emp:0).toFixed(1)}</td></tr>`;});
+  html+=`<tr style="font-weight:700;background:#f8fafc"><td style="text-align:left">合计</td><td>${all.emp}</td><td>${all.participants}</td><td>${all.weekday.toFixed(1)}</td><td>${all.weekend.toFixed(1)}</td><td>${all.total.toFixed(1)}</td><td>${all.avg.toFixed(1)}</td></tr></tbody></table>`;
+  const warnList=all.perEmp.filter(p=>p.total>0).sort((a,b)=>b.total-a.total).slice(0,15);
+  let warnHtml='<table><thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>工序</th><th>工作日(h)</th><th>周末(h)</th><th>合计(h)</th></tr></thead><tbody>';
+  warnList.forEach(p=>{const e=p.emp;warnHtml+=`<tr><td>${esc9(e.id)}</td><td style="text-align:left">${esc9(e.name)}</td><td>${esc9(e.dept||'-')}</td><td>${esc9(empProcess(e)||'未分类工序')}</td><td>${p.wd.toFixed(1)}</td><td>${p.we.toFixed(1)}</td><td>${p.total.toFixed(1)}</td></tr>`;});
+  warnHtml+='</tbody></table>';
+  const ci=window.chartToImg;
+  window.buildPDFReport({
+    title:'加班分析报表',
+    meta:`统计周期：${wLabel(otWeekOff)}　·　按工序统计（未配置工序归入"未分类工序"）${dF?'　·　部门：'+dF:''}${pF?'　·　工序：'+pF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
+    sections:[
+      {kind:'kpi',cards:[
+        {label:'加班总时长',value:all.total.toFixed(1)+' h'},
+        {label:'参与加班人数',value:all.participants,color:'#0c63e4'},
+        {label:'人均加班时长',value:all.avg.toFixed(1)+' h',color:'#1f8a5b'},
+        {label:'高强度加班预警',value:overLimit,color:'#c0392b'},
+      ]},
+      {kind:'table',title:'各工序加班汇总',html:html},
+      {kind:'table',title:`高强度加班预警名单（单周 > ${OT_WEEKLY_LIMIT}h）`,html:warnHtml},
+      {kind:'charts',title:'图表',cols:2,images:[ci&&ci(charts.ot1,'各工序加班时长对比'),ci&&ci(charts.ot2,'各工序人均加班对比')]},
+      {kind:'charts',cols:1,images:[ci&&ci(charts.ot3,'工厂近 6 周加班趋势')]},
+    ]
+  });
+  toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
+}
+
 // SALARY REVIEW
 function getSR(empId){if(!salaryReviews[empId])salaryReviews[empId]={nodes:{},actas:[],deptOpinion:null,finalOpinion:null};return salaryReviews[empId];}
 function getFI3M(empId,refY,refM){
@@ -6937,6 +7178,7 @@ const GRANTABLE_MODULES=[
   {id:'attendance',label:'墨方考勤填报'},
   {id:'att-analysis',label:'考勤分析'},
   {id:'att-summary',label:'月度考勤汇总'},
+  {id:'ot-analysis',label:'加班分析'},
   {id:'cn-attendance',label:'中方考勤填报'},
   {id:'turnover',label:'离职率分析'},
   {id:'employees',label:'员工信息录入'},
@@ -7123,6 +7365,7 @@ function showPage(id,el){
   if(id==='employees'){filterEmp();}
   if(id==='kpi'){initKpiFilters();setKpiView('cards');renderKPI();}
   if(id==='attendance')renderAttWeek();
+  if(id==='ot-analysis')renderOtAnalysis();
   if(id==='cn-attendance')cnRenderPage();
   if(id==='turnover'){
     if(typeof renderTurnoverPage==='function'){
@@ -8519,6 +8762,24 @@ const ES_DICT={
 '已封账':'Periodo cerrado',
 '本周已封账':'Periodo cerrado',
 '旷工总天数(FI)':'Total de días de ausencia injustificada (FI)',
+// ── 加班分析（墨方 · 按工序）──
+'加班分析':'Análisis de horas extra',
+'各工序加班汇总':'Resumen de horas extra por proceso',
+'各工序加班时长对比':'Comparación de horas extra por proceso',
+'各工序人均加班对比':'Comparación de horas extra promedio por proceso',
+'工厂近6周加班趋势':'Tendencia de horas extra — últimas 6 semanas (planta)',
+'加班总时长':'Total de horas extra',
+'参与加班人数':'N.º de empleados con horas extra',
+'人均加班时长':'Horas extra promedio por persona',
+'高强度加班预警':'Alerta de horas extra intensivas',
+'高强度加班预警名单':'Lista de alerta de horas extra intensivas',
+'工作日加班':'Horas extra en día laborable',
+'周末加班':'Horas extra en fin de semana',
+'加班合计':'Total de horas extra',
+'人均加班':'Horas extra promedio',
+'未分类工序':'Proceso sin clasificar',
+'全部工序':'Todos los procesos',
+'仅岗位类型为「技能职」的员工 · 按工序统计':'solo empleados con tipo de puesto «técnico-operativo» · por proceso',
 '显示更多员工（还有':'Mostrar más empleados (quedan',
 '假期开始（前V）':'Inicio de vacaciones (V anterior)',
 '假期结束（后V）':'Fin de vacaciones (V posterior)',
