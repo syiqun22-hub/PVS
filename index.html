@@ -1046,8 +1046,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
     <div class="page-title" style="margin-bottom:0">考勤分析 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅岗位类型为「技能职」的员工</span></div>
     <div style="display:flex;gap:8px">
-      <button class="btn" onclick="exportAttAnalysis()"><i class="ti ti-file-spreadsheet"></i> 导出Excel</button>
-      <button class="btn" onclick="exportAttAnalysisPDF()"><i class="ti ti-file-type-pdf"></i> 导出PDF</button>
+      <button class="btn" onclick="exportAttAnalysisActive()"><i class="ti ti-file-spreadsheet"></i> 导出Excel</button>
+      <button class="btn" onclick="exportAttAnalysisPDFActive()"><i class="ti ti-file-type-pdf"></i> 导出PDF</button>
     </div>
   </div>
   <div class="toolbar">
@@ -1055,44 +1055,81 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <button class="month-btn" onclick="chAnaWk(-1)">‹</button>
       <div style="font-size:13px;font-weight:500;min-width:200px;text-align:center" id="ana-week-lbl"></div>
       <button class="month-btn" onclick="chAnaWk(1)">›</button>
-      <button class="btn btn-sm" style="margin-left:6px" onclick="anaWeekOff=0;renderAttAnalysis()">本周</button>
+      <button class="btn btn-sm" style="margin-left:6px" onclick="anaWeekOff=0;renderAnaActive()">本周</button>
     </div>
     <button class="btn btn-sm" id="ana-lock-btn" onclick="toggleAttLock()" title="封账后，本周的考勤分析结果将被冻结，即使相关员工的在职状态/部门/考勤记录后续发生变化，也不再影响本周已生成的统计结果"><i class="ti ti-lock"></i> 封账</button>
     <span id="ana-lock-badge" style="display:none;align-items:center;gap:4px;font-size:11px;color:#856404;background:#fff8e1;border:1px solid #ffe58f;border-radius:var(--border-radius-md);padding:5px 10px"></span>
-    <select id="ana-dept-f" onchange="renderAttAnalysis()" style="width:140px"><option value="">全部科室</option></select>
+    <select id="ana-dept-f" onchange="renderAnaActive()" style="width:140px"><option value="">全部科室</option></select>
     <label id="ana-excl-wrap" title="在职但本周无任何考勤记录的员工，视为尚未填报，不计入出勤率与旷工占比" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:5px 10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md)">
-      <input type="checkbox" id="ana-excl-blank" checked="" onchange="anaExclBlank=this.checked;renderAttAnalysis()" style="cursor:pointer;margin:0">
+      <input type="checkbox" id="ana-excl-blank" checked="" onchange="anaExclBlank=this.checked;renderAnaActive()" style="cursor:pointer;margin:0">
       排除无考勤记录员工
     </label>
-    <div style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">出勤率 = 出勤天数(A) / 应出勤天数 &nbsp;·&nbsp; 旷工占比 = 旷工天数(FI) / 应出勤天数</div>
+    <div id="ana-caption" style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">出勤率 = 出勤天数(A) / 应出勤天数 &nbsp;·&nbsp; 旷工占比 = 旷工天数(FI) / 应出勤天数</div>
   </div>
 
-  <div class="g4" id="ana-stat-cards" style="margin-bottom:14px"></div>
-
-  <div class="card">
-    <div class="card-header"><div class="card-title" id="ana-tbl-title">部门考勤分析</div></div>
-    <div style="overflow-x:auto">
-      <table style="width:100%"><thead><tr>
-        <th style="text-align:left">部门</th><th style="text-align:left">科室</th><th style="text-align:right">人数</th><th style="text-align:right">出勤天数(A)</th><th style="text-align:right">应出勤天数</th>
-        <th style="text-align:right">出勤率</th><th style="text-align:right">缺勤天数</th><th style="text-align:right">旷工天数(FI)</th><th style="text-align:right">旷工占比</th>
-      </tr></thead><tbody id="ana-tbl-body"></tbody></table>
-    </div>
+  <div class="tabs" style="margin-bottom:14px">
+    <button class="tab active" onclick="switchAnaTab('week',this)">工作日考勤分析</button>
+    <button class="tab" onclick="switchAnaTab('weekend',this)">周末考勤分析（周六/周日）</button>
   </div>
 
-  <div class="g2">
+  <div id="ana-week-panel">
+    <div class="g4" id="ana-stat-cards" style="margin-bottom:14px"></div>
+
     <div class="card">
-      <div class="card-header"><div class="card-title" id="ana-ch1-title">各部门出勤率对比</div></div>
-      <div style="position:relative;height:280px"><canvas id="anaChart1"></canvas></div>
+      <div class="card-header"><div class="card-title" id="ana-tbl-title">部门考勤分析</div></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%"><thead><tr>
+          <th style="text-align:left">部门</th><th style="text-align:left">科室</th><th style="text-align:right">人数</th><th style="text-align:right">出勤天数(A)</th><th style="text-align:right">应出勤天数</th>
+          <th style="text-align:right">出勤率</th><th style="text-align:right">缺勤天数</th><th style="text-align:right">旷工天数(FI)</th><th style="text-align:right">旷工占比</th>
+        </tr></thead><tbody id="ana-tbl-body"></tbody></table>
+      </div>
     </div>
+
+    <div class="g2">
+      <div class="card">
+        <div class="card-header"><div class="card-title" id="ana-ch1-title">各部门出勤率对比</div></div>
+        <div style="position:relative;height:280px"><canvas id="anaChart1"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title" id="ana-ch2-title">各部门旷工占比对比</div></div>
+        <div style="position:relative;height:280px"><canvas id="anaChart2"></canvas></div>
+      </div>
+    </div>
+
     <div class="card">
-      <div class="card-header"><div class="card-title" id="ana-ch2-title">各部门旷工占比对比</div></div>
-      <div style="position:relative;height:280px"><canvas id="anaChart2"></canvas></div>
+      <div class="card-header"><div class="card-title">工厂近6周 — 出勤率 vs 旷工占比</div><div style="font-size:11px;color:var(--color-text-tertiary)">条状：出勤率 · 折线：旷工占比</div></div>
+      <div style="position:relative;height:320px"><canvas id="anaChart3"></canvas></div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-header"><div class="card-title">工厂近6周 — 出勤率 vs 旷工占比</div><div style="font-size:11px;color:var(--color-text-tertiary)">条状：出勤率 · 折线：旷工占比</div></div>
-    <div style="position:relative;height:320px"><canvas id="anaChart3"></canvas></div>
+  <div id="ana-weekend-panel" style="display:none">
+    <div class="g4" id="ana-wknd-stat-cards" style="margin-bottom:14px"></div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title" id="ana-wknd-tbl-title">部门周末考勤分析</div></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%"><thead><tr>
+          <th style="text-align:left">部门</th><th style="text-align:left">科室</th><th style="text-align:right">人数</th><th style="text-align:right">出勤天数(A)</th><th style="text-align:right">应出勤天数</th>
+          <th style="text-align:right">出勤率</th><th style="text-align:right">缺勤天数</th><th style="text-align:right">旷工天数(FI)</th><th style="text-align:right">旷工占比</th>
+        </tr></thead><tbody id="ana-wknd-tbl-body"></tbody></table>
+      </div>
+    </div>
+
+    <div class="g2">
+      <div class="card">
+        <div class="card-header"><div class="card-title" id="ana-wknd-ch1-title">各部门周末出勤率对比</div></div>
+        <div style="position:relative;height:280px"><canvas id="anaWkndChart1"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title" id="ana-wknd-ch2-title">各部门周末旷工占比对比</div></div>
+        <div style="position:relative;height:280px"><canvas id="anaWkndChart2"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">工厂近6周 — 周末出勤率 vs 旷工占比</div><div style="font-size:11px;color:var(--color-text-tertiary)">条状：出勤率 · 折线：旷工占比</div></div>
+      <div style="position:relative;height:320px"><canvas id="anaWkndChart3"></canvas></div>
+    </div>
   </div>
 </div>
 <!-- OT ANALYSIS (加班分析 · 墨方 · 按工序) -->
@@ -5146,7 +5183,21 @@ function renderSumDetail(){
 function exportSumDetail(){const dF=($('sum-detail-dept')&&$('sum-detail-dept').value)||'';const q=(($('sum-detail-search')&&$('sum-detail-search').value)||'').toLowerCase().trim();let emps=mxEmps();if(dF)emps=emps.filter(e=>e.dept===dF);if(q)emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.id||'').toLowerCase().includes(q));const n=daysInMonth(sumY,sumM);function getDay(empId,d){const ds=`${sumY}-${String(sumM).padStart(2,'0')}-${String(d).padStart(2,'0')}`;for(const wk of Object.keys(attendanceData)){if(!attendanceData[wk][empId])continue;const v=attendanceData[wk][empId][ds];if(v)return v;}return'';}const days=Array.from({length:n},(_,i)=>i+1);const header=['工号','工资编码','姓名','部门',...days.map(d=>d+'日'),'FI天','A天'];const data=emps.map(e=>{const row=[e.id,e.salaryCode||'',e.name,e.dept];let fi=0,a=0;days.forEach(d=>{const s=getDay(e.id,d);row.push(s);if(s==='FI')fi++;if(s==='A')a++;});row.push(fi,a);return row;});const ws=XLSX.utils.aoa_to_sheet([header,...data]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,mLabel(sumY,sumM)+'明细');XLSX.writeFile(wb,`考勤逐日明细_${mKey(sumY,sumM)}.xlsx`);toast('导出成功');}
 // ATT ANALYSIS
 let anaWeekOff=0,anaGrp='dept',anaExclBlank=true;
-function chAnaWk(d){anaWeekOff+=d;renderAttAnalysis();}
+function chAnaWk(d){anaWeekOff+=d;renderAnaActive();}
+let anaTab='week';
+function renderAnaActive(){if(anaTab==='weekend')renderAttAnalysisWeekend();else renderAttAnalysis();}
+function switchAnaTab(tab,el){
+  anaTab=tab;
+  document.querySelectorAll('#page-att-analysis > .tabs .tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  $('ana-week-panel').style.display=tab==='week'?'':'none';
+  $('ana-weekend-panel').style.display=tab==='weekend'?'':'none';
+  const cap=$('ana-caption');
+  if(cap)cap.textContent=tab==='weekend'
+    ?'出勤率 = 出勤天数(A) / 应出勤天数（周六、周日各按1天计） · 旷工占比 = 旷工天数(FI) / 应出勤天数'
+    :'出勤率 = 出勤天数(A) / 应出勤天数 · 旷工占比 = 旷工天数(FI) / 应出勤天数';
+  renderAnaActive();
+}
 function setAnaGrp(g){anaGrp=g;const d=$('ana-grp-dept'),s=$('ana-grp-sec');[d,s].forEach(b=>{b.style.background='';b.style.color='';b.style.borderColor='';});const act=g==='dept'?d:s;act.style.background='var(--color-text-primary)';act.style.color='var(--color-background-primary)';act.style.borderColor='var(--color-text-primary)';renderAttAnalysis();}
 // 判断某员工在某周是否填报了任何考勤（任一单元格有状态即视为有记录）
 function hasWeekAtt(wk,empId){const row=attendanceData[wk]&&attendanceData[wk][empId];if(!row)return false;return Object.keys(row).some(k=>{const v=row[k];return v!==undefined&&v!==null&&v!=='';});}
@@ -5188,6 +5239,45 @@ function computeWeekStats(emps,wkOff){
   const fiRate=expTotal>0?fiDays/expTotal*100:0;
   return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate};
 }
+// 周末（周六/周日）专项考勤统计：口径与 computeWeekStats 一致（同样的"排除无考勤记录员工"规则、
+// 同样的封账冻结逻辑），仅将统计范围收窄为每周的周六、周日两天，应出勤天数按参与统计人数 ×2 计算。
+function computeWeekendStats(emps,wkOff){
+  const dates=getWeekDates(wkOff),wk=wKey(wkOff);
+  const satDs=dStr(dates[5]),sunDs=dStr(dates[6]);
+  const lock=attLocks[wk];
+  let aDays=0,fiDays=0,expTotal=0,counted=0,excluded=0;
+  function tally(satS,sunS){
+    if(satS==='A')aDays++;if(sunS==='A')aDays++;
+    if(satS==='FI')fiDays++;if(sunS==='FI')fiDays++;
+  }
+  if(lock&&lock.emps){
+    const frozenById={};lock.emps.forEach(r=>frozenById[r.id]=r);
+    emps.forEach(e=>{
+      const r=frozenById[e.id];
+      if(!r||(anaExclBlank&&!r.hasAtt)){excluded++;return;}
+      counted++;expTotal+=2;
+      const wr=r.wkndRow;
+      if(wr&&(wr[satDs]!==undefined||wr[sunDs]!==undefined)){
+        tally(wr[satDs],wr[sunDs]);
+      }else{
+        // 旧版封账快照未保存周末明细，回退读取当前考勤数据（仅影响本功能上线前已封账的历史周）
+        const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
+        tally(row[satDs],row[sunDs]);
+      }
+    });
+  }else{
+    emps.forEach(e=>{
+      if(anaExclBlank&&!hasWeekAtt(wk,e.id)){excluded++;return;}
+      counted++;expTotal+=2;
+      const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
+      tally(row[satDs],row[sunDs]);
+    });
+  }
+  const absDays=Math.max(0,expTotal-aDays);
+  const attRate=expTotal>0?aDays/expTotal*100:0;
+  const fiRate=expTotal>0?fiDays/expTotal*100:0;
+  return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate};
+}
 async function lockAttWeek(){
   if(!canEdit()){toast('无权限');return;}
   const wk=wKey(anaWeekOff);
@@ -5201,11 +5291,13 @@ async function lockAttWeek(){
     const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
     let aDays=0,fiDays=0;
     dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;});
-    return {id:e.id,dept:e.dept||'未分配',sec:(e.section&&e.section!==e.dept)?e.section:'',hasAtt,aDays,fiDays,expDays};
+    const satDs=dStr(dates[5]),sunDs=dStr(dates[6]);
+    const wkndRow={[satDs]:row[satDs]||'',[sunDs]:row[sunDs]||''};
+    return {id:e.id,dept:e.dept||'未分配',sec:(e.section&&e.section!==e.dept)?e.section:'',hasAtt,aDays,fiDays,expDays,wkndRow};
   });
   attLocks[wk]={lockedAt:new Date().toISOString(),lockedBy:(currentUser&&currentUser.displayName)||'',emps:rec};
   await saveAndToast('已封账：'+wLabel(anaWeekOff));
-  renderAttAnalysis();
+  renderAnaActive();
 }
 async function unlockAttWeek(){
   if(!canEdit()){toast('无权限');return;}
@@ -5214,7 +5306,7 @@ async function unlockAttWeek(){
   if(!confirm(`确定要解封「${wLabel(anaWeekOff)}」吗？解封后本周数据将恢复为按当前实时数据计算。`))return;
   delete attLocks[wk];
   await saveAndToast('已解封：'+wLabel(anaWeekOff));
-  renderAttAnalysis();
+  renderAnaActive();
 }
 function toggleAttLock(){if(isWeekLocked(anaWeekOff))unlockAttWeek();else lockAttWeek();}
 function renderAttAnalysis(){
@@ -5316,6 +5408,107 @@ function renderAttAnalysis(){
   $('ana-tbl-body').innerHTML=html||'<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';
   drawAnaCharts(chartRows);
 }
+// 周末考勤分析渲染：与 renderAttAnalysis 结构、口径完全一致（同一套周导航/封账/科室筛选/排除规则），
+// 仅统计范围收窄到每周的周六、周日两天（见 computeWeekendStats）。
+function renderAttAnalysisWeekend(){
+  const dfSel=$('ana-dept-f');if(dfSel&&dfSel.options.length<=1){const allSecs=new Set();mxEmps().filter(isSkillPos).forEach(e=>{if(e.section)allSecs.add(e.section);});[...allSecs].sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;dfSel.appendChild(o);});}
+  $('ana-week-lbl').textContent=wLabel(anaWeekOff);
+  const secF=$('ana-dept-f').value;
+  let emps=weekVisibleEmps(anaWeekOff);if(secF)emps=emps.filter(e=>e.section===secF);
+  const _locked=isWeekLocked(anaWeekOff);
+  const _lockBtn=$('ana-lock-btn'),_lockBadge=$('ana-lock-badge');
+  if(_lockBtn){_lockBtn.style.display=canEdit()?'':'none';_lockBtn.innerHTML=_locked?'<i class="ti ti-lock-open"></i> 解封':'<i class="ti ti-lock"></i> 封账';}
+  if(_lockBadge){
+    if(_locked){
+      const _li=attLocks[wKey(anaWeekOff)]||{};
+      _lockBadge.style.display='inline-flex';
+      _lockBadge.title='封账时间：'+(_li.lockedAt?new Date(_li.lockedAt).toLocaleString('zh-CN'):'—')+(_li.lockedBy?'　操作人：'+_li.lockedBy:'');
+      _lockBadge.innerHTML='<i class="ti ti-lock"></i> 已封账';
+    }else{_lockBadge.style.display='none';}
+  }
+  // 按部门→科室分组
+  const byDept={};
+  emps.forEach(e=>{
+    const d=e.dept||'未分配';
+    const s=(e.section&&e.section!==e.dept)?e.section:'__none__';
+    if(!byDept[d])byDept[d]={emps:[],secs:{}};
+    byDept[d].emps.push(e);
+    if(!byDept[d].secs[s])byDept[d].secs[s]=[];
+    byDept[d].secs[s].push(e);
+  });
+  // 各部门汇总行（用于图表）
+  const deptSummary=Object.keys(byDept).map(dept=>({name:dept,...computeWeekendStats(byDept[dept].emps,anaWeekOff)}))
+    .filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+  // overall stat cards
+  const all=computeWeekendStats(emps,anaWeekOff);
+  const deptCount=Object.keys(byDept).length;
+  $('ana-wknd-stat-cards').innerHTML=[
+    {l:'参与统计人数',v:all.emp,s:(all.excluded>0?`已排除 ${all.excluded} 名无记录 · `:'')+deptCount+' 个部门',c:'var(--color-text-primary)'},
+    {l:'周末出勤率',v:all.attRate.toFixed(1)+'%',s:`出勤 ${all.aDays} / 应出勤 ${all.expTotal} 天`,c:'#0c63e4'},
+    {l:'缺勤天数',v:all.absDays,s:'应出勤 − 出勤',c:'#856404'},
+    {l:'旷工占比',v:all.fiRate.toFixed(2)+'%',s:`旷工 ${all.fiDays} 天`,c:'#842029'},
+  ].map(x=>`<div class="stat-mini"><div class="stat-mini-lbl">${x.l}</div><div class="stat-mini-val" style="color:${x.c}">${x.v}</div><div class="stat-mini-sub">${x.s}</div></div>`).join('');
+  $('ana-wknd-tbl-title').textContent='部门 / 科室周末考勤分析（周六/周日） — '+wLabel(anaWeekOff);
+  // 图表：部门下有科室划分的按科室显示，没有科室划分的按部门显示
+  let chartRows=[];
+  Object.keys(byDept).forEach(dept=>{
+    const secs=byDept[dept].secs;
+    const realSecs=Object.keys(secs).filter(k=>k!=='__none__');
+    if(realSecs.length){
+      realSecs.forEach(sec=>chartRows.push({name:sec,...computeWeekendStats(secs[sec],anaWeekOff)}));
+      if(secs['__none__'])chartRows.push({name:dept,...computeWeekendStats(secs['__none__'],anaWeekOff)});
+    }else{
+      chartRows.push({name:dept,...computeWeekendStats(byDept[dept].emps,anaWeekOff)});
+    }
+  });
+  chartRows=chartRows.filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+  $('ana-wknd-ch1-title').textContent='各部门/科室周末出勤率对比';
+  $('ana-wknd-ch2-title').textContent='各部门/科室周末旷工占比对比';
+  // 构建表格 HTML
+  function rowCls(v,hi,mid,lo){return v>=hi?'badge-success':v>=mid?'badge-info':v>=lo?'badge-warning':'badge-danger';}
+  function fiCls(v){return v<=1?'badge-success':v<=3?'badge-warning':'badge-danger';}
+  function secRow(st,secName){
+    const rc=rowCls(st.attRate,95,85,70),fc=fiCls(st.fiRate);
+    return `<tr><td></td><td style="text-align:left"><span style="color:#adb5bd">└</span> ${secName}</td>`+
+      `<td style="text-align:right;font-family:monospace">${st.emp}</td>`+
+      `<td style="text-align:right;font-family:monospace;color:#155724">${st.aDays}</td>`+
+      `<td style="text-align:right;font-family:monospace">${st.expTotal}</td>`+
+      `<td style="text-align:right"><span class="badge ${rc}" style="font-family:monospace">${st.attRate.toFixed(1)}%</span></td>`+
+      `<td style="text-align:right;font-family:monospace;color:#856404">${st.absDays}</td>`+
+      `<td style="text-align:right;font-family:monospace;color:${st.fiDays>0?'#dc3545':'var(--color-text-tertiary)'};font-weight:${st.fiDays>0?600:400}">${st.fiDays}</td>`+
+      `<td style="text-align:right"><span class="badge ${fc}" style="font-family:monospace">${st.fiRate.toFixed(2)}%</span></td></tr>`;
+  }
+  let html='';
+  deptSummary.forEach(d=>{
+    const rc=rowCls(d.attRate,95,85,70),fc=fiCls(d.fiRate);
+    const secs=byDept[d.name].secs;
+    const hasSecs=Object.keys(secs).some(k=>k!=='__none__');
+    const b='font-weight:700;';
+    html+=`<tr style="background:var(--color-background-info)">`+
+      `<td style="text-align:left;${b}">${d.name}</td>`+
+      `<td style="text-align:left;${b}color:var(--color-text-secondary)">${hasSecs?'部门汇总':''}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.emp}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace;color:#155724">${d.aDays}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.expTotal}</td>`+
+      `<td style="text-align:right;${b}"><span class="badge ${rc}" style="font-family:monospace">${d.attRate.toFixed(1)}%</span></td>`+
+      `<td style="text-align:right;${b}font-family:monospace;color:#856404">${d.absDays}</td>`+
+      `<td style="text-align:right;${b}font-family:monospace;color:${d.fiDays>0?'#dc3545':'var(--color-text-tertiary)'}">${d.fiDays}</td>`+
+      `<td style="text-align:right;${b}"><span class="badge ${fc}" style="font-family:monospace">${d.fiRate.toFixed(2)}%</span></td></tr>`;
+    if(hasSecs){
+      Object.keys(secs).filter(k=>k!=='__none__').sort().forEach(sec=>{
+        const st=computeWeekendStats(secs[sec],anaWeekOff);
+        if(anaExclBlank&&st.emp===0)return;
+        html+=secRow(st,sec);
+      });
+      if(secs['__none__']){
+        const st=computeWeekendStats(secs['__none__'],anaWeekOff);
+        if(!anaExclBlank||st.emp>0)html+=secRow(st,'（部门直属）');
+      }
+    }
+  });
+  $('ana-wknd-tbl-body').innerHTML=html||'<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';
+  drawAnaWeekendCharts(chartRows);
+}
 function drawAnaCharts(rows){
   try{
   if(typeof Chart==='undefined'){
@@ -5351,6 +5544,42 @@ function drawAnaCharts(rows){
   }catch(err){
     console.error('drawAnaCharts error',err);
     ['anaChart1','anaChart2','anaChart3'].forEach(id=>{
+      const cv=$(id);if(cv&&cv.parentNode)cv.parentNode.innerHTML=`<div style="padding:20px;text-align:center;color:#dc3545;font-size:12px">图表渲染出错：${err.message}</div>`;
+    });
+  }
+}
+function drawAnaWeekendCharts(rows){
+  try{
+  if(typeof Chart==='undefined'){
+    ['anaWkndChart1','anaWkndChart2','anaWkndChart3'].forEach(id=>{
+      const cv=$(id);if(cv&&cv.parentNode)cv.parentNode.innerHTML='<div style="padding:20px;text-align:center;color:#dc3545;font-size:12px">图表库（Chart.js）加载失败，请检查网络/CDN访问</div>';
+    });
+    return;
+  }
+  const labels=rows.map(r=>tLabel(r.name));
+  const attData=rows.map(r=>+r.attRate.toFixed(2));
+  const fiData=rows.map(r=>+r.fiRate.toFixed(2));
+  const baseOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'%'}},x:{ticks:{font:{size:11}}}}};
+  // chart1: weekend attendance rate
+  const c1=$('anaWkndChart1').getContext('2d');if(charts.anaWknd1)charts.anaWknd1.destroy();
+  charts.anaWknd1=new Chart(c1,{type:'bar',data:{labels,datasets:[{label:tLabel('周末出勤率'),data:attData,backgroundColor:attData.map(v=>v>=95?'#22c55e':v>=85?'#3b82f6':v>=70?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,scales:{...baseOpts.scales,y:{...baseOpts.scales.y,suggestedMax:100}},plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>'周末出勤率：'+ctx.parsed.y+'%'}}}}});
+  // chart2: weekend FI rate
+  const c2=$('anaWkndChart2').getContext('2d');if(charts.anaWknd2)charts.anaWknd2.destroy();
+  charts.anaWknd2=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:tLabel('旷工占比'),data:fiData,backgroundColor:fiData.map(v=>v<=1?'#22c55e':v<=3?'#f59e0b':'#ef4444'),borderRadius:4}]},options:{...baseOpts,plugins:{...baseOpts.plugins,tooltip:{callbacks:{label:ctx=>'旷工占比：'+ctx.parsed.y+'%'}}}}});
+  // chart3: last 6 weeks combo (factory-wide, weekend only)
+  const last6=[];for(let i=5;i>=0;i--){const off=anaWeekOff-i;const ds=getWeekDates(off);const lbl=`${ds[0].getMonth()+1}/${ds[0].getDate()}~${ds[6].getMonth()+1}/${ds[6].getDate()}`;const st=computeWeekendStats(weekVisibleEmps(off),off);last6.push({lbl,att:+st.attRate.toFixed(2),fi:+st.fiRate.toFixed(2)});}
+  const c3=$('anaWkndChart3').getContext('2d');if(charts.anaWknd3)charts.anaWknd3.destroy();
+  charts.anaWknd3=new Chart(c3,{type:'bar',data:{labels:last6.map(x=>x.lbl),datasets:[
+    {type:'bar',label:tLabel('周末出勤率'),data:last6.map(x=>x.att),backgroundColor:'#3b82f6',borderRadius:4,yAxisID:'y',order:2},
+    {type:'line',label:tLabel('旷工占比'),data:last6.map(x=>x.fi),borderColor:'#dc3545',backgroundColor:'#dc3545',borderWidth:2,pointRadius:4,pointBackgroundColor:'#dc3545',tension:.3,yAxisID:'y1',order:1}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+'：'+ctx.parsed.y+'%'}}},scales:{
+    y:{type:'linear',position:'left',beginAtZero:true,suggestedMax:100,title:{display:true,text:tLabel('周末出勤率 (%)'),font:{size:11}},ticks:{callback:v=>v+'%'}},
+    y1:{type:'linear',position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:tLabel('旷工占比 (%)'),font:{size:11}},ticks:{callback:v=>v+'%'}}
+  }}});
+  requestAnimationFrame(()=>{[charts.anaWknd1,charts.anaWknd2,charts.anaWknd3].forEach(c=>{if(c)c.resize();});});
+  }catch(err){
+    console.error('drawAnaWeekendCharts error',err);
+    ['anaWkndChart1','anaWkndChart2','anaWkndChart3'].forEach(id=>{
       const cv=$(id);if(cv&&cv.parentNode)cv.parentNode.innerHTML=`<div style="padding:20px;text-align:center;color:#dc3545;font-size:12px">图表渲染出错：${err.message}</div>`;
     });
   }
@@ -5480,6 +5709,73 @@ function exportAttAnalysis(){
   XLSX.utils.book_append_sheet(wb,ws,wLabel(anaWeekOff).replace(/\//g,'-'));
   XLSX.writeFile(wb,`考勤分析_${wKey(anaWeekOff).replace('week_','')}.xlsx`);toast('导出成功');
 }
+function exportAttAnalysisWeekendPDF(){
+  const E=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const secF=$('ana-dept-f').value;let emps=weekVisibleEmps(anaWeekOff);if(secF)emps=emps.filter(e=>e.section===secF);
+  const byDept={};
+  emps.forEach(e=>{
+    const d=e.dept||'未分配';
+    const s=(e.section&&e.section!==e.dept)?e.section:'__none__';
+    if(!byDept[d])byDept[d]={dept:d,emps:[],secs:{}};
+    byDept[d].emps.push(e);
+    if(!byDept[d].secs[s])byDept[d].secs[s]=[];
+    byDept[d].secs[s].push(e);
+  });
+  let deptList=Object.keys(byDept).map(d=>({...byDept[d],st:computeWeekendStats(byDept[d].emps,anaWeekOff)}));
+  if(anaExclBlank)deptList=deptList.filter(d=>d.st.emp>0);
+  deptList=deptList.sort((a,b)=>b.st.attRate-a.st.attRate);
+  const tot=computeWeekendStats(emps,anaWeekOff);
+  let html=`<table><thead><tr><th>部门</th><th>科室</th><th>人数</th><th>出勤天数(A)</th><th>应出勤天数</th><th>出勤率</th><th>缺勤天数</th><th>旷工天数(FI)</th><th>旷工占比</th></tr></thead><tbody>`;
+  deptList.forEach(d=>{
+    const secs=d.secs;const realSecs=Object.keys(secs).filter(k=>k!=='__none__');const hasSecs=realSecs.length>0;
+    const r=d.st;
+    html+=`<tr style="font-weight:700;background:#eef2ff"><td>${E(d.dept)}</td><td style="text-align:left">${hasSecs?'部门汇总':''}</td><td>${r.emp}</td><td>${r.aDays}</td><td>${r.expTotal}</td><td>${r.attRate.toFixed(1)}%</td><td>${r.absDays}</td><td>${r.fiDays}</td><td>${r.fiRate.toFixed(2)}%</td></tr>`;
+    if(hasSecs){
+      const secRows=realSecs.map(sec=>({sec,st:computeWeekendStats(secs[sec],anaWeekOff)})).sort((a,b)=>b.st.attRate-a.st.attRate);
+      secRows.forEach(s=>{
+        if(anaExclBlank&&s.st.emp===0)return;
+        const st=s.st;
+        html+=`<tr><td></td><td style="text-align:left">└ ${E(s.sec)}</td><td>${st.emp}</td><td>${st.aDays}</td><td>${st.expTotal}</td><td>${st.attRate.toFixed(1)}%</td><td>${st.absDays}</td><td>${st.fiDays}</td><td>${st.fiRate.toFixed(2)}%</td></tr>`;
+      });
+      if(secs['__none__']){
+        const st=computeWeekendStats(secs['__none__'],anaWeekOff);
+        if(!anaExclBlank||st.emp>0)html+=`<tr><td></td><td style="text-align:left">└ （部门直属）</td><td>${st.emp}</td><td>${st.aDays}</td><td>${st.expTotal}</td><td>${st.attRate.toFixed(1)}%</td><td>${st.absDays}</td><td>${st.fiDays}</td><td>${st.fiRate.toFixed(2)}%</td></tr>`;
+      }
+    }
+  });
+  html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td style="text-align:left"></td><td>${tot.emp}</td><td>${tot.aDays}</td><td>${tot.expTotal}</td><td>${tot.attRate.toFixed(1)}%</td><td>${tot.absDays}</td><td>${tot.fiDays}</td><td>${tot.fiRate.toFixed(2)}%</td></tr></tbody></table>`;
+  buildPDFReport({
+    title:'周末考勤分析报表',
+    meta:`统计周期：${wLabel(anaWeekOff)}（周六/周日）${isWeekLocked(anaWeekOff)?'　·　🔒 本周已封账':''}　·　以科室为单位（无科室按部门）${secF?'　·　科室：'+secF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
+    sections:[
+      {kind:'kpi',cards:[
+        {label:'统计人数',value:tot.emp+' 人'},
+        {label:'平均周末出勤率',value:tot.attRate.toFixed(1)+'%',color:'#1f8a5b'},
+        {label:'平均旷工占比',value:tot.fiRate.toFixed(2)+'%',color:'#c0392b'},
+        {label:'旷工总天数(FI)',value:tot.fiDays,color:'#c0392b'},
+      ]},
+      {kind:'table',title:'各部门/科室周末考勤分析',html:html},
+      {kind:'charts',title:'图表',cols:2,images:[chartToImg(charts.anaWknd1,'各部门/科室周末出勤率对比'),chartToImg(charts.anaWknd2,'各部门/科室周末旷工占比对比')]},
+      {kind:'charts',cols:1,images:[chartToImg(charts.anaWknd3,'工厂近 6 周 — 周末出勤率 vs 旷工占比')]},
+    ]
+  });
+  toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
+}
+function exportAttAnalysisWeekend(){
+  const secF=$('ana-dept-f').value;let emps=weekVisibleEmps(anaWeekOff);if(secF)emps=emps.filter(e=>e.section===secF);
+  const groups={};
+  if(anaGrp==='dept'){emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});}
+  else{emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]=[];groups[k].push(e);});}
+  let rows=Object.keys(groups).map(name=>({name,...computeWeekendStats(groups[name],anaWeekOff)})).sort((a,b)=>b.attRate-a.attRate);
+  if(anaExclBlank)rows=rows.filter(r=>r.emp>0);
+  const aoa=[[(anaGrp==='dept'?'部门':'科室'),'人数','出勤天数(A)','应出勤天数','出勤率(%)','缺勤天数','旷工天数(FI)','旷工占比(%)'],
+    ...rows.map(r=>[r.name,r.emp,r.aDays,r.expTotal,+r.attRate.toFixed(2),r.absDays,r.fiDays,+r.fiRate.toFixed(2)])];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,wLabel(anaWeekOff).replace(/\//g,'-'));
+  XLSX.writeFile(wb,`周末考勤分析_${wKey(anaWeekOff).replace('week_','')}.xlsx`);toast('导出成功');
+}
+function exportAttAnalysisActive(){if(anaTab==='weekend')exportAttAnalysisWeekend();else exportAttAnalysis();}
+function exportAttAnalysisPDFActive(){if(anaTab==='weekend')exportAttAnalysisWeekendPDF();else exportAttAnalysisPDF();}
 
 // ============ 加班分析（墨方 · 按工序） ============
 // 数据来源：墨方考勤填报页面已录入的 overtimeData[周key][工号][日期]=小时数，本模块只做统计展示。
@@ -7379,7 +7675,7 @@ function showPage(id,el){
     }
   }
   if(id==='att-summary')renderSummary();
-  if(id==='att-analysis')renderAttAnalysis();
+  if(id==='att-analysis')renderAnaActive();
   if(id==='salary-review'){const s=$('sr-dept');if(s.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;s.appendChild(o);});renderSR();}
   if(id==='accounts')renderAccs();
 }
