@@ -1064,7 +1064,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <input type="checkbox" id="ana-excl-blank" checked="" onchange="anaExclBlank=this.checked;renderAnaActive()" style="cursor:pointer;margin:0">
       排除无考勤记录员工
     </label>
-    <div id="ana-caption" style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">出勤率 = 出勤天数(A) / 应出勤天数 &nbsp;·&nbsp; 旷工占比 = 旷工天数(FI) / 应出勤天数</div>
+    <div id="ana-caption" style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">出勤率 = 出勤天数(A) / 应出勤天数 &nbsp;·&nbsp; 旷工占比 / PSG占比 / INC占比 / VAC占比 = 对应天数 / 应出勤天数</div>
   </div>
 
   <div class="tabs" style="margin-bottom:14px">
@@ -1081,6 +1081,7 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
         <table style="width:100%"><thead><tr>
           <th style="text-align:left">部门</th><th style="text-align:left">科室</th><th style="text-align:right">人数</th><th style="text-align:right">出勤天数(A)</th><th style="text-align:right">应出勤天数</th>
           <th style="text-align:right">出勤率</th><th style="text-align:right">缺勤天数</th><th style="text-align:right">旷工天数(FI)</th><th style="text-align:right">旷工占比</th>
+          <th style="text-align:right">PSG占比</th><th style="text-align:right">INC占比</th><th style="text-align:right">VAC占比</th>
         </tr></thead><tbody id="ana-tbl-body"></tbody></table>
       </div>
     </div>
@@ -5194,8 +5195,8 @@ function switchAnaTab(tab,el){
   $('ana-weekend-panel').style.display=tab==='weekend'?'':'none';
   const cap=$('ana-caption');
   if(cap)cap.textContent=tab==='weekend'
-    ?'出勤率 = 出勤天数(A) / 应出勤天数（周六、周日各按1天计） · 旷工占比 = 旷工天数(FI) / 应出勤天数'
-    :'出勤率 = 出勤天数(A) / 应出勤天数 · 旷工占比 = 旷工天数(FI) / 应出勤天数';
+    ?'出勤率 = 出勤天数(A) / 应出勤天数（周六、周日各按1天计，其中"D 休息"当天不计入应出勤天数） · 旷工占比 = 旷工天数(FI) / 应出勤天数'
+    :'出勤率 = 出勤天数(A) / 应出勤天数 · 旷工占比 / PSG占比 / INC占比 / VAC占比 = 对应天数 / 应出勤天数';
   renderAnaActive();
 }
 function setAnaGrp(g){anaGrp=g;const d=$('ana-grp-dept'),s=$('ana-grp-sec');[d,s].forEach(b=>{b.style.background='';b.style.color='';b.style.borderColor='';});const act=g==='dept'?d:s;act.style.background='var(--color-text-primary)';act.style.color='var(--color-background-primary)';act.style.borderColor='var(--color-text-primary)';renderAttAnalysis();}
@@ -5217,13 +5218,20 @@ function weekVisibleEmps(wkOff){
 function computeWeekStats(emps,wkOff){
   const dates=getWeekDates(wkOff),wk=wKey(wkOff);
   const lock=attLocks[wk];
-  let aDays=0,fiDays=0,expTotal=0,counted=0,excluded=0;
+  let aDays=0,fiDays=0,psgDays=0,incDays=0,vacDays=0,expTotal=0,counted=0,excluded=0;
   if(lock&&lock.emps){
     const frozenById={};lock.emps.forEach(r=>frozenById[r.id]=r);
     emps.forEach(e=>{
       const r=frozenById[e.id];
       if(!r||(anaExclBlank&&!r.hasAtt)){excluded++;return;}
       counted++;expTotal+=r.expDays;aDays+=r.aDays;fiDays+=r.fiDays;
+      if(r.psgDays!==undefined){
+        psgDays+=r.psgDays;incDays+=r.incDays;vacDays+=r.vacDays;
+      }else{
+        // 旧版封账快照未保存 PSG/INC/VAC 明细，回退读取当前考勤数据（仅影响本功能上线前已封账的历史周）
+        const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
+        dates.forEach(d=>{const s=row[dStr(d)];if(s==='PSG')psgDays++;else if(s==='INC')incDays++;else if(s==='VAC')vacDays++;});
+      }
     });
   }else{
     emps.forEach(e=>{
@@ -5231,22 +5239,54 @@ function computeWeekStats(emps,wkOff){
       counted++;
       const expD=getExpDays(wk,e.id);expTotal+=expD;
       const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
-      dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;});
+      dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;else if(s==='PSG')psgDays++;else if(s==='INC')incDays++;else if(s==='VAC')vacDays++;});
     });
   }
   const absDays=Math.max(0,expTotal-aDays);
   const attRate=expTotal>0?aDays/expTotal*100:0;
   const fiRate=expTotal>0?fiDays/expTotal*100:0;
-  return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate};
+  const psgRate=expTotal>0?psgDays/expTotal*100:0;
+  const incRate=expTotal>0?incDays/expTotal*100:0;
+  const vacRate=expTotal>0?vacDays/expTotal*100:0;
+  return{emp:counted,excluded,aDays,expTotal,absDays,fiDays,attRate,fiRate,psgDays,incDays,vacDays,psgRate,incRate,vacRate};
+}
+// 部门 / 科室固定展示顺序：轮胎制造部 → 其余有科室的部门 → 无科室的部门；
+// 轮胎制造部内部科室固定为：炼胶生产科、生产一科、生产二科、生产三科（其余科室按名称排在后面）。
+const ANA_DEPT_FIRST='轮胎制造部';
+const ANA_SECTION_ORDER={'炼胶生产科':0,'生产一科':1,'生产二科':2,'生产三科':3};
+function sortDeptNames(names,hasSecsFn){
+  return names.slice().sort((a,b)=>{
+    const ka=a===ANA_DEPT_FIRST?0:(hasSecsFn(a)?1:2);
+    const kb=b===ANA_DEPT_FIRST?0:(hasSecsFn(b)?1:2);
+    if(ka!==kb)return ka-kb;
+    return a.localeCompare(b,'zh');
+  });
+}
+function sortSectionNames(names,deptName){
+  if(deptName===ANA_DEPT_FIRST){
+    return names.slice().sort((a,b)=>{
+      const ia=ANA_SECTION_ORDER[a],ib=ANA_SECTION_ORDER[b];
+      if(ia!==undefined&&ib!==undefined)return ia-ib;
+      if(ia!==undefined)return -1;
+      if(ib!==undefined)return 1;
+      return a.localeCompare(b,'zh');
+    });
+  }
+  return names.slice().sort((a,b)=>a.localeCompare(b,'zh'));
 }
 // 周末（周六/周日）专项考勤统计：口径与 computeWeekStats 一致（同样的"排除无考勤记录员工"规则、
-// 同样的封账冻结逻辑），仅将统计范围收窄为每周的周六、周日两天，应出勤天数按参与统计人数 ×2 计算。
+// 同样的封账冻结逻辑），仅将统计范围收窄为每周的周六、周日两天。应出勤天数按参与统计人数 ×2 计算，
+// 其中被标记为"D 休息"的当天不计入应出勤天数（即周六/周日若排班为休息，不参与出勤率分母）。
 function computeWeekendStats(emps,wkOff){
   const dates=getWeekDates(wkOff),wk=wKey(wkOff);
   const satDs=dStr(dates[5]),sunDs=dStr(dates[6]);
   const lock=attLocks[wk];
   let aDays=0,fiDays=0,expTotal=0,counted=0,excluded=0;
   function tally(satS,sunS){
+    let exp=2;
+    if(satS==='D')exp--;
+    if(sunS==='D')exp--;
+    expTotal+=exp;
     if(satS==='A')aDays++;if(sunS==='A')aDays++;
     if(satS==='FI')fiDays++;if(sunS==='FI')fiDays++;
   }
@@ -5255,7 +5295,7 @@ function computeWeekendStats(emps,wkOff){
     emps.forEach(e=>{
       const r=frozenById[e.id];
       if(!r||(anaExclBlank&&!r.hasAtt)){excluded++;return;}
-      counted++;expTotal+=2;
+      counted++;
       const wr=r.wkndRow;
       if(wr&&(wr[satDs]!==undefined||wr[sunDs]!==undefined)){
         tally(wr[satDs],wr[sunDs]);
@@ -5268,7 +5308,7 @@ function computeWeekendStats(emps,wkOff){
   }else{
     emps.forEach(e=>{
       if(anaExclBlank&&!hasWeekAtt(wk,e.id)){excluded++;return;}
-      counted++;expTotal+=2;
+      counted++;
       const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
       tally(row[satDs],row[sunDs]);
     });
@@ -5289,11 +5329,11 @@ async function lockAttWeek(){
     const hasAtt=hasWeekAtt(wk,e.id);
     const expDays=getExpDays(wk,e.id);
     const row=(attendanceData[wk]&&attendanceData[wk][e.id])||{};
-    let aDays=0,fiDays=0;
-    dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;});
+    let aDays=0,fiDays=0,psgDays=0,incDays=0,vacDays=0;
+    dates.forEach(d=>{const s=row[dStr(d)];if(s==='A')aDays++;else if(s==='FI')fiDays++;else if(s==='PSG')psgDays++;else if(s==='INC')incDays++;else if(s==='VAC')vacDays++;});
     const satDs=dStr(dates[5]),sunDs=dStr(dates[6]);
     const wkndRow={[satDs]:row[satDs]||'',[sunDs]:row[sunDs]||''};
-    return {id:e.id,dept:e.dept||'未分配',sec:(e.section&&e.section!==e.dept)?e.section:'',hasAtt,aDays,fiDays,expDays,wkndRow};
+    return {id:e.id,dept:e.dept||'未分配',sec:(e.section&&e.section!==e.dept)?e.section:'',hasAtt,aDays,fiDays,psgDays,incDays,vacDays,expDays,wkndRow};
   });
   attLocks[wk]={lockedAt:new Date().toISOString(),lockedBy:(currentUser&&currentUser.displayName)||'',emps:rec};
   await saveAndToast('已封账：'+wLabel(anaWeekOff));
@@ -5335,9 +5375,12 @@ function renderAttAnalysis(){
     if(!byDept[d].secs[s])byDept[d].secs[s]=[];
     byDept[d].secs[s].push(e);
   });
+  // 部门固定展示顺序：轮胎制造部 → 其余有科室的部门 → 无科室的部门
+  const deptHasSecs=name=>Object.keys(byDept[name].secs).some(k=>k!=='__none__');
+  const deptNamesOrdered=sortDeptNames(Object.keys(byDept),deptHasSecs);
   // 各部门汇总行（用于图表）
-  const deptSummary=Object.keys(byDept).map(dept=>({name:dept,...computeWeekStats(byDept[dept].emps,anaWeekOff)}))
-    .filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+  const deptSummary=deptNamesOrdered.map(dept=>({name:dept,...computeWeekStats(byDept[dept].emps,anaWeekOff)}))
+    .filter(r=>!anaExclBlank||r.emp>0);
   // overall stat cards
   const all=computeWeekStats(emps,anaWeekOff);
   const deptCount=Object.keys(byDept).length;
@@ -5350,9 +5393,9 @@ function renderAttAnalysis(){
   $('ana-tbl-title').textContent='部门 / 科室考勤分析 — '+wLabel(anaWeekOff);
   // 图表：部门下有科室划分的按科室显示，没有科室划分的按部门显示
   let chartRows=[];
-  Object.keys(byDept).forEach(dept=>{
+  deptNamesOrdered.forEach(dept=>{
     const secs=byDept[dept].secs;
-    const realSecs=Object.keys(secs).filter(k=>k!=='__none__');
+    const realSecs=sortSectionNames(Object.keys(secs).filter(k=>k!=='__none__'),dept);
     if(realSecs.length){
       realSecs.forEach(sec=>chartRows.push({name:sec,...computeWeekStats(secs[sec],anaWeekOff)}));
       if(secs['__none__'])chartRows.push({name:dept,...computeWeekStats(secs['__none__'],anaWeekOff)});
@@ -5360,12 +5403,13 @@ function renderAttAnalysis(){
       chartRows.push({name:dept,...computeWeekStats(byDept[dept].emps,anaWeekOff)});
     }
   });
-  chartRows=chartRows.filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+  chartRows=chartRows.filter(r=>!anaExclBlank||r.emp>0);
   $('ana-ch1-title').textContent='各部门/科室出勤率对比';
   $('ana-ch2-title').textContent='各部门/科室旷工占比对比';
   // 构建表格 HTML
   function rowCls(v,hi,mid,lo){return v>=hi?'badge-success':v>=mid?'badge-info':v>=lo?'badge-warning':'badge-danger';}
   function fiCls(v){return v<=1?'badge-success':v<=3?'badge-warning':'badge-danger';}
+  function extraCell(v){return `<td style="text-align:right;font-family:monospace;color:var(--color-text-secondary)">${v.toFixed(2)}%</td>`;}
   function secRow(st,secName){
     const rc=rowCls(st.attRate,95,85,70),fc=fiCls(st.fiRate);
     return `<tr><td></td><td style="text-align:left"><span style="color:#adb5bd">└</span> ${secName}</td>`+
@@ -5375,7 +5419,8 @@ function renderAttAnalysis(){
       `<td style="text-align:right"><span class="badge ${rc}" style="font-family:monospace">${st.attRate.toFixed(1)}%</span></td>`+
       `<td style="text-align:right;font-family:monospace;color:#856404">${st.absDays}</td>`+
       `<td style="text-align:right;font-family:monospace;color:${st.fiDays>0?'#dc3545':'var(--color-text-tertiary)'};font-weight:${st.fiDays>0?600:400}">${st.fiDays}</td>`+
-      `<td style="text-align:right"><span class="badge ${fc}" style="font-family:monospace">${st.fiRate.toFixed(2)}%</span></td></tr>`;
+      `<td style="text-align:right"><span class="badge ${fc}" style="font-family:monospace">${st.fiRate.toFixed(2)}%</span></td>`+
+      extraCell(st.psgRate)+extraCell(st.incRate)+extraCell(st.vacRate)+`</tr>`;
   }
   let html='';
   deptSummary.forEach(d=>{
@@ -5392,9 +5437,12 @@ function renderAttAnalysis(){
       `<td style="text-align:right;${b}"><span class="badge ${rc}" style="font-family:monospace">${d.attRate.toFixed(1)}%</span></td>`+
       `<td style="text-align:right;${b}font-family:monospace;color:#856404">${d.absDays}</td>`+
       `<td style="text-align:right;${b}font-family:monospace;color:${d.fiDays>0?'#dc3545':'var(--color-text-tertiary)'}">${d.fiDays}</td>`+
-      `<td style="text-align:right;${b}"><span class="badge ${fc}" style="font-family:monospace">${d.fiRate.toFixed(2)}%</span></td></tr>`;
+      `<td style="text-align:right;${b}"><span class="badge ${fc}" style="font-family:monospace">${d.fiRate.toFixed(2)}%</span></td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.psgRate.toFixed(2)}%</td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.incRate.toFixed(2)}%</td>`+
+      `<td style="text-align:right;${b}font-family:monospace">${d.vacRate.toFixed(2)}%</td></tr>`;
     if(hasSecs){
-      Object.keys(secs).filter(k=>k!=='__none__').sort().forEach(sec=>{
+      sortSectionNames(Object.keys(secs).filter(k=>k!=='__none__'),d.name).forEach(sec=>{
         const st=computeWeekStats(secs[sec],anaWeekOff);
         if(anaExclBlank&&st.emp===0)return;
         html+=secRow(st,sec);
@@ -5405,7 +5453,7 @@ function renderAttAnalysis(){
       }
     }
   });
-  $('ana-tbl-body').innerHTML=html||'<tr><td colspan="9" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';
+  $('ana-tbl-body').innerHTML=html||'<tr><td colspan="12" style="text-align:center;color:var(--color-text-tertiary);padding:40px">暂无数据</td></tr>';
   drawAnaCharts(chartRows);
 }
 // 周末考勤分析渲染：与 renderAttAnalysis 结构、口径完全一致（同一套周导航/封账/科室筛选/排除规则），
@@ -5436,9 +5484,12 @@ function renderAttAnalysisWeekend(){
     if(!byDept[d].secs[s])byDept[d].secs[s]=[];
     byDept[d].secs[s].push(e);
   });
+  // 部门固定展示顺序：轮胎制造部 → 其余有科室的部门 → 无科室的部门
+  const deptHasSecs=name=>Object.keys(byDept[name].secs).some(k=>k!=='__none__');
+  const deptNamesOrdered=sortDeptNames(Object.keys(byDept),deptHasSecs);
   // 各部门汇总行（用于图表）
-  const deptSummary=Object.keys(byDept).map(dept=>({name:dept,...computeWeekendStats(byDept[dept].emps,anaWeekOff)}))
-    .filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+  const deptSummary=deptNamesOrdered.map(dept=>({name:dept,...computeWeekendStats(byDept[dept].emps,anaWeekOff)}))
+    .filter(r=>!anaExclBlank||r.emp>0);
   // overall stat cards
   const all=computeWeekendStats(emps,anaWeekOff);
   const deptCount=Object.keys(byDept).length;
@@ -5451,9 +5502,9 @@ function renderAttAnalysisWeekend(){
   $('ana-wknd-tbl-title').textContent='部门 / 科室周末考勤分析（周六/周日） — '+wLabel(anaWeekOff);
   // 图表：部门下有科室划分的按科室显示，没有科室划分的按部门显示
   let chartRows=[];
-  Object.keys(byDept).forEach(dept=>{
+  deptNamesOrdered.forEach(dept=>{
     const secs=byDept[dept].secs;
-    const realSecs=Object.keys(secs).filter(k=>k!=='__none__');
+    const realSecs=sortSectionNames(Object.keys(secs).filter(k=>k!=='__none__'),dept);
     if(realSecs.length){
       realSecs.forEach(sec=>chartRows.push({name:sec,...computeWeekendStats(secs[sec],anaWeekOff)}));
       if(secs['__none__'])chartRows.push({name:dept,...computeWeekendStats(secs['__none__'],anaWeekOff)});
@@ -5461,7 +5512,7 @@ function renderAttAnalysisWeekend(){
       chartRows.push({name:dept,...computeWeekendStats(byDept[dept].emps,anaWeekOff)});
     }
   });
-  chartRows=chartRows.filter(r=>!anaExclBlank||r.emp>0).sort((a,b)=>b.attRate-a.attRate);
+  chartRows=chartRows.filter(r=>!anaExclBlank||r.emp>0);
   $('ana-wknd-ch1-title').textContent='各部门/科室周末出勤率对比';
   $('ana-wknd-ch2-title').textContent='各部门/科室周末旷工占比对比';
   // 构建表格 HTML
@@ -5495,7 +5546,7 @@ function renderAttAnalysisWeekend(){
       `<td style="text-align:right;${b}font-family:monospace;color:${d.fiDays>0?'#dc3545':'var(--color-text-tertiary)'}">${d.fiDays}</td>`+
       `<td style="text-align:right;${b}"><span class="badge ${fc}" style="font-family:monospace">${d.fiRate.toFixed(2)}%</span></td></tr>`;
     if(hasSecs){
-      Object.keys(secs).filter(k=>k!=='__none__').sort().forEach(sec=>{
+      sortSectionNames(Object.keys(secs).filter(k=>k!=='__none__'),d.name).forEach(sec=>{
         const st=computeWeekendStats(secs[sec],anaWeekOff);
         if(anaExclBlank&&st.emp===0)return;
         html+=secRow(st,sec);
@@ -5656,29 +5707,29 @@ function exportAttAnalysisPDF(){
     if(!byDept[d].secs[s])byDept[d].secs[s]=[];
     byDept[d].secs[s].push(e);
   });
-  let deptList=Object.keys(byDept).map(d=>({...byDept[d],st:computeWeekStats(byDept[d].emps,anaWeekOff)}));
+  const deptNamesOrdered=sortDeptNames(Object.keys(byDept),name=>Object.keys(byDept[name].secs).some(k=>k!=='__none__'));
+  let deptList=deptNamesOrdered.map(d=>({...byDept[d],st:computeWeekStats(byDept[d].emps,anaWeekOff)}));
   if(anaExclBlank)deptList=deptList.filter(d=>d.st.emp>0);
-  deptList=deptList.sort((a,b)=>b.st.attRate-a.st.attRate);
   const tot=computeWeekStats(emps,anaWeekOff);
-  let html=`<table><thead><tr><th>部门</th><th>科室</th><th>人数</th><th>出勤天数(A)</th><th>应出勤天数</th><th>出勤率</th><th>缺勤天数</th><th>旷工天数(FI)</th><th>旷工占比</th></tr></thead><tbody>`;
+  let html=`<table><thead><tr><th>部门</th><th>科室</th><th>人数</th><th>出勤天数(A)</th><th>应出勤天数</th><th>出勤率</th><th>缺勤天数</th><th>旷工天数(FI)</th><th>旷工占比</th><th>PSG占比</th><th>INC占比</th><th>VAC占比</th></tr></thead><tbody>`;
   deptList.forEach(d=>{
-    const secs=d.secs;const realSecs=Object.keys(secs).filter(k=>k!=='__none__');const hasSecs=realSecs.length>0;
+    const secs=d.secs;const realSecs=sortSectionNames(Object.keys(secs).filter(k=>k!=='__none__'),d.dept);const hasSecs=realSecs.length>0;
     const r=d.st;
-    html+=`<tr style="font-weight:700;background:#eef2ff"><td>${E(d.dept)}</td><td style="text-align:left">${hasSecs?'部门汇总':''}</td><td>${r.emp}</td><td>${r.aDays}</td><td>${r.expTotal}</td><td>${r.attRate.toFixed(1)}%</td><td>${r.absDays}</td><td>${r.fiDays}</td><td>${r.fiRate.toFixed(2)}%</td></tr>`;
+    html+=`<tr style="font-weight:700;background:#eef2ff"><td>${E(d.dept)}</td><td style="text-align:left">${hasSecs?'部门汇总':''}</td><td>${r.emp}</td><td>${r.aDays}</td><td>${r.expTotal}</td><td>${r.attRate.toFixed(1)}%</td><td>${r.absDays}</td><td>${r.fiDays}</td><td>${r.fiRate.toFixed(2)}%</td><td>${r.psgRate.toFixed(2)}%</td><td>${r.incRate.toFixed(2)}%</td><td>${r.vacRate.toFixed(2)}%</td></tr>`;
     if(hasSecs){
-      const secRows=realSecs.map(sec=>({sec,st:computeWeekStats(secs[sec],anaWeekOff)})).sort((a,b)=>b.st.attRate-a.st.attRate);
+      const secRows=realSecs.map(sec=>({sec,st:computeWeekStats(secs[sec],anaWeekOff)}));
       secRows.forEach(s=>{
         if(anaExclBlank&&s.st.emp===0)return;
         const st=s.st;
-        html+=`<tr><td></td><td style="text-align:left">└ ${E(s.sec)}</td><td>${st.emp}</td><td>${st.aDays}</td><td>${st.expTotal}</td><td>${st.attRate.toFixed(1)}%</td><td>${st.absDays}</td><td>${st.fiDays}</td><td>${st.fiRate.toFixed(2)}%</td></tr>`;
+        html+=`<tr><td></td><td style="text-align:left">└ ${E(s.sec)}</td><td>${st.emp}</td><td>${st.aDays}</td><td>${st.expTotal}</td><td>${st.attRate.toFixed(1)}%</td><td>${st.absDays}</td><td>${st.fiDays}</td><td>${st.fiRate.toFixed(2)}%</td><td>${st.psgRate.toFixed(2)}%</td><td>${st.incRate.toFixed(2)}%</td><td>${st.vacRate.toFixed(2)}%</td></tr>`;
       });
       if(secs['__none__']){
         const st=computeWeekStats(secs['__none__'],anaWeekOff);
-        if(!anaExclBlank||st.emp>0)html+=`<tr><td></td><td style="text-align:left">└ （部门直属）</td><td>${st.emp}</td><td>${st.aDays}</td><td>${st.expTotal}</td><td>${st.attRate.toFixed(1)}%</td><td>${st.absDays}</td><td>${st.fiDays}</td><td>${st.fiRate.toFixed(2)}%</td></tr>`;
+        if(!anaExclBlank||st.emp>0)html+=`<tr><td></td><td style="text-align:left">└ （部门直属）</td><td>${st.emp}</td><td>${st.aDays}</td><td>${st.expTotal}</td><td>${st.attRate.toFixed(1)}%</td><td>${st.absDays}</td><td>${st.fiDays}</td><td>${st.fiRate.toFixed(2)}%</td><td>${st.psgRate.toFixed(2)}%</td><td>${st.incRate.toFixed(2)}%</td><td>${st.vacRate.toFixed(2)}%</td></tr>`;
       }
     }
   });
-  html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td style="text-align:left"></td><td>${tot.emp}</td><td>${tot.aDays}</td><td>${tot.expTotal}</td><td>${tot.attRate.toFixed(1)}%</td><td>${tot.absDays}</td><td>${tot.fiDays}</td><td>${tot.fiRate.toFixed(2)}%</td></tr></tbody></table>`;
+  html+=`<tr style="font-weight:700;background:#f8fafc"><td>合计</td><td style="text-align:left"></td><td>${tot.emp}</td><td>${tot.aDays}</td><td>${tot.expTotal}</td><td>${tot.attRate.toFixed(1)}%</td><td>${tot.absDays}</td><td>${tot.fiDays}</td><td>${tot.fiRate.toFixed(2)}%</td><td>${tot.psgRate.toFixed(2)}%</td><td>${tot.incRate.toFixed(2)}%</td><td>${tot.vacRate.toFixed(2)}%</td></tr></tbody></table>`;
   buildPDFReport({
     title:'考勤分析报表',
     meta:`统计周期：${wLabel(anaWeekOff)}${isWeekLocked(anaWeekOff)?'　·　🔒 本周已封账':''}　·　以科室为单位（无科室按部门）${secF?'　·　科室：'+secF:''}　·　仅技能职员工　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
@@ -5701,10 +5752,16 @@ function exportAttAnalysis(){
   const groups={};
   if(anaGrp==='dept'){emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});}
   else{emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]=[];groups[k].push(e);});}
-  let rows=Object.keys(groups).map(name=>({name,...computeWeekStats(groups[name],anaWeekOff)})).sort((a,b)=>b.attRate-a.attRate);
+  let names=Object.keys(groups);
+  if(anaGrp==='dept'){
+    names=sortDeptNames(names,name=>groups[name].some(e=>e.section&&e.section!==e.dept));
+  }else{
+    names=names.sort((a,b)=>a.localeCompare(b,'zh'));
+  }
+  let rows=names.map(name=>({name,...computeWeekStats(groups[name],anaWeekOff)}));
   if(anaExclBlank)rows=rows.filter(r=>r.emp>0);
-  const aoa=[[(anaGrp==='dept'?'部门':'科室'),'人数','出勤天数(A)','应出勤天数','出勤率(%)','缺勤天数','旷工天数(FI)','旷工占比(%)'],
-    ...rows.map(r=>[r.name,r.emp,r.aDays,r.expTotal,+r.attRate.toFixed(2),r.absDays,r.fiDays,+r.fiRate.toFixed(2)])];
+  const aoa=[[(anaGrp==='dept'?'部门':'科室'),'人数','出勤天数(A)','应出勤天数','出勤率(%)','缺勤天数','旷工天数(FI)','旷工占比(%)','PSG占比(%)','INC占比(%)','VAC占比(%)'],
+    ...rows.map(r=>[r.name,r.emp,r.aDays,r.expTotal,+r.attRate.toFixed(2),r.absDays,r.fiDays,+r.fiRate.toFixed(2),+r.psgRate.toFixed(2),+r.incRate.toFixed(2),+r.vacRate.toFixed(2)])];
   const ws=XLSX.utils.aoa_to_sheet(aoa);const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,wLabel(anaWeekOff).replace(/\//g,'-'));
   XLSX.writeFile(wb,`考勤分析_${wKey(anaWeekOff).replace('week_','')}.xlsx`);toast('导出成功');
@@ -5721,17 +5778,17 @@ function exportAttAnalysisWeekendPDF(){
     if(!byDept[d].secs[s])byDept[d].secs[s]=[];
     byDept[d].secs[s].push(e);
   });
-  let deptList=Object.keys(byDept).map(d=>({...byDept[d],st:computeWeekendStats(byDept[d].emps,anaWeekOff)}));
+  const deptNamesOrdered=sortDeptNames(Object.keys(byDept),name=>Object.keys(byDept[name].secs).some(k=>k!=='__none__'));
+  let deptList=deptNamesOrdered.map(d=>({...byDept[d],st:computeWeekendStats(byDept[d].emps,anaWeekOff)}));
   if(anaExclBlank)deptList=deptList.filter(d=>d.st.emp>0);
-  deptList=deptList.sort((a,b)=>b.st.attRate-a.st.attRate);
   const tot=computeWeekendStats(emps,anaWeekOff);
   let html=`<table><thead><tr><th>部门</th><th>科室</th><th>人数</th><th>出勤天数(A)</th><th>应出勤天数</th><th>出勤率</th><th>缺勤天数</th><th>旷工天数(FI)</th><th>旷工占比</th></tr></thead><tbody>`;
   deptList.forEach(d=>{
-    const secs=d.secs;const realSecs=Object.keys(secs).filter(k=>k!=='__none__');const hasSecs=realSecs.length>0;
+    const secs=d.secs;const realSecs=sortSectionNames(Object.keys(secs).filter(k=>k!=='__none__'),d.dept);const hasSecs=realSecs.length>0;
     const r=d.st;
     html+=`<tr style="font-weight:700;background:#eef2ff"><td>${E(d.dept)}</td><td style="text-align:left">${hasSecs?'部门汇总':''}</td><td>${r.emp}</td><td>${r.aDays}</td><td>${r.expTotal}</td><td>${r.attRate.toFixed(1)}%</td><td>${r.absDays}</td><td>${r.fiDays}</td><td>${r.fiRate.toFixed(2)}%</td></tr>`;
     if(hasSecs){
-      const secRows=realSecs.map(sec=>({sec,st:computeWeekendStats(secs[sec],anaWeekOff)})).sort((a,b)=>b.st.attRate-a.st.attRate);
+      const secRows=realSecs.map(sec=>({sec,st:computeWeekendStats(secs[sec],anaWeekOff)}));
       secRows.forEach(s=>{
         if(anaExclBlank&&s.st.emp===0)return;
         const st=s.st;
@@ -5766,7 +5823,13 @@ function exportAttAnalysisWeekend(){
   const groups={};
   if(anaGrp==='dept'){emps.forEach(e=>{const k=e.dept||'未分配';if(!groups[k])groups[k]=[];groups[k].push(e);});}
   else{emps.forEach(e=>{const k=e.section||'未分科室';if(!groups[k])groups[k]=[];groups[k].push(e);});}
-  let rows=Object.keys(groups).map(name=>({name,...computeWeekendStats(groups[name],anaWeekOff)})).sort((a,b)=>b.attRate-a.attRate);
+  let names=Object.keys(groups);
+  if(anaGrp==='dept'){
+    names=sortDeptNames(names,name=>groups[name].some(e=>e.section&&e.section!==e.dept));
+  }else{
+    names=names.sort((a,b)=>a.localeCompare(b,'zh'));
+  }
+  let rows=names.map(name=>({name,...computeWeekendStats(groups[name],anaWeekOff)}));
   if(anaExclBlank)rows=rows.filter(r=>r.emp>0);
   const aoa=[[(anaGrp==='dept'?'部门':'科室'),'人数','出勤天数(A)','应出勤天数','出勤率(%)','缺勤天数','旷工天数(FI)','旷工占比(%)'],
     ...rows.map(r=>[r.name,r.emp,r.aDays,r.expTotal,+r.attRate.toFixed(2),r.absDays,r.fiDays,+r.fiRate.toFixed(2)])];
