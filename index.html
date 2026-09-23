@@ -5252,23 +5252,33 @@ function computeWeekStats(emps,wkOff){
 }
 // 部门 / 科室固定展示顺序：轮胎制造部 → 其余有科室的部门 → 无科室的部门；
 // 轮胎制造部内部科室固定为：炼胶生产科、生产一科、生产二科、生产三科（其余科室按名称排在后面）。
+// 注：部门名/科室名在实际数据中可能带有前缀（如科室存的是"轮胎制造部生产一科"而非"生产一科"），
+// 因此用"是否包含关键字"而非严格相等来判断，避免因命名差异导致固定顺序失效。
 const ANA_DEPT_FIRST='轮胎制造部';
-const ANA_SECTION_ORDER={'炼胶生产科':0,'生产一科':1,'生产二科':2,'生产三科':3};
+const ANA_SECTION_ORDER_LIST=['炼胶生产科','生产一科','生产二科','生产三科'];
+function isTireDept(name){return !!name&&name.indexOf(ANA_DEPT_FIRST)!==-1;}
+function tireSectionOrderIndex(name){
+  if(!name)return -1;
+  for(let i=0;i<ANA_SECTION_ORDER_LIST.length;i++){
+    if(name.indexOf(ANA_SECTION_ORDER_LIST[i])!==-1)return i;
+  }
+  return -1;
+}
 function sortDeptNames(names,hasSecsFn){
   return names.slice().sort((a,b)=>{
-    const ka=a===ANA_DEPT_FIRST?0:(hasSecsFn(a)?1:2);
-    const kb=b===ANA_DEPT_FIRST?0:(hasSecsFn(b)?1:2);
+    const ka=isTireDept(a)?0:(hasSecsFn(a)?1:2);
+    const kb=isTireDept(b)?0:(hasSecsFn(b)?1:2);
     if(ka!==kb)return ka-kb;
     return a.localeCompare(b,'zh');
   });
 }
 function sortSectionNames(names,deptName){
-  if(deptName===ANA_DEPT_FIRST){
+  if(isTireDept(deptName)){
     return names.slice().sort((a,b)=>{
-      const ia=ANA_SECTION_ORDER[a],ib=ANA_SECTION_ORDER[b];
-      if(ia!==undefined&&ib!==undefined)return ia-ib;
-      if(ia!==undefined)return -1;
-      if(ib!==undefined)return 1;
+      const ia=tireSectionOrderIndex(a),ib=tireSectionOrderIndex(b);
+      if(ia!==-1&&ib!==-1)return ia-ib;
+      if(ia!==-1)return -1;
+      if(ib!==-1)return 1;
       return a.localeCompare(b,'zh');
     });
   }
