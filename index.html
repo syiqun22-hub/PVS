@@ -3410,7 +3410,7 @@ function buildEmpDailyBlock(emp){
       const dow=new Date(qY,qM-1,d).getDay();const wk=(dow===0||dow===6);const ds=dsOf(qY,qM,d);
       const rec=dailyScores[empId]&&dailyScores[empId][ds];
       const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
-      const isZeroDay=adj.zeroStatuses&&adj.zeroStatuses.has(att);
+      const isZeroDay=adj.absentStatuses&&adj.absentStatuses.has(att);
       const bg=`${wk?'background:var(--color-background-secondary);':''}${isZeroDay?'background:#2e0d0d;':''}`;
       const bd=isZeroDay?'border-color:#fca5a5;':'';
       const kShareMode=kpiShareMode(k);
@@ -3457,7 +3457,7 @@ function buildEmpDailyBlock(emp){
   // 绩效总分行（含规则2高亮 + 月合计列）
   let totCells='';
   for(let d=1;d<=n;d++){const dow=new Date(qY,qM-1,d).getDay();const wk=(dow===0||dow===6);const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];const tot=rec?(recalcDayTotal(empId,ds,emp),rec.totalScore!=null?rec.totalScore:null):null;
-    const dateObj2=new Date(qY,qM-1,d);const att2=dayAttStatus(empId,dateObj2);const isZeroDay=adj.zeroStatuses&&adj.zeroStatuses.has(att2);
+    const dateObj2=new Date(qY,qM-1,d);const att2=dayAttStatus(empId,dateObj2);const isZeroDay=adj.absentStatuses&&adj.absentStatuses.has(att2);
     totCells+=`<td id="qd-tot-${empId}-${ds}" style="text-align:center;font-weight:700;font-family:var(--font-mono);${wk?'background:var(--color-background-secondary);':''}${isZeroDay?'background:#2e0d0d;':''}color:${tot!=null?(isZeroDay?'#fca5a5':scoreColor(tot)):'var(--color-border-secondary)'}">${tot!=null?Math.round(tot):'·'}</td>`;}
   const adjScoreCell=adj.zeroed
     ?`<span style="font-weight:700;color:#f87171">0</span><div style="font-size:9px;color:#f87171;margin-top:1px">${adj.reason}</div>`
@@ -3765,7 +3765,7 @@ function getEmpDailyAvg(empId){return calcAdjustedMonthScore(empId).score;}
 // 考勤出勤规则得分核算（返回 {score, zeroed, reason, zeroStatuses}）
 function calcAdjustedMonthScore(empId){
   const emp=employees.find(e=>e.id===empId);
-  if(!emp)return{score:0,zeroed:false,reason:'',zeroStatuses:new Set()};
+  if(!emp)return{score:0,zeroed:false,reason:'',zeroStatuses:new Set(),absentStatuses:new Set()};
   const counts=getMonthCounts([emp],qY,qM);const c=counts[empId]||{};
   const fi=c['FI']||0,inc=c['INC']||0,psg=c['PSG']||0,fj=c['FJ']||0;
   // 规则1：月度归零
@@ -3773,15 +3773,16 @@ function calcAdjustedMonthScore(empId){
   if(_actas.length>=1)return{score:0,zeroed:true,reason:`Acta Administrativa ${_actas.length} 次`,zeroStatuses:new Set()};
   if(fi>=1)return{score:0,zeroed:true,reason:`旷工 ${fi} 天`,zeroStatuses:new Set()};
   if(inc>=4)return{score:0,zeroed:true,reason:`病假 ${inc} 天≥4`,zeroStatuses:new Set()};
-  if(psg+fj>=2)return{score:0,zeroed:true,reason:`事假/合理缺勤 ${psg+fj} 天≥2`,zeroStatuses:new Set()};
-  // 规则2：特定天计0（INC<4 / PSG+FJ<2 时，对应天得分归零）
-  const zeroStatuses=new Set();
-  if(inc>0)zeroStatuses.add('INC');
-  if(psg>0)zeroStatuses.add('PSG');
-  if(fj>0)zeroStatuses.add('FJ');
+  if(psg+fj>=3)return{score:0,zeroed:true,reason:`事假/合理缺勤 ${psg+fj} 天≥3`,zeroStatuses:new Set()};
+  // 规则2：未达归零线时，按出勤比例折算：得分 × (当月天数-缺勤天数)/当月天数
+  // 缺勤 = INC + PSG + FJ 的天数（缺勤日等于自动记0分，无论当天是否录入过绩效）
+  const absentStatuses=new Set(['INC','PSG','FJ']);
+  const zeroStatuses=new Set(); // 不再逐日改写录入值，改为整体按比例折算
   // 按月累计实际达成代入各KPI得分逻辑，再加权汇总
   const adj0={zeroStatuses};
   const n=pastDaysInMonth();
+  let absDays=0;for(let d=1;d<=n;d++){if(absentStatuses.has(dayAttStatus(empId,new Date(qY,qM-1,d))))absDays++;}
+  const factor=n>0?Math.max(0,(n-absDays)/n):1;
   const kpis=getEmpKPIs(emp);
   const monthActuals={};
   kpis.forEach(k=>{monthActuals[k.id]=calcMonthlyKpiActual(empId,k,adj0,n);});
@@ -3793,29 +3794,22 @@ function calcAdjustedMonthScore(empId){
     const a=monthActuals[k.id];if(a===null||a===undefined)return;
     const sc=calcKPIScore(a,k);if(sc===null)return;
     const rankBonus=_topInfo.bonusMap[k.id]||0;
-    _tot+=(sc+rankBonus)*(k.weight/100);_tw+=k.weight;
+    _tot+=(sc+rankBonus)*factor*(k.weight/100);_tw+=k.weight;
   });
-  // 超额奖励（按排名加到总分，不参与加权）
+  // 超额奖励（按排名加到总分，不参与加权；同样按出勤比例折算）
   const _bonusRankInfo=calcBonusRankInfo(empId,kpis,false);
   _bonus+=_bonusRankInfo.bonus;
-  const score=(_tw>0||_bonus>0)?Math.round((_tot+_bonus)*10)/10:0;
-  // 统计受考勤影响的录入天数（用于reason提示）
-  let adjCount=0;
-  for(let d=1;d<=n;d++){
-    const ds=dsOf(qY,qM,d);const rec=dailyScores[empId]&&dailyScores[empId][ds];
-    if(!rec||rec.totalScore==null)continue;
-    const dateObj=new Date(qY,qM-1,d);const att=dayAttStatus(empId,dateObj);
-    if(zeroStatuses.has(att))adjCount++;
-  }
+  const score=(_tw>0||_bonus>0)?Math.round((_tot+_bonus*factor)*10)/10:0;
+  const adjCount=absDays;
   const _reasonParts=[];
-  if(adjCount>0)_reasonParts.push(`${adjCount} 天按0折算`);
+  if(adjCount>0)_reasonParts.push(`缺勤 ${adjCount} 天，按 (${n}-${adjCount})/${n} 折算`);
   _topInfo.reasons.forEach(r=>_reasonParts.push(r));
   _bonusRankInfo.reasons.forEach(r=>_reasonParts.push(r));
   const reason=_reasonParts.join('；');
   // bonusReason 只含加分说明（排名奖励），不含考勤折算，用于 ⭐ 展示
   const allBonusReasons=[..._topInfo.reasons,..._bonusRankInfo.reasons];
   const bonusReason=allBonusReasons.length?allBonusReasons.join('；'):null;
-  return{score,zeroed:false,reason,bonusReason,zeroStatuses,adjCount};
+  return{score,zeroed:false,reason,bonusReason,zeroStatuses,absentStatuses,adjCount,factor};
 }
 // 按月累计实际达成：%指标累积分子/分母，次数指标求和，其他指标取平均
 function calcMonthlyKpiActual(empId,kpi,adj,n){
@@ -3857,7 +3851,7 @@ function getEmpKpiAvgScore(empId,kpi,adj){
   const actual=calcMonthlyKpiActual(empId,kpi,adj,n);
   if(actual===null)return{score:null,zeroed:false};
   const sc=calcKPIScore(actual,kpi);
-  return{score:sc!=null?Math.round(sc*10)/10:null,zeroed:false};
+  return{score:sc!=null?Math.round(sc*(adj&&adj.factor!=null?adj.factor:1)*10)/10:null,zeroed:false};
 }
 function renderQRank(){
   try{_renderQRank();}catch(err){console.error('renderQRank error',err);const wrap=$('qr-content');if(wrap)wrap.innerHTML=`<div class="card" style="padding:20px;color:#dc3545">岗位排名渲染失败：${err.message}<br><small>${err.stack||''}</small></div>`;}
@@ -5152,7 +5146,7 @@ function dlAttTpl(){
   XLSX.utils.book_append_sheet(wb,ws,'考勤');
   XLSX.writeFile(wb,'考勤导入模板.xlsx');
 }
-function getMonthCounts(emps,y,m){const counts={};emps.forEach(e=>{counts[e.id]={};STATUSES.forEach(s=>counts[e.id][s]=0);});Object.keys(attendanceData).forEach(wk=>{if(!wk.replace('week_','').startsWith(mKey(y,m)))return;emps.forEach(e=>{const row=attendanceData[wk]&&attendanceData[wk][e.id]||{};Object.values(row).forEach(s=>{if(s&&counts[e.id])counts[e.id][s]++;});});});return counts;}
+function getMonthCounts(emps,y,m){const counts={};emps.forEach(e=>{counts[e.id]={};STATUSES.forEach(s=>counts[e.id][s]=0);});const _mk=mKey(y,m);Object.keys(attendanceData).forEach(wk=>{emps.forEach(e=>{const row=attendanceData[wk]&&attendanceData[wk][e.id]||{};Object.keys(row).forEach(ds=>{const s=row[ds];if(s&&ds.startsWith(_mk)&&counts[e.id]&&counts[e.id][s]!==undefined)counts[e.id][s]++;});});});return counts;}
 function renderAttHist(){const dF=$('att-hist-dept').value;let emps=mxEmps();if(dF)emps=emps.filter(e=>e.dept===dF);const counts=getMonthCounts(emps,attHistY,attHistM);$('att-hist-body').innerHTML=emps.map(e=>{const c=counts[e.id]||{};const total=STATUSES.reduce((s,st)=>s+(c[st]||0),0);return`<tr><td style="font-family:monospace;font-size:11px">${e.id}</td><td style="font-family:monospace;font-size:11px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td style="font-weight:500">${e.name}</td><td style="color:var(--color-text-secondary)">${getDeptLabel(e.dept)}</td>${STATUSES.map(s=>`<td style="font-weight:${c[s]>0?'600':'400'};color:${c[s]>0?'var(--color-text-primary)':'var(--color-text-tertiary)'}">${c[s]||0}</td>`).join('')}<td style="font-weight:600">${total}</td></tr>`;}).join('');}
 // SUMMARY
 function renderSummary(){
