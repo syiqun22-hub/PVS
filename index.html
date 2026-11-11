@@ -353,11 +353,6 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div class="nav-item" data-role="admin" onclick="showPage('ot-analysis',this)"><i class="ti ti-clock-hour-4"></i>加班分析</div>
     <div class="nav-sec" data-role="admin">考勤管理 · 中方</div>
     <div class="nav-item" data-role="admin" onclick="showPage('cn-attendance',this)"><i class="ti ti-user-check"></i>中方考勤填报</div>
-    <div class="nav-sec" data-role="admin">调薪管理</div>
-    <div class="nav-item" data-role="admin" onclick="showPage('salary-review',this)"><i class="ti ti-file-text"></i>员工考核档案</div>
-    <div class="nav-item" data-role="admin" onclick="showPage('salary-ledger',this)"><i class="ti ti-list-numbers"></i>调薪台账</div>
-    <div class="nav-item" data-role="admin" onclick="showPage('watch-list-page',this)"><i class="ti ti-eye"></i>待观察名单</div>
-    <div class="nav-item" data-role="admin" onclick="showPage('blacklist-page',this)"><i class="ti ti-ban"></i>黑名单</div>
     <div class="nav-sec" data-role="admin">系统</div>
     <div class="nav-item" data-role="admin" id="nav-backup" onclick="showPage('backup',this)"><i class="ti ti-database"></i>数据备份</div>
     <div class="nav-item" id="nav-accounts" style="display:none" onclick="showPage('accounts',this)"><i class="ti ti-shield"></i>账号管理</div>
@@ -461,10 +456,6 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
       <div class="card"><div class="card-header"><div class="card-title">各部门绩效均分对比</div></div><div style="position:relative;height:240px"><canvas id="pa-dept-score-chart"></canvas></div></div>
       <div class="card"><div class="card-header"><div class="card-title">各部门绩效完成率</div></div><div style="position:relative;height:240px"><canvas id="pa-dept-completion-chart"></canvas></div></div>
-    </div>
-    <div class="card">
-      <div class="card-header"><div class="card-title">部门绩效 × 薪资等级关联分析</div></div>
-      <div id="pa-dept-salary-table"></div>
     </div>
     <div class="card" style="margin-top:14px">
       <div class="card-header"><div class="card-title">科室绩效下钻</div><div style="font-size:11px;color:var(--color-text-tertiary)" id="pa-sec-hint"></div></div>
@@ -725,16 +716,21 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     <button class="btn" onclick="exportAllEmployees()"><i class="ti ti-file-export"></i> 导出员工信息</button>
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th data-i18n="th_emp_id">工号</th><th>工资系统编码</th><th data-i18n="th_name">姓名</th><th data-i18n="th_dept">部门</th><th data-i18n="th_section">科室</th><th>班组</th><th data-i18n="th_position">岗位</th><th data-i18n="th_join_date">入职日期</th><th>国籍</th><th>状态</th><th>薪资等级</th><th data-i18n="th_action">操作</th></tr></thead>
+    <table><thead><tr><th data-i18n="th_emp_id">工号</th><th>工资系统编码</th><th data-i18n="th_name">姓名</th><th data-i18n="th_dept">部门</th><th data-i18n="th_section">科室</th><th>班组</th><th data-i18n="th_position">岗位</th><th data-i18n="th_join_date">入职日期</th><th>国籍</th><th>状态</th><th data-i18n="th_action">操作</th></tr></thead>
     <tbody id="emp-table"></tbody></table>
   </div>
 </div>
 <!-- TURNOVER ANALYSIS (离职率分析) -->
 <div id="page-turnover" class="page">
-  <div class="page-title">离职率分析 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅墨西哥工厂员工 · 以科室为单位（无科室按部门）</span></div>
+  <div class="page-title">离职率分析 <span style="font-size:12px;font-weight:400;color:var(--color-text-tertiary)">· 仅墨西哥工厂员工 · <span id="to-scope">以科室为单位（无科室按部门）</span></span></div>
   <div class="tabs" style="margin-bottom:14px">
     <button class="tab active" id="to-tab-month" onclick="switchToTab('month',this)">月度离职率</button>
     <button class="tab" id="to-tab-week" onclick="switchToTab('week',this)">周度离职率</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+    <span style="font-size:12px;color:var(--color-text-secondary)">分析维度：</span>
+    <button class="btn btn-sm btn-p" id="to-view-dept" onclick="setToView('dept')">按部门</button>
+    <button class="btn btn-sm" id="to-view-proc" onclick="setToView('proc')">按工序</button>
   </div>
   <div id="to-panel-month">
   <div class="toolbar" style="align-items:center">
@@ -748,9 +744,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   </div>
   <div id="to-kpi" class="g5" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px"></div>
   <div class="card">
-    <div style="font-size:13px;font-weight:600;margin-bottom:10px">各科室离职率（本月）</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px"><span class="to-v-name">各科室</span>离职率（本月）</div>
     <div style="overflow-x:auto"><table><thead><tr>
-      <th style="text-align:left">部门</th><th style="text-align:left">科室</th>
+      <th style="text-align:left" class="to-th1">部门</th><th style="text-align:left" class="to-th2">科室</th>
       <th>月初人数</th><th>入职</th><th>离职</th><th>月末人数</th><th>月均人数</th><th>当月离职率</th>
     </tr></thead><tbody id="to-table"></tbody></table></div>
   </div>
@@ -761,8 +757,8 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
       <div style="height:260px"><canvas id="to-chart-tenure"></canvas></div>
     </div>
     <div class="card">
-      <div style="font-size:13px;font-weight:600;margin-bottom:4px">科室近 6 个月离职率趋势</div>
-      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">点击图例可隐藏/显示某科室</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px"><span class="to-v-unit">科室</span>近 6 个月离职率趋势</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">点击图例可隐藏/显示某<span class="to-v-unit">科室</span></div>
       <div style="height:260px"><canvas id="to-chart-trend"></canvas></div>
     </div>
   </div>
@@ -799,9 +795,9 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
   </div>
   <div id="wto-kpi" class="g5" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px"></div>
   <div class="card">
-    <div style="font-size:13px;font-weight:600;margin-bottom:10px">各科室离职率（<span id="wto-week-range">本周</span>）</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px"><span class="to-v-name">各科室</span>离职率（<span id="wto-week-range">本周</span>）</div>
     <div style="overflow-x:auto"><table><thead><tr>
-      <th style="text-align:left">部门</th><th style="text-align:left">科室</th>
+      <th style="text-align:left" class="to-th1">部门</th><th style="text-align:left" class="to-th2">科室</th>
       <th>期初人数</th><th>入职</th><th>离职</th><th>期末人数</th><th>期间均人数</th><th>当周离职率</th>
     </tr></thead><tbody id="wto-table"></tbody></table></div>
   </div>
@@ -1313,149 +1309,6 @@ tr:hover td{background:var(--color-background-secondary)}tr.no-hover:hover td{ba
     </div>
   </div>
 </div>
-<!-- SALARY REVIEW -->
-<div id="page-salary-review" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-    <div class="page-title" style="margin-bottom:0">员工考核档案</div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="sr-s" style="width:170px" oninput="renderSR()">
-      <select id="sr-dept" onchange="renderSR()" style="width:130px"><option value="">全部部门</option></select>
-      <button class="btn" onclick="exportSR()"><i class="ti ti-download"></i> 导出</button>
-    </div>
-  </div>
-
-  <div id="sr-list"></div>
-</div>
-<!-- SALARY LEDGER -->
-<div id="page-salary-ledger" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-    <div class="page-title" style="margin-bottom:0">调薪台账</div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn" onclick="refreshLedger()"><i class="ti ti-refresh"></i> 刷新名单</button>
-      <button class="btn" onclick="exportLedger()"><i class="ti ti-download"></i> 导出</button>
-    </div>
-  </div>
-
-  <!-- 标签页切换 -->
-  <div style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid var(--color-border-secondary)">
-    <button id="ledger-tab-btn-pending" class="ledger-tab-btn active" onclick="switchLedgerTab('pending')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-primary);border-bottom:2px solid var(--color-primary);margin-bottom:-2px">
-      ⏰ 待考核 <span id="ledger-tab-count-pending" class="badge badge-info" style="margin-left:6px">0</span>
-    </button>
-    <button id="ledger-tab-btn-week" class="ledger-tab-btn" onclick="switchLedgerTab('week')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
-      📅 当周调薪 <span id="ledger-tab-week-range" style="font-size:11px;font-weight:400;color:var(--color-text-tertiary);margin-left:4px"></span><span id="ledger-tab-count-week" class="badge" style="margin-left:6px;background:#dcfce7;color:#166534">0</span>
-    </button>
-    <button id="ledger-tab-btn-past" class="ledger-tab-btn" onclick="switchLedgerTab('past')" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px">
-      ✅ 已过调薪节点 <span id="ledger-tab-count-past" class="badge" style="margin-left:6px;background:#f3f4f6;color:#374151">0</span>
-    </button>
-  </div>
-
-  <!-- 筛选栏 -->
-  <div class="toolbar" style="margin-top:12px">
-    <select id="ledger-filter-node" onchange="renderLedger()" style="width:130px">
-      <option value="">全部节点</option>
-      <option value="3个月">3个月</option>
-      <option value="6个月">6个月</option>
-      <option value="12个月">12个月</option>
-      <option value="18个月">18个月</option>
-      <option value="30个月">30个月</option>
-    </select>
-    <select id="ledger-filter-status" onchange="renderLedger()" style="width:130px">
-      <option value="">全部状态</option>
-      <option value="pending">待评价</option>
-      <option value="evaluating">评估中</option>
-      <option value="watching">待观察</option>
-      <option value="passed">已通过</option>
-      <option value="failed">不通过</option>
-      <option value="blacklisted">黑名单</option>
-    </select>
-    <select id="ledger-filter-dept" onchange="renderLedger()" style="width:130px"><option value="">全部部门</option></select>
-    <input id="ledger-search" placeholder="搜索员工姓名/工号" oninput="renderLedger()" style="width:160px">
-  </div>
-
-  <div id="ledger-list"></div>
-
-  <!-- 不通过 / 黑名单 名单 -->
-  <div style="margin-top:28px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px">
-        <span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:6px;font-size:13px">⚠️ 待观察名单</span>
-      </div>
-      <span id="watch-count" class="badge" style="background:#fef3c7;color:#92400e">0人</span>
-    </div>
-    <div id="watch-list" style="margin-bottom:24px"></div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px">
-        <span style="background:#1f2937;color:#f9fafb;padding:3px 10px;border-radius:6px;font-size:13px">⛔ 黑名单</span>
-      </div>
-      <span id="blacklist-count" class="badge" style="background:#fee2e2;color:#991b1b">0人</span>
-    </div>
-    <div id="blacklist-list"></div>
-  </div>
-</div>
-
-<!-- SALARY LEDGER EVAL MODAL -->
-<div class="modal-backdrop" id="modal-ledger-eval">
-  <div class="modal modal-sm">
-    <div class="modal-header">
-      <div class="modal-title" id="le-title">调薪考核评估</div>
-      <button class="close-btn" onclick="closeM('modal-ledger-eval')">✕</button>
-    </div>
-    <div id="le-info" style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px;margin-bottom:14px;font-size:13px;line-height:1.8"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div class="fg">
-        <label class="fl">考试分数（满分100）</label>
-        <input type="number" id="le-exam" min="0" max="100" placeholder="请填写" oninput="updateLeStatus()">
-      </div>
-      <div class="fg">
-        <label class="fl">FI/Acta纪律得分（系统核算）</label>
-        <input id="le-disc" readonly="" style="background:var(--color-background-tertiary)">
-      </div>
-    </div>
-    <div id="le-status-hint" style="font-size:12px;padding:8px 12px;border-radius:var(--border-radius-md);margin-bottom:12px;display:none"></div>
-    <div class="fg" style="margin-bottom:12px">
-      <label class="fl">部门意见</label>
-      <textarea id="le-dept-opinion" rows="2" placeholder="部门领导意见（可选）"></textarea>
-    </div>
-    <div class="fg" style="margin-bottom:14px">
-      <label class="fl">最终调薪意见 <span style="color:#dc3545">*</span></label>
-      <select id="le-final">
-        <option value="">— 请选择 —</option>
-        <option value="通过">✅ 通过</option>
-        <option value="不通过">❌ 不通过</option>
-      </select>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn" onclick="closeM('modal-ledger-eval')">取消</button>
-      <button class="btn btn-p" onclick="saveLedgerEval()">保存评估</button>
-    </div>
-  </div>
-</div>
-
-<!-- WATCH LIST PAGE -->
-<div id="page-watch-list-page" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-    <div class="page-title" style="margin-bottom:0">⚠️ 待观察名单</div>
-    <button class="btn" onclick="renderWatchPage()"><i class="ti ti-refresh"></i> 刷新</button>
-  </div>
-  <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;padding:10px 14px;background:#fef3c7;border-radius:8px;border-left:3px solid #f59e0b">
-    首次调薪考核不通过的员工，进入待观察状态，系统安排3个月后补考。补考通过后，员工恢复正常考核周期；补考再次不通过则转入黑名单。
-  </div>
-  <div id="watch-page-list"></div>
-</div>
-
-<!-- BLACKLIST PAGE -->
-<div id="page-blacklist-page" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-    <div class="page-title" style="margin-bottom:0">⛔ 黑名单</div>
-    <button class="btn" onclick="renderBlacklistPage()"><i class="ti ti-refresh"></i> 刷新</button>
-  </div>
-  <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;padding:10px 14px;background:#fee2e2;border-radius:8px;border-left:3px solid #dc2626">
-    连续两次调薪考核不通过的员工进入黑名单，不再参与调薪考核流程。
-  </div>
-  <div id="blacklist-page-list"></div>
-</div>
-
 <!-- BACKUP -->
 <div id="page-backup" class="page">
   <div class="page-title">数据备份与恢复</div>
@@ -1787,39 +1640,6 @@ S10002	A	A	FI	A	A	D	D</pre>
     </div>
   </div>
 </div>
-<div class="modal-backdrop" id="modal-sn">
-  <div class="modal modal-sm">
-    <div class="modal-header"><div class="modal-title" id="sn-title">考核分数</div><button class="close-btn" onclick="closeM('modal-sn')">✕</button></div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
-      <div class="fg"><label class="fl">考核分数（0~100）</label><input id="sn-score" type="number" min="0" max="100"></div>
-      <div class="fg"><label class="fl">考核日期</label><input id="sn-date" type="date"></div>
-      <div class="fg"><label class="fl">备注（选填）</label><textarea id="sn-note" rows="2"></textarea></div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeM('modal-sn')">取消</button><button class="btn btn-p" onclick="saveSN()">保存</button></div>
-  </div>
-</div>
-<div class="modal-backdrop" id="modal-acta">
-  <div class="modal modal-sm">
-    <div class="modal-header"><div class="modal-title">新增 Acta Administrativa</div><button class="close-btn" onclick="closeM('modal-acta')">✕</button></div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
-      <div class="fg"><label class="fl">日期</label><input id="acta-date" type="date"></div>
-      <div class="fg"><label class="fl">原因 / 事由</label><textarea id="acta-reason" rows="3"></textarea></div>
-      <div class="fg"><label class="fl">上传 PDF 证明（显示文件名）</label><input type="file" id="acta-pdf" accept=".pdf" multiple="" style="padding:5px"><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px" id="acta-pdf-list"></div></div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeM('modal-acta')">取消</button><button class="btn btn-p" onclick="saveActa()">保存</button></div>
-  </div>
-</div>
-<div class="modal-backdrop" id="modal-opinion">
-  <div class="modal modal-sm">
-    <div class="modal-header"><div class="modal-title" id="op-title">填写意见</div><button class="close-btn" onclick="closeM('modal-opinion')">✕</button></div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
-      <div class="fg"><label class="fl" id="op-lbl">意见内容</label><textarea id="op-text" rows="4"></textarea></div>
-      <div class="fg"><label class="fl">填写日期</label><input id="op-date" type="date"></div>
-      <div class="fg"><label class="fl">签名 / 填写人（选填）</label><input id="op-signer"></div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeM('modal-opinion')">取消</button><button class="btn btn-p" onclick="saveOpinion()">保存</button></div>
-  </div>
-</div>
 <div class="modal-backdrop" id="modal-add-acc">
   <div class="modal modal-sm">
     <div class="modal-header"><div class="modal-title">新增账号</div><button class="close-btn" onclick="closeM('modal-add-acc')">✕</button></div>
@@ -1878,124 +1698,12 @@ let currentUser=null,currentEvalEmp=null,editingKPIId=null,editingPosId=null,edi
 const _NOW=new Date(),_NY=_NOW.getFullYear(),_NM=_NOW.getMonth()+1;
 let curY=_NY,curM=_NM,qY=_NY,qM=_NM,attHistY=_NY,attHistM=_NM,sumY=_NY,sumM=_NM,deptY=_NY,deptM=_NM;
 let weekOff=0,sortField=null,sortAsc=true;
-let kd='achieve',km='rate',snEmpId=null,snNode=null,actaEmpId=null,opEmpId=null,opType=null;
+let kd='achieve',km='rate';
 let charts={};
 const STATUSES=['FI','A','D','F','PSG','PCG','VAC','INC','FJ','PT','S','TT'];
 const STATUS_LABELS={FI:'旷工',A:'出勤',D:'休息',F:'法定节假日',PSG:'无薪事假',PCG:'带薪事假',VAC:'年假',INC:'病假',FJ:'合理缺勤',PT:'停产',S:'纪律停职',TT:'调休'};
 const STATUS_CLS={FI:'s-FI',A:'s-A',D:'s-D',F:'s-F',PSG:'s-PSG',PCG:'s-PCG',VAC:'s-VAC',INC:'s-INC',FJ:'s-FJ',PT:'s-PT',S:'s-S',TT:'s-TT'};
-const SCORE_NODES=['3个月','6个月','12个月','18个月','30个月'];
 
-// ── 薪资周期定义 ──────────────────────────────────────────
-const SALARY_NODES=[
-  {label:'3个月', months:3,  grade:1},
-  {label:'6个月', months:6,  grade:2},
-  {label:'12个月',months:12, grade:3},
-  {label:'18个月',months:18, grade:4},
-  {label:'30个月',months:30, grade:5},
-];
-
-// 根据入职时长计算薪资等级数字：<3月=0，满3月=1，满6月=2，满12月=3，满18月=4，满30月=5
-function tenureGrade(emp){
-  if(!emp.joinDate)return 0;
-  const join=new Date(emp.joinDate); if(isNaN(join))return 0;
-  const now=new Date();
-  let months=(now.getFullYear()-join.getFullYear())*12+(now.getMonth()-join.getMonth());
-  if(now.getDate()<join.getDate()) months--;
-  let g=0;
-  const sr=salaryReviews[emp.id];
-  SALARY_NODES.forEach(n=>{
-    if(months<n.months)return;
-    // 只有该节点审核结论为「通过」才晋升等级
-    const nd=sr&&sr.nodes&&sr.nodes[n.label];
-    if(nd&&nd.finalDecision==='通过')g=Math.max(g,n.grade);
-  });
-  return g;
-}
-
-// 计算薪资等级标签，如 "B-2"（岗位等级 + 入职时长等级）
-function getSalaryGrade(emp){
-  const pos=positions.find(p=>p.name===emp.position);
-  if(!pos||!pos.level)return '—';
-  return pos.level+'-'+tenureGrade(emp);
-}
-
-// 获取员工当前所在的考核节点（基于入职日期和今天）
-function getEmpSalaryNode(emp, refDate){
-  if(!emp.joinDate)return null;
-  const ref=refDate||new Date();
-  const join=new Date(emp.joinDate);
-  const diffDays=(ref-join)/86400000;
-  const diffMonths=diffDays/30.44;
-  // Find the closest upcoming or current node within ±15 days window
-  for(let i=SALARY_NODES.length-1;i>=0;i--){
-    if(diffMonths>=SALARY_NODES[i].months-0.5) return SALARY_NODES[i];
-  }
-  return null;
-}
-
-// 调薪日 = 入职日 + 节点月数 的下一天
-function getSalaryDate(joinDate, months){
-  const d=new Date(joinDate); d.setHours(0,0,0,0);
-  d.setMonth(d.getMonth()+months);
-  d.setDate(d.getDate()+1); // 满节点当天的下一天
-  return d;
-}
-
-// 获取15天内即将到达调薪日的员工（调薪日前15天起预警）
-function getUpcomingNodeEmps(windowDays=15){
-  const today=new Date(); today.setHours(0,0,0,0);
-  const result=[];
-  employees.forEach(emp=>{
-    if(!emp.joinDate)return;
-    const pos=positions.find(p=>p.name===emp.position);
-    if(!pos)return;
-    if(pos.category!=='O'&&pos.category!=='O-T'&&pos.category!=='O-S')return;
-    SALARY_NODES.forEach(node=>{
-      const salaryDate=getSalaryDate(emp.joinDate,node.months);
-      const daysUntil=Math.round((salaryDate-today)/86400000);
-      // 预警：调薪日前15天到调薪日当天
-      if(daysUntil>=0&&daysUntil<=windowDays){
-        result.push({emp,node,nodeDate:salaryDate,daysUntil});
-      }
-    });
-  });
-  return result;
-}
-
-// 计算员工FI/Acta扣分（最近3个月，满分100，每次FI或Acta扣10分，最低0分）
-function calcDisciplineScore(empId, refDate){
-  const ref=refDate||new Date();
-  const refY=ref.getFullYear(), refM=ref.getMonth()+1;
-  // Count FI in last 3 months
-  const fiDays=getFI3M(empId,refY,refM);
-  // Count Acta in last 3 months
-  const sr=salaryReviews[empId]||{};
-  const actas=sr.actas||[];
-  const start3m=new Date(ref); start3m.setMonth(start3m.getMonth()-3);
-  const actaCount=actas.filter(a=>{
-    if(!a.date)return false;
-    return new Date(a.date)>=start3m;
-  }).length;
-  const deductions=(fiDays+actaCount)*10;
-  return Math.max(0, 100-deductions);
-}
-
-// 获取员工在某节点的评估状态
-function getNodeEvalStatus(empId, nodeLabel){
-  const sr=salaryReviews[empId]||{};
-  const node=sr.nodes&&sr.nodes[nodeLabel];
-  if(!node)return 'pending'; // 待评价
-  if(node.finalDecision==='通过')return 'passed';
-  if(node.finalDecision==='不通过')return 'failed';
-  if(node.watchUntil)return 'watching'; // 待观察
-  return 'evaluating'; // 评估中
-}
-
-// 获取员工黑名单状态
-function isBlacklisted(empId){
-  const sr=salaryReviews[empId]||{};
-  return sr.blacklisted===true;
-}
 const DAYS_CN=['一','二','三','四','五','六','日'];
 const GRADES=[{k:'S',min:95,max:999,cls:'gs-S',badge:'grade-S'},{k:'A',min:85,max:95,cls:'gs-A',badge:'grade-A'},{k:'B',min:70,max:85,cls:'gs-B',badge:'grade-B'},{k:'C',min:60,max:70,cls:'gs-C',badge:'grade-C'},{k:'D',min:0,max:60,cls:'gs-D',badge:'grade-D'}];
 const KPI_TPLS={r11:[{n:'奖一罚一（标准）',c:'MAX(0,MIN(150,100+(rate-1)*100))'}],r12:[{n:'奖一罚二（标准）',c:'IF(rate>=1,MIN(150,100+(rate-1)*100),MAX(0,100-(1-rate)*200))'}],r21:[{n:'奖二罚一（标准）',c:'IF(rate>=1,MIN(150,100+(rate-1)*200),MAX(0,100-(1-rate)*100))'}],fml:[{n:'等比奖罚',c:'MAX(0,MIN(150,100+(rate-1)*100))'},{n:'达标即满分',c:'IF(rate>=1,100,rate*100)'},{n:'阶梯计分',c:'IFS(rate>=1,100,rate>=0.9,80,rate>=0.8,60,true,0)'},{n:'封顶120',c:'MIN(120,100*rate)'}]};
@@ -3769,8 +3477,6 @@ function calcAdjustedMonthScore(empId){
   const counts=getMonthCounts([emp],qY,qM);const c=counts[empId]||{};
   const fi=c['FI']||0,inc=c['INC']||0,psg=c['PSG']||0,fj=c['FJ']||0;
   // 规则1：月度归零
-  const _sr=salaryReviews[empId]||{};const _actas=(_sr.actas||[]).filter(a=>{if(!a.date)return false;const [ay,am]=a.date.split('-').map(Number);return ay===qY&&am===qM;});
-  if(_actas.length>=1)return{score:0,zeroed:true,reason:`Acta Administrativa ${_actas.length} 次`,zeroStatuses:new Set()};
   if(fi>=1)return{score:0,zeroed:true,reason:`旷工 ${fi} 天`,zeroStatuses:new Set()};
   if(inc>=4)return{score:0,zeroed:true,reason:`病假 ${inc} 天≥4`,zeroStatuses:new Set()};
   if(psg+fj>=3)return{score:0,zeroed:true,reason:`事假/合理缺勤 ${psg+fj} 天≥3`,zeroStatuses:new Set()};
@@ -4143,11 +3849,11 @@ async function importActualScores(event){
 }
 // EMPLOYEES
 function initAllFilters(){
-  [$('emp-df'),$('q-dept'),$('att-dept-f'),$('att-hist-dept'),$('sum-dept'),$('sr-dept')].forEach(sel=>{if(sel&&sel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});});
+  [$('emp-df'),$('q-dept'),$('att-dept-f'),$('att-hist-dept'),$('sum-dept')].forEach(sel=>{if(sel&&sel.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});});
   fillEmpSecFilter();
   // Lock dept filters for non-admin users
   if(currentUser&&currentUser.role!=='admin'){
-    ['emp-df','q-dept','att-dept-f','att-hist-dept','sum-dept','sr-dept','dept-filter'].forEach(id=>{const e=$(id);if(e){e.value=currentUser.dept;e.disabled=true;}});
+    ['emp-df','q-dept','att-dept-f','att-hist-dept','sum-dept','dept-filter'].forEach(id=>{const e=$(id);if(e){e.value=currentUser.dept;e.disabled=true;}});
     // 科室级账号也锁定科室筛选器
     if(currentUser.section){
       ['emp-sec-f','q-sec','att-sec-f'].forEach(id=>{const e=$(id);if(e){e.value=currentUser.section;e.disabled=true;}});
@@ -4175,7 +3881,7 @@ function filterEmp(){
   let list=allEmps().filter(e=>{if(s&&!e.name.toLowerCase().includes(s)&&!e.id.toLowerCase().includes(s))return false;if(dept&&e.dept!==dept)return false;if(secF&&e.section!==secF)return false;if(natF&&empNat(e)!==natF)return false;if(empf==='active'&&(isResigned(e)||isStandby(e)))return false;if(empf==='standby'&&!isStandby(e))return false;if(empf==='resigned'&&!isResigned(e))return false;const ms=getMS(e.id);if(status==='done'&&!ms.done)return false;if(status==='pending'&&ms.done)return false;return true;});
   const isAdmin=currentUser&&currentUser.role==='admin';
   $('emp-table').innerHTML=list.map(e=>{
-    const ms=getMS(e.id);const salGrade=getSalaryGrade(e);
+    const ms=getMS(e.id);
     const resigned=isResigned(e),standby=isStandby(e);
     const _rtCat=resignCategory(e.resignType);
     const _rtBadge=resigned&&e.resignType?`<span class="badge" style="margin-left:4px;font-size:9px;background:${_rtCat==='被动离职'?'#fdecea':'#fff4e0'};color:${_rtCat==='被动离职'?'#c0392b':'#b9770e'}" title="${_rtCat}">${e.resignType}</span>`:'';
@@ -4187,7 +3893,7 @@ function filterEmp(){
     const canEditEmp=isAdmin||(currentUser&&currentUser.role!=='admin'&&(currentUser.modules||[]).includes('employees'));
     const actBtns=isAdmin?`<button class="btn btn-sm" onclick="openEditEmp('${e.id}')" title="编辑信息"><i class="ti ti-user-edit"></i></button>${resigned||standby?`<button class="btn btn-sm" onclick="reinstateEmp('${e.id}')" title="恢复在岗"><i class="ti ti-user-check"></i></button>`:`<button class="btn btn-sm" onclick="resignEmp('${e.id}')" title="标记离岗"><i class="ti ti-user-x"></i></button>`}<button class="btn-del btn btn-sm" onclick="delEmp('${e.id}')" title="删除员工"><i class="ti ti-trash"></i></button>`:(canEditEmp?`<button class="btn btn-sm" onclick="openEditEmp('${e.id}')" title="编辑岗位/班组"><i class="ti ti-user-edit"></i></button>`:'');
     const rowStyle=resigned?' style="opacity:.62"':standby?' style="opacity:.8;background:#fffbeb"':'';
-    return`<tr${rowStyle}><td style="font-family:monospace;font-size:12px">${e.id}</td><td style="font-family:monospace;font-size:12px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong></td><td>${getDeptLabel(e.dept)}</td><td>${getSecLabel(e.section)||'-'}</td><td>${e.team||'-'}</td><td>${getPosLabel(e.position)||'-'}</td><td style="color:var(--color-text-secondary)">${e.joinDate||'-'}</td><td>${empNat(e)==='中国'?'<span class="badge badge-info">中国</span>':'<span class="badge badge-gray">墨西哥</span>'}</td><td>${statCell}</td><td><span style="font-family:monospace;font-weight:600;background:var(--color-background-info);color:var(--color-text-info);padding:2px 8px;border-radius:4px">${salGrade}</span></td><td><div style="display:flex;gap:4px">${actBtns}</div></td></tr>`;
+    return`<tr${rowStyle}><td style="font-family:monospace;font-size:12px">${e.id}</td><td style="font-family:monospace;font-size:12px;color:var(--color-text-secondary)">${e.salaryCode||'-'}</td><td><strong>${e.name}</strong></td><td>${getDeptLabel(e.dept)}</td><td>${getSecLabel(e.section)||'-'}</td><td>${e.team||'-'}</td><td>${getPosLabel(e.position)||'-'}</td><td style="color:var(--color-text-secondary)">${e.joinDate||'-'}</td><td>${empNat(e)==='中国'?'<span class="badge badge-info">中国</span>':'<span class="badge badge-gray">墨西哥</span>'}</td><td>${statCell}</td><td><div style="display:flex;gap:4px">${actBtns}</div></td></tr>`;
   }).join('');
 }
 function updateNeSecOptions(keepSec){const d=$('ne-dept').value;const cur=keepSec!==undefined?keepSec:$('ne-sec').value;const rel=sections.filter(s=>s.deptName===d);let opts='<option value="">— 不限定科室 —</option>';if(d)opts+=`<option value="${d}">${d}（本部门直属）</option>`;opts+=rel.map(s=>`<option value="${s.name}">${getName(s)}</option>`).join('');const known=new Set(['',d].concat(rel.map(s=>s.name)));if(cur&&!known.has(cur))opts+=`<option value="${cur}">${cur}</option>`;$('ne-sec').innerHTML=opts;if(cur)$('ne-sec').value=cur;}
@@ -6004,520 +5710,6 @@ function exportOtAnalysisPDF(){
   toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
 }
 
-// SALARY REVIEW
-function getSR(empId){if(!salaryReviews[empId])salaryReviews[empId]={nodes:{},actas:[],deptOpinion:null,finalOpinion:null};return salaryReviews[empId];}
-function getFI3M(empId,refY,refM){
-  // count FI (旷工) days in the past 3 calendar months ending at (refY,refM)
-  const end=new Date(refY||curY,(refM||curM)-1,31);
-  const start=new Date(refY||curY,(refM||curM)-1-2,1);
-  let cnt=0;
-  Object.keys(attendanceData).forEach(wk=>{
-    const empData=attendanceData[wk][empId];if(!empData)return;
-    Object.entries(empData).forEach(([ds,st])=>{
-      if(st!=='FI')return;
-      const d=new Date(ds);
-      if(d>=start&&d<=end)cnt++;
-    });
-  });
-  return cnt;
-}
-function renderSR(){
-  const s=($('sr-s').value||'').toLowerCase(),dept=$('sr-dept').value;
-  let emps=visibleEmps().filter(e=>{if(s&&!e.name.toLowerCase().includes(s)&&!e.id.toLowerCase().includes(s))return false;if(dept&&e.dept!==dept)return false;return true;});
-  $('sr-list').innerHTML=emps.map(e=>{
-    const sr=getSR(e.id);const actaCnt=sr.actas.length;
-    const filled=SCORE_NODES.filter(n=>sr.nodes[n]&&sr.nodes[n].score!==undefined);
-    const fi3m=getFI3M(e.id);
-    const discScore=calcDisciplineScore(e.id);
-    const salGrade=getSalaryGrade(e);
-    const blacklisted=isBlacklisted(e.id);
-
-    // Build salary node history from ledger data
-    const nodeHistory=SALARY_NODES.map(node=>{
-      const nd=sr.nodes&&sr.nodes[node.label];
-      const status=blacklisted?'blacklisted':getNodeEvalStatus(e.id,node.label);
-      const statusMap={pending:'待评价',evaluating:'评估中',watching:'待观察',passed:'通过',failed:'不通过',blacklisted:'黑名单'};
-      const colorMap={pending:'#9ca3af',evaluating:'#3b82f6',watching:'#f59e0b',passed:'#16a34a',failed:'#dc2626',blacklisted:'#1f2937'};
-      const bgMap={pending:'#f3f4f6',evaluating:'#dbeafe',watching:'#fef3c7',passed:'#dcfce7',failed:'#fee2e2',blacklisted:'#1f2937'};
-      return `<div style="text-align:center;padding:8px 6px;border-radius:6px;background:${bgMap[status]||'#f3f4f6'}">
-        <div style="font-size:10px;color:#6b7280;margin-bottom:3px">${node.label}</div>
-        <div style="font-size:11px;font-weight:600;color:${colorMap[status]||'#374151'}">${statusMap[status]||'—'}</div>
-        ${nd&&nd.examScore!==undefined?`<div style="font-size:10px;color:#6b7280;margin-top:2px">考试 ${nd.examScore}分</div>`:''}
-        ${nd&&nd.evalDate?`<div style="font-size:10px;color:#9ca3af">${nd.evalDate}</div>`:''}
-      </div>`;
-    }).join('');
-
-    const fiColor=fi3m>5?'#dc2626':fi3m>2?'#d97706':fi3m>0?'#f59e0b':'#16a34a';
-    const fiBg=fi3m>5?'#fee2e2':fi3m>2?'#fef3c7':fi3m>0?'#fef9c3':'#dcfce7';
-    const discColor=discScore>=70?'#16a34a':discScore>=50?'#d97706':'#dc2626';
-
-    return`<div class="rv-card">
-      <div class="rv-hd" onclick="toggleRV('${e.id}')">
-        <div style="display:flex;align-items:center;gap:12px">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--color-background-info);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:var(--color-text-info);flex-shrink:0">${e.name.slice(0,1)}</div>
-          <div>
-            <div style="font-weight:500;font-size:14px">${e.name}
-              <span style="font-size:11px;color:var(--color-text-secondary);font-weight:400;font-family:monospace">${e.id}</span>
-              ${e.salaryCode?`<span style="font-size:10px;color:var(--color-text-tertiary);font-family:monospace">[工资编码 ${e.salaryCode}]</span>`:''}
-              ${blacklisted?'<span class="badge" style="background:#1f2937;color:#f9fafb;margin-left:6px">⛔ 黑名单</span>':''}
-            </div>
-            <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">
-              ${getDeptLabel(e.dept)} · ${getPosLabel(e.position)||'—'} · 入职 ${e.joinDate||'—'}
-              · 当前薪资等级 <strong style="font-family:monospace;color:var(--color-text-primary)">${salGrade}</strong>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <span class="badge badge-info">${filled.length}/${SCORE_NODES.length} 节点</span>
-          ${actaCnt>0?`<span class="badge badge-danger">Acta × ${actaCnt}</span>`:''}
-          <span style="color:var(--color-text-tertiary)">▾</span>
-        </div>
-      </div>
-      <div class="rv-body" id="rv-${e.id}">
-
-        <!-- FI 旷工 显眼展示 -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding:14px;background:var(--color-background-secondary);border-radius:8px">
-          <div style="text-align:center">
-            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">近3个月旷工（FI）</div>
-            <div style="font-size:32px;font-weight:700;color:${fiColor};line-height:1">${fi3m}</div>
-            <div style="font-size:11px;margin-top:4px;color:${fiColor};background:${fiBg};display:inline-block;padding:2px 10px;border-radius:20px">${fi3m===0?'良好':fi3m<=2?'注意':fi3m<=5?'警告':'严重'}</div>
-          </div>
-          <div style="text-align:center">
-            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">纪律得分（FI+Acta）</div>
-            <div style="font-size:32px;font-weight:700;color:${discColor};line-height:1">${discScore}</div>
-            <div style="font-size:11px;margin-top:4px;color:${discColor};background:${discScore>=70?'#dcfce7':discScore>=50?'#fef9c3':'#fee2e2'};display:inline-block;padding:2px 10px;border-radius:20px">满分100 · 每次FI/Acta扣10分</div>
-          </div>
-        </div>
-
-        <!-- 调薪节点历史 -->
-        <div style="margin-bottom:14px">
-          <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">调薪考核记录</div>
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">${nodeHistory}</div>
-        </div>
-
-        <!-- 技能考核分数 -->
-        <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">技能考核分数</div>
-        <div class="sn-grid">
-          ${SCORE_NODES.map(n=>{
-            const nd=sr.nodes[n];
-            // Sync: prefer examScore from ledger if available, fallback to sn score
-            const ledgerNd=sr.nodes&&sr.nodes[n];
-            const syncedScore=ledgerNd&&ledgerNd.examScore!==undefined?ledgerNd.examScore:(nd&&nd.score!==undefined?nd.score:undefined);
-            const has=syncedScore!==undefined;
-            const col=has?(syncedScore>=100?'#16a34a':syncedScore>=70?'#ea580c':'#dc2626'):'var(--color-text-tertiary)';
-            const bg=has?(syncedScore>=100?'#dcfce7':syncedScore>=70?'#fff7ed':'#fee2e2'):'var(--color-background-secondary)';
-            return`<div class="sn" style="background:${bg};border:0.5px solid ${has?(syncedScore>=100?'#bbf7d0':syncedScore>=70?'#fed7aa':'#fecaca'):'var(--color-border-tertiary)'};border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="openSN('${e.id}','${n}')"><div class="sn-lbl">${n}</div><div class="sn-val" style="color:${col};font-size:22px;font-weight:700">${has?syncedScore:'—'}</div><div style="font-size:10px;color:var(--color-text-tertiary)">${nd&&nd.date||'点击填写'}</div></div>`;}).join('')}
-        </div>
-
-        <!-- Acta -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px">
-          <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em">Acta Administrativa <span style="background:#fee2e2;color:#991b1b;border:0.5px solid #fca5a5;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;margin-left:6px">${actaCnt} 次</span></div>
-          <button class="btn btn-sm" onclick="openActa('${e.id}')"><i class="ti ti-plus"></i> 新增</button>
-        </div>
-        ${actaCnt>0?sr.actas.map((a,i)=>`<div class="acta-row"><div style="flex-shrink:0;font-size:11px;color:var(--color-text-secondary);min-width:80px">${a.date||'—'}</div><div style="flex:1;min-width:0"><div style="font-size:12px;line-height:1.5">${a.reason||'—'}</div>${a.files&&a.files.length?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${a.files.map(f=>`<div class="pdf-item">📄 ${f}</div>`).join('')}</div>`:''}</div><button class="btn btn-sm btn-del" onclick="delActa('${e.id}',${i})">×</button></div>`).join(''):`<div style="font-size:12px;color:var(--color-text-tertiary);padding:8px;text-align:center;border:0.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-md)">暂无记录</div>`}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function toggleRV(id){const el=$('rv-'+id);if(el)el.style.display=el.style.display==='none'||!el.style.display?'block':'none';}
-function openSN(empId,node){snEmpId=empId;snNode=node;const nd=getSR(empId).nodes[node]||{};$('sn-title').textContent=`考核分数 — ${node}`;$('sn-score').value=nd.score!==undefined?nd.score:'';$('sn-date').value=nd.date||'';$('sn-note').value=nd.note||'';$('modal-sn').classList.add('open');}
-async function saveSN(){const score=parseFloat($('sn-score').value);if(isNaN(score)||score<0||score>100){toast('请输入0~100分');return;}getSR(snEmpId).nodes[snNode]={score,date:$('sn-date').value,note:$('sn-note').value};_srDirty=true;closeM('modal-sn');await saveAndToast('考核分数已保存');renderSR();}
-function openActa(empId){actaEmpId=empId;$('acta-date').value='';$('acta-reason').value='';$('acta-pdf').value='';$('acta-pdf-list').innerHTML='';$('modal-acta').classList.add('open');}
-document.getElementById('acta-pdf').addEventListener('change',function(){$('acta-pdf-list').innerHTML=[...this.files].map(f=>`<div class="pdf-item">📄 ${f.name}</div>`).join('');});
-async function saveActa(){getSR(actaEmpId).actas.push({date:$('acta-date').value,reason:$('acta-reason').value,files:[...$('acta-pdf').files].map(f=>f.name)});_srDirty=true;closeM('modal-acta');await saveAndToast('Acta 已记录');renderSR();}
-async function delActa(empId,i){if(!confirm('确定删除？'))return;getSR(empId).actas.splice(i,1);_srDirty=true;await saveAndToast('已删除');renderSR();}
-function openOpinion(empId,type){opEmpId=empId;opType=type;const op=type==='dept'?getSR(empId).deptOpinion:getSR(empId).finalOpinion;$('op-title').textContent=type==='dept'?'部门领导意见':'最终意见';$('op-lbl').textContent=type==='dept'?'部门领导意见内容':'最终意见内容';$('op-text').value=op&&op.text||'';$('op-date').value=op&&op.date||'';$('op-signer').value=op&&op.signer||'';$('modal-opinion').classList.add('open');}
-async function saveOpinion(){const sr=getSR(opEmpId);const op={text:$('op-text').value,date:$('op-date').value,signer:$('op-signer').value};if(opType==='dept')sr.deptOpinion=op;else sr.finalOpinion=op;_srDirty=true;closeM('modal-opinion');await saveAndToast('意见已保存');renderSR();}
-
-// ═══════════════════════════════════════════════════════════
-// 调薪台账 JS
-// ═══════════════════════════════════════════════════════════
-let _ledgerEvalEmpId=null, _ledgerEvalNode=null;
-
-function refreshLedger(){
-  renderLedger();
-  renderLedgerWeek();
-  renderWatchBlacklist();
-  toast('名单已刷新');
-}
-
-function renderWatchBlacklist(){
-  const watchEl=document.getElementById('watch-list');
-  const blackEl=document.getElementById('blacklist-list');
-  const watchCnt=document.getElementById('watch-count');
-  const blackCnt=document.getElementById('blacklist-count');
-  if(!watchEl||!blackEl)return;
-
-  const watchRows=[], blackRows=[];
-  employees.forEach(emp=>{
-    const sr=salaryReviews[emp.id]||{};
-    const pos=positions.find(p=>p.name===emp.position)||{};
-    if(sr.blacklisted){
-      blackRows.push({emp,sr,pos});
-    } else {
-      // Check if any node has watchUntil set
-      const watchNodes=Object.entries(sr.nodes||{}).filter(([k,v])=>v&&v.watchUntil);
-      if(watchNodes.length){
-        blackRows.push; // skip - they're in nodes
-        watchNodes.forEach(([nodeLabel,nd])=>{
-          watchRows.push({emp,sr,pos,nodeLabel,nd});
-        });
-      }
-    }
-  });
-
-  watchCnt.textContent=watchRows.length+'人';
-  blackCnt.textContent=blackRows.length+'人';
-
-  if(!watchRows.length){
-    watchEl.innerHTML='<div style="color:var(--color-text-tertiary);font-size:13px;padding:12px 0">暂无待观察员工</div>';
-  } else {
-    watchEl.innerHTML=watchRows.map(({emp,pos,nodeLabel,nd})=>`
-      <div class="card" style="margin-bottom:8px;border-left:3px solid #f59e0b">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:32px;height:32px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;color:#92400e">${emp.name.slice(0,1)}</div>
-            <div>
-              <span style="font-weight:500">${emp.name}</span>
-              <span style="font-size:11px;color:var(--color-text-secondary);margin-left:6px">${emp.id} · ${emp.dept} · ${emp.position||'—'}</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="badge" style="background:#fef3c7;color:#92400e">${nodeLabel}节点不通过</span>
-            <span style="font-size:12px;color:#92400e">补考日期：<strong>${nd.watchUntil}</strong></span>
-            <button class="btn btn-sm btn-p" onclick="openLedgerEval('${emp.id}','${nodeLabel}')">补考评估</button>
-          </div>
-        </div>
-      </div>`).join('');
-  }
-
-  if(!blackRows.length){
-    blackEl.innerHTML='<div style="color:var(--color-text-tertiary);font-size:13px;padding:12px 0">暂无黑名单员工</div>';
-  } else {
-    blackEl.innerHTML=blackRows.map(({emp,sr,pos})=>`
-      <div class="card" style="margin-bottom:8px;border-left:3px solid #dc2626">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:32px;height:32px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;color:#991b1b">${emp.name.slice(0,1)}</div>
-            <div>
-              <span style="font-weight:500">${emp.name}</span>
-              <span style="font-size:11px;color:var(--color-text-secondary);margin-left:6px">${emp.id} · ${emp.dept} · ${emp.position||'—'}</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="badge" style="background:#1f2937;color:#f9fafb">⛔ 黑名单</span>
-            <span style="font-size:11px;color:var(--color-text-secondary)">${sr.blacklistedDate||''} ${sr.blacklistedReason?'· '+sr.blacklistedReason:''}</span>
-          </div>
-        </div>
-      </div>`).join('');
-  }
-}
-
-let _ledgerActiveTab='pending';
-
-function switchLedgerTab(tab){
-  _ledgerActiveTab=tab;
-  ['pending','week','past'].forEach(t=>{
-    const btn=document.getElementById('ledger-tab-btn-'+t);
-    if(!btn)return;
-    if(t===tab){
-      btn.style.color='var(--color-primary)';
-      btn.style.borderBottom='2px solid var(--color-primary)';
-    } else {
-      btn.style.color='var(--color-text-secondary)';
-      btn.style.borderBottom='2px solid transparent';
-    }
-  });
-  renderLedger();
-}
-
-function renderLedgerWeek(){
-  // kept for backward compat — now handled inside renderLedger tabs
-  renderLedger();
-}
-
-function getLedgerStatusBadge(status){
-  const map={
-    pending:'<span class="badge" style="background:#f3f4f6;color:#374151">待评价</span>',
-    evaluating:'<span class="badge" style="background:#dbeafe;color:#1d4ed8">评估中</span>',
-    watching:'<span class="badge" style="background:#fef3c7;color:#92400e">待观察</span>',
-    passed:'<span class="badge badge-success">已通过</span>',
-    failed:'<span class="badge" style="background:#fee2e2;color:#991b1b">不通过</span>',
-    blacklisted:'<span class="badge" style="background:#1f2937;color:#f9fafb">⛔ 黑名单</span>',
-  };
-  return map[status]||'';
-}
-
-function renderLedger(){
-  // populate dept filter
-  const deptSel=document.getElementById('ledger-filter-dept');
-  if(deptSel&&deptSel.options.length<=1){
-    departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;deptSel.appendChild(o);});
-  }
-
-  const nodeF=document.getElementById('ledger-filter-node')?.value||'';
-  const statusF=document.getElementById('ledger-filter-status')?.value||'';
-  const deptF=document.getElementById('ledger-filter-dept')?.value||'';
-  const searchF=(document.getElementById('ledger-search')?.value||'').toLowerCase();
-  const el=document.getElementById('ledger-list');
-  if(!el)return;
-
-  const today=new Date(); today.setHours(0,0,0,0);
-  const dayOfWeek=today.getDay()===0?6:today.getDay()-1; // 0=Mon
-  const weekMon=new Date(today); weekMon.setDate(today.getDate()-dayOfWeek);
-  const weekSun=new Date(weekMon); weekSun.setDate(weekMon.getDate()+6);
-  // 当周调薪 = 上周调薪日（本周发上周工资）
-  const prevWeekMon=new Date(weekMon); prevWeekMon.setDate(weekMon.getDate()-7);
-  const prevWeekSun=new Date(weekSun); prevWeekSun.setDate(weekSun.getDate()-7);
-
-  // Build all rows
-  const allRows=[];
-  employees.forEach(emp=>{
-    if(!emp.joinDate)return;
-    const pos=positions.find(p=>p.name===emp.position);
-    if(!pos)return;
-    if(pos.category!=='O'&&pos.category!=='O-T'&&pos.category!=='O-S')return;
-    if(deptF&&emp.dept!==deptF)return;
-    if(searchF&&!emp.name.toLowerCase().includes(searchF)&&!emp.id.toLowerCase().includes(searchF))return;
-
-    const sr=salaryReviews[emp.id]||{};
-    const blacklisted=isBlacklisted(emp.id);
-
-    SALARY_NODES.forEach(node=>{
-      const salaryDate=getSalaryDate(emp.joinDate,node.months);
-      const daysUntil=Math.round((salaryDate-today)/86400000);
-
-      let status=blacklisted?'blacklisted':getNodeEvalStatus(emp.id,node.label);
-      const nodeData=sr.nodes&&sr.nodes[node.label];
-      if(nodeData&&nodeData.watchUntil) status='watching';
-
-      if(nodeF&&nodeF!==node.label)return;
-      if(statusF&&statusF!==status)return;
-
-      const discScore=calcDisciplineScore(emp.id, salaryDate);
-      const examScore=nodeData?.examScore;
-      const salGrade=pos.level+'-'+node.grade;
-
-      // Categorize
-      let tabCat;
-      if(daysUntil>15) return;
-      if(salaryDate>=prevWeekMon&&salaryDate<=prevWeekSun) tabCat='week'; // 上周调薪日 → 本周发薪
-      else if(daysUntil>=0&&daysUntil<=15) tabCat='pending';
-      else tabCat='past';
-
-      allRows.push({emp,pos,node,salaryDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted,tabCat});
-    });
-  });
-
-  // Count per tab
-  const countPending=allRows.filter(r=>r.tabCat==='pending').length;
-  const countWeek=allRows.filter(r=>r.tabCat==='week').length;
-  const countPast=allRows.filter(r=>r.tabCat==='past').length;
-  const setCnt=(id,n)=>{const e=document.getElementById(id);if(e)e.textContent=n;};
-  setCnt('ledger-tab-count-pending',countPending);
-  setCnt('ledger-tab-count-week',countWeek);
-  setCnt('ledger-tab-count-past',countPast);
-  const _wr=document.getElementById('ledger-tab-week-range');if(_wr){const _f=d=>`${d.getMonth()+1}/${d.getDate()}`;_wr.textContent=`(${_f(prevWeekMon)}–${_f(prevWeekSun)})`;};
-
-  const rows=allRows.filter(r=>r.tabCat===_ledgerActiveTab);
-
-  if(!rows.length){el.innerHTML='<div class="card" style="text-align:center;color:var(--color-text-tertiary);padding:32px">暂无符合条件的记录</div>';return;}
-
-  el.innerHTML=rows.map(({emp,pos,node,salaryDate,daysUntil,status,discScore,examScore,nodeData,salGrade,blacklisted})=>{
-    const statusBadge=getLedgerStatusBadge(status);
-    const ndStr=salaryDate.toISOString().slice(0,10);
-    const timeTag=daysUntil<0
-      ?`<span style="font-size:11px;color:var(--color-text-tertiary)">已过${-daysUntil}天</span>`
-      :daysUntil===0?`<span class="badge" style="background:#fef3c7;color:#92400e">今日调薪</span>`
-      :`<span class="badge" style="background:#dbeafe;color:#1d4ed8">还有${daysUntil}天调薪</span>`;
-
-    const examColor=examScore===undefined?'var(--color-text-tertiary)':examScore>=90?'#16a34a':examScore>=60?'#2563eb':'#dc2626';
-    const discColor=discScore>=70?'#16a34a':discScore>=50?'#d97706':'#dc2626';
-    const canEval=!blacklisted&&(status==='pending'||status==='evaluating'||status==='watching');
-    const deptOp=nodeData?.deptOpinion||'';
-    const watchInfo=nodeData?.watchUntil?`<span style="font-size:11px;color:#92400e">待观察至 ${nodeData.watchUntil}</span>`:'';
-
-    return `<div class="card" style="margin-bottom:10px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--color-background-info);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:var(--color-text-info);flex-shrink:0">${emp.name.slice(0,1)}</div>
-          <div style="min-width:0">
-            <div style="font-weight:500;font-size:14px">${emp.name}
-              <span style="font-size:11px;color:var(--color-text-secondary);font-weight:400;font-family:monospace;margin-left:4px">${emp.id}</span>
-              ${blacklisted?'<span class="badge" style="background:#1f2937;color:#f9fafb;margin-left:6px">⛔ 黑名单</span>':''}
-            </div>
-            <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">${emp.dept} · ${emp.position||'—'} · <span style="font-family:monospace;background:var(--color-background-secondary);padding:1px 5px;border-radius:3px">类别:${pos.category||'—'} 等级:${pos.level||'—'}</span> · 薪资等级 <strong style="font-family:monospace">${salGrade}</strong> · 入职 ${emp.joinDate}</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-          <span class="badge" style="background:#f3f4f6;color:#374151">${node.label}节点</span>
-          <span style="font-size:11px;color:var(--color-text-tertiary)">调薪日 ${ndStr}</span>
-          ${timeTag}
-          ${statusBadge}
-          ${watchInfo}
-          ${canEval?`<button class="btn btn-sm btn-p" onclick="openLedgerEval('${emp.id}','${node.label}')">评估</button>`:''}
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;padding-top:12px;border-top:0.5px solid var(--color-border-tertiary)">
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px">考试分数</div>
-          <div style="font-size:20px;font-weight:600;color:${examColor}">${examScore!==undefined?examScore:'—'}</div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">需≥90分通过</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px">纪律得分（FI/Acta）</div>
-          <div style="font-size:20px;font-weight:600;color:${discColor}">${discScore}</div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">需≥70分通过（满分100，每次FI/Acta扣10）</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px">部门意见</div>
-          <div style="font-size:12px;color:var(--color-text-primary);line-height:1.5">${deptOp||'<span style="color:var(--color-text-tertiary)">暂无</span>'}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function openLedgerEval(empId, nodeLabel){
-  const emp=employees.find(e=>e.id===empId);
-  const pos=positions.find(p=>p.name===emp?.position);
-  const sr=salaryReviews[empId]||{};
-  const nodeData=sr.nodes&&sr.nodes[nodeLabel]||{};
-  const discScore=calcDisciplineScore(empId);
-
-  _ledgerEvalEmpId=empId;
-  _ledgerEvalNode=nodeLabel;
-
-  document.getElementById('le-title').textContent=`调薪考核评估 — ${emp?.name} · ${nodeLabel}`;
-
-  const join=emp?.joinDate?new Date(emp.joinDate):null;
-  const nodeInfo=SALARY_NODES.find(n=>n.label===nodeLabel);
-  const salGrade=pos&&nodeInfo?pos.level+'-'+nodeInfo.grade:'—';
-
-  document.getElementById('le-info').innerHTML=`
-    <div><strong>员工：</strong>${emp?.name} <span style="font-family:monospace;font-size:11px">${empId}</span></div>
-    <div><strong>部门/岗位：</strong>${emp?.dept} / ${emp?.position||'—'}</div>
-    <div><strong>岗位类别：</strong>${pos?.category||'—'} &nbsp; <strong>岗位等级：</strong>${pos?.level||'—'} &nbsp; <strong>目标薪资等级：</strong><span style="font-family:monospace;font-weight:600">${salGrade}</span></div>
-    <div><strong>入职日期：</strong>${emp?.joinDate||'—'} &nbsp; <strong>考核节点：</strong>${nodeLabel}</div>
-  `;
-
-  document.getElementById('le-exam').value=nodeData.examScore!==undefined?nodeData.examScore:'';
-  document.getElementById('le-disc').value=discScore+' 分';
-  document.getElementById('le-dept-opinion').value=nodeData.deptOpinion||'';
-  document.getElementById('le-final').value=nodeData.finalDecision||'';
-  updateLeStatus();
-  document.getElementById('modal-ledger-eval').classList.add('open');
-}
-
-function updateLeStatus(){
-  const exam=parseFloat(document.getElementById('le-exam').value);
-  const disc=parseFloat((document.getElementById('le-disc').value||'0').replace(' 分',''));
-  const hint=document.getElementById('le-status-hint');
-  hint.style.display='none';
-  if(isNaN(exam))return;
-  hint.style.display='block';
-  if(exam>=90&&disc>=70){
-    hint.style.background='#dcfce7';hint.style.color='#15803d';
-    hint.textContent='✅ 考试分数 ≥ 90 且纪律得分 ≥ 70，符合加薪条件，可选择"通过"';
-  } else {
-    let reasons=[];
-    if(exam<90)reasons.push('考试分数不足90分（当前'+exam+'分）');
-    if(disc<70)reasons.push('纪律得分不足70分（当前'+disc+'分）');
-    hint.style.background='#fee2e2';hint.style.color='#991b1b';
-    hint.textContent='❌ '+reasons.join('；')+' — 不符合加薪条件';
-  }
-}
-
-async function saveLedgerEval(){
-  const empId=_ledgerEvalEmpId, nodeLabel=_ledgerEvalNode;
-  if(!empId||!nodeLabel)return;
-
-  const examVal=document.getElementById('le-exam').value;
-  const exam=examVal!==''?parseFloat(examVal):undefined;
-  const deptOp=document.getElementById('le-dept-opinion').value.trim();
-  const finalDec=document.getElementById('le-final').value;
-
-  if(!finalDec){toast('请选择最终调薪意见');return;}
-
-  const sr=getSR(empId);
-  if(!sr.nodes)sr.nodes={};
-  if(!sr.nodes[nodeLabel])sr.nodes[nodeLabel]={};
-  const nd=sr.nodes[nodeLabel];
-
-  nd.examScore=exam;
-  nd.deptOpinion=deptOp;
-  nd.finalDecision=finalDec;
-  nd.evalDate=new Date().toISOString().slice(0,10);
-
-  if(finalDec==='通过'){
-    nd.watchUntil=null;
-    // Check if this is a re-eval from watch — clear watch flag
-    nd.isReeval=nd.wasWatch||false;
-    nd.wasWatch=false;
-    toast('✅ 评估通过！员工将按正常周期继续参与后续考核。');
-  } else {
-    // 不通过
-    const prevFailed=nd.failCount||0;
-    nd.failCount=(prevFailed+1);
-    if(nd.failCount>=2){
-      // 第二次不通过 → 黑名单
-      sr.blacklisted=true;
-      sr.blacklistedDate=new Date().toISOString().slice(0,10);
-      sr.blacklistedReason=`${nodeLabel}节点第${nd.failCount}次不通过`;
-      toast('⛔ 第二次不通过，员工已进入黑名单。');
-    } else {
-      // 第一次不通过 → 待观察，3个月后补考
-      const watchDate=new Date();
-      watchDate.setMonth(watchDate.getMonth()+3);
-      nd.watchUntil=watchDate.toISOString().slice(0,10);
-      nd.wasWatch=true;
-      // Add a watch re-eval node scheduled at watchDate
-      const watchNodeLabel=nodeLabel+'（补考'+watchDate.toISOString().slice(0,7)+'）';
-      if(!sr.nodes[watchNodeLabel]){
-        sr.nodes[watchNodeLabel]={
-          isWatchNode:true,
-          parentNode:nodeLabel,
-          scheduledDate:watchDate.toISOString().slice(0,10),
-          failCount:1,
-        };
-      }
-      toast('⏳ 第一次不通过，进入待观察，将于 '+watchDate.toISOString().slice(0,10)+' 安排补考。');
-    }
-  }
-
-  salaryReviews[empId]=sr;
-  _srDirty=true;
-  await saveAll();
-  closeM('modal-ledger-eval');
-  renderLedger();
-  renderLedgerWeek();
-}
-
-function exportLedger(){
-  const rows=[['工号','姓名','部门','岗位','岗位类别','岗位等级','薪资等级','考核节点','节点日期','考试分数','纪律得分','部门意见','最终意见','评估日期','状态']];
-  employees.forEach(emp=>{
-    const pos=positions.find(p=>p.name===emp.position);
-    if(!pos||(pos.category!=='O'&&pos.category!=='O-T'&&pos.category!=='O-S'))return;
-    if(!emp.joinDate)return;
-    const join=new Date(emp.joinDate);
-    const sr=salaryReviews[emp.id]||{};
-    const blacklisted=isBlacklisted(emp.id);
-    SALARY_NODES.forEach(node=>{
-      const nodeDate=new Date(join); nodeDate.setMonth(nodeDate.getMonth()+node.months);
-      const daysUntil=Math.round((nodeDate-new Date())/86400000);
-      if(daysUntil>15)return;
-      const nd=sr.nodes&&sr.nodes[node.label]||{};
-      const discScore=calcDisciplineScore(emp.id,nodeDate);
-      const status=blacklisted?'黑名单':{pending:'待评价',evaluating:'评估中',watching:'待观察',passed:'已通过',failed:'不通过'}[getNodeEvalStatus(emp.id,node.label)]||'—';
-      rows.push([emp.id,emp.name,emp.dept,emp.position,pos.category||'—',pos.level||'—',pos.level+'-'+node.grade,node.label,nodeDate.toISOString().slice(0,10),nd.examScore??'',discScore,nd.deptOpinion||'',nd.finalDecision||'',nd.evalDate||'',status]);
-    });
-  });
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'调薪台账');
-  XLSX.writeFile(wb,'调薪台账_'+new Date().toISOString().slice(0,10)+'.xlsx');
-}
 
 // ═══════════════════════════════════════════════════
 // 绩效分析页 JS
@@ -6694,34 +5886,6 @@ function renderPADept(allScores,months,emps,deptF){
   const ctx5=document.getElementById('pa-dept-completion-chart')?.getContext('2d');
   if(ctx5&&deptData.length){
     _paCharts['pa-dept-completion-chart']=new Chart(ctx5,{type:'bar',data:{labels:deptData.map(d=>tLabel(d.dept)),datasets:[{label:tLabel('完成率%'),data:deptData.map(d=>d.completion),backgroundColor:'#7c3aed44',borderColor:'#7c3aed',borderWidth:1.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}}}});
-  }
-
-  // Dept × salary grade table
-  const tableEl=document.getElementById('pa-dept-salary-table');
-  if(tableEl){
-    const rows=deptData.map(d=>{
-      const dEmps=emps.filter(e=>e.dept===d.dept);
-      const gradeDist={};
-      dEmps.forEach(e=>{const g=getSalaryGrade(e);gradeDist[g]=(gradeDist[g]||0)+1;});
-      const topGrades=Object.entries(gradeDist).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([g,n])=>`${g}×${n}`).join(' / ');
-      return`<tr>
-        <td style="font-weight:500">${d.dept}</td>
-        <td style="text-align:center;font-weight:600;color:${d.avg>=85?'#16a34a':d.avg>=70?'#2563eb':'#dc2626'}">${d.avg}</td>
-        <td style="text-align:center">${d.completion}%</td>
-        <td style="font-size:12px;color:var(--color-text-secondary)">${topGrades||'—'}</td>
-        <td style="text-align:center">${dEmps.length}人</td>
-      </tr>`;
-    }).join('');
-    tableEl.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="border-bottom:1px solid var(--color-border-tertiary)">
-        <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--color-text-secondary)">部门</th>
-        <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--color-text-secondary)">均分</th>
-        <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--color-text-secondary)">完成率</th>
-        <th style="padding:6px 8px;font-size:11px;color:var(--color-text-secondary)">主要薪资等级分布</th>
-        <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--color-text-secondary)">人数</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
   }
 
   // 科室绩效下钻：仅在筛选了具体部门时展示（emps 已按 deptF 过滤）
@@ -7188,12 +6352,11 @@ function renderFail3List(){
       <th style="text-align:left;padding:8px;color:var(--color-text-secondary);font-size:11px">部门 / 岗位</th>
       ${months.map(m=>`<th style="text-align:center;padding:8px;color:var(--color-text-secondary);font-size:11px">${m.label}</th>`).join('')}
       <th style="text-align:center;padding:8px;color:var(--color-text-secondary);font-size:11px">3月均分</th>
-      <th style="text-align:center;padding:8px;color:var(--color-text-secondary);font-size:11px">薪资等级</th>
+      <th style="text-align:center;padding:8px;color:var(--color-text-secondary);font-size:11px">趋势</th>
     </tr></thead>
     <tbody>
     ${failRows.map(({e,monthData})=>{
       const avg=+(monthData.filter(d=>d.score!==null).reduce((a,d)=>a+d.score,0)/3).toFixed(1);
-      const salGrade=getSalaryGrade(e);
       const trend=monthData[2].score-monthData[0].score;
       return`<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
         <td style="padding:8px">
@@ -7204,7 +6367,6 @@ function renderFail3List(){
         ${monthData.map(d=>`<td style="text-align:center;padding:8px;font-weight:700;color:#f87171">${d.score??'—'}</td>`).join('')}
         <td style="text-align:center;padding:8px;font-weight:700;color:#f87171">${avg}</td>
         <td style="text-align:center;padding:8px">
-          <span style="font-family:monospace;font-size:12px;font-weight:600;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px">${salGrade}</span>
           ${trend<0?`<div style="font-size:10px;color:#f87171;margin-top:2px">↓ 持续下滑</div>`:trend>0?`<div style="font-size:10px;color:#d97706;margin-top:2px">↑ 略有回升</div>`:''}
         </td>
       </tr>`;
@@ -7372,102 +6534,6 @@ async function importActualScoresEval(event){
   renderEmpEval();
 }
 
-// ═══════════════════════════════════════════════════
-// 待观察 & 黑名单独立页面 JS
-// ═══════════════════════════════════════════════════
-function renderWatchPage(){
-  const el=document.getElementById('watch-page-list');
-  if(!el)return;
-  const rows=[];
-  employees.forEach(emp=>{
-    const sr=salaryReviews[emp.id]||{};
-    const pos=positions.find(p=>p.name===emp.position)||{};
-    if(sr.blacklisted)return;
-    Object.entries(sr.nodes||{}).forEach(([nodeLabel,nd])=>{
-      if(nd&&nd.watchUntil){
-        rows.push({emp,sr,pos,nodeLabel,nd});
-      }
-    });
-  });
-  if(!rows.length){el.innerHTML='<div class="card" style="text-align:center;color:var(--color-text-tertiary);padding:32px">暂无待观察员工 ✅</div>';return;}
-  el.innerHTML=rows.map(({emp,pos,nodeLabel,nd})=>{
-    const discScore=calcDisciplineScore(emp.id);
-    const today=new Date().toISOString().slice(0,10);
-    const overdue=nd.watchUntil<=today;
-    return`<div class="card" style="margin-bottom:10px;border-left:3px solid #f59e0b">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#92400e">${emp.name.slice(0,1)}</div>
-          <div>
-            <div style="font-weight:500;font-size:14px">${emp.name} <span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace">${emp.id}</span></div>
-            <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">${emp.dept} · ${emp.position||'—'} · 入职 ${emp.joinDate||'—'}</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-          <span class="badge" style="background:#fef3c7;color:#92400e">${nodeLabel} 节点不通过</span>
-          <span class="badge" style="background:${overdue?'#fee2e2':'#f3f4f6'};color:${overdue?'#991b1b':'#374151'}">${overdue?'⚠️ 补考已到期':'补考日 '+nd.watchUntil}</span>
-          <span style="font-size:12px;color:var(--color-text-secondary)">纪律分：<strong>${discScore}</strong></span>
-          <button class="btn btn-sm btn-p" onclick="openLedgerEval('${emp.id}','${nodeLabel}')">补考评估</button>
-        </div>
-      </div>
-      ${nd.examScore!==undefined?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--color-border-tertiary);font-size:12px;color:var(--color-text-secondary)">原考试得分：<strong>${nd.examScore}分</strong>　不通过次数：<strong>${nd.failCount||1}次</strong></div>`:''}
-    </div>`;
-  }).join('');
-}
-
-function renderBlacklistPage(){
-  const el=document.getElementById('blacklist-page-list');
-  if(!el)return;
-  const rows=employees.filter(e=>{
-    const sr=salaryReviews[e.id]||{};
-    return sr.blacklisted===true;
-  });
-  if(!rows.length){el.innerHTML='<div class="card" style="text-align:center;color:var(--color-text-tertiary);padding:32px">暂无黑名单员工 ✅</div>';return;}
-  el.innerHTML=rows.map(emp=>{
-    const sr=salaryReviews[emp.id]||{};
-    const pos=positions.find(p=>p.name===emp.position)||{};
-    const salGrade=getSalaryGrade(emp);
-    const discScore=calcDisciplineScore(emp.id);
-    const failedNodes=Object.entries(sr.nodes||{}).filter(([,nd])=>nd&&nd.failCount>=2).map(([label])=>label);
-    return`<div class="card" style="margin-bottom:10px;border-left:3px solid #dc2626">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:36px;height:36px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#991b1b">${emp.name.slice(0,1)}</div>
-          <div>
-            <div style="font-weight:500;font-size:14px">${emp.name} <span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace">${emp.id}</span></div>
-            <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">${emp.dept} · ${emp.position||'—'} · 薪资等级 <strong style="font-family:monospace">${salGrade}</strong> · 入职 ${emp.joinDate||'—'}</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-          <span class="badge" style="background:#1f2937;color:#f9fafb">⛔ 黑名单</span>
-          <span style="font-size:12px;color:var(--color-text-secondary)">${sr.blacklistedDate||''}</span>
-        </div>
-      </div>
-      <div style="margin-top:10px;padding:10px;background:#fff5f5;border-radius:6px;font-size:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-        <div><span style="color:var(--color-text-secondary)">加入原因：</span>${sr.blacklistedReason||'—'}</div>
-        <div><span style="color:var(--color-text-secondary)">失败节点：</span>${failedNodes.join('、')||'—'}</div>
-        <div><span style="color:var(--color-text-secondary)">当前纪律分：</span><strong>${discScore}</strong></div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function exportSR(){
-  const rows=[['工号','姓名','部门','岗位','当前薪资等级',...SCORE_NODES.map(n=>n+'考核分'),...SALARY_NODES.map(n=>n.label+'调薪结果'),'近3月FI天数','纪律得分','Acta次数']];
-  visibleEmps().forEach(e=>{
-    const sr=getSR(e.id);
-    const salGrade=getSalaryGrade(e);
-    const fi3m=getFI3M(e.id);
-    const disc=calcDisciplineScore(e.id);
-    rows.push([
-      e.id,e.name,e.dept,e.position||'',salGrade,
-      ...SCORE_NODES.map(n=>sr.nodes[n]&&sr.nodes[n].score!=null?sr.nodes[n].score:''),
-      ...SALARY_NODES.map(n=>{const nd=sr.nodes&&sr.nodes[n.label];return nd&&nd.finalDecision?nd.finalDecision:'';}),
-      fi3m,disc,sr.actas.length
-    ]);
-  });
-  const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'员工考核档案');XLSX.writeFile(wb,'员工考核档案.xlsx');toast('导出成功');
-}
 // IMPORT/EXPORT
 const COL_MAP={id:['工号','ID Empleado','ID'],salaryCode:['工资系统编码','工资编码','Salary Code'],name:['姓名','Nombre'],dept:['部门','Departamento'],section:['科室','Sección'],team:['班组','Equipo','Turno'],position:['岗位','Puesto'],joinDate:['入职日期','Fecha de Ingreso'],nationality:['国籍','Nacionalidad'],status:['在职状态','Estado'],resignDate:['离职日期','Fecha de Baja'],resignType:['离职类型','Tipo de Baja'],evalStatus:['员工状态','Estado del Empleado'],regularDate:['转正日期','Fecha de Regularización']};
 // 员工状态归一化：试用/probation -> 试用，其余 -> 正常
@@ -7545,10 +6611,6 @@ const GRANTABLE_MODULES=[
   {id:'cn-attendance',label:'中方考勤填报'},
   {id:'turnover',label:'离职率分析'},
   {id:'employees',label:'员工信息录入'},
-  {id:'salary-review',label:'员工考核档案'},
-  {id:'salary-ledger',label:'调薪台账'},
-  {id:'watch-list-page',label:'待观察名单'},
-  {id:'blacklist-page',label:'黑名单'},
 ];
 function _renderModuleCheckboxes(checked=[]){
   const g=$('ac-modules-grid');if(!g)return;
@@ -7720,11 +6782,8 @@ function showPage(id,el){
   if(id==='org')renderOrg();
   if(id==='kpilib')renderKpiLib();
   if(id==='backup')renderBackupStats();
-  if(id==='salary-ledger'){renderLedger();renderLedgerWeek();renderWatchBlacklist();}
   if(id==='perf-analysis'){renderPerfAnalysis();}
   if(id==='emp-eval'){initEvalPage();}
-  if(id==='watch-list-page'){renderWatchPage();}
-  if(id==='blacklist-page'){renderBlacklistPage();}
   if(id==='employees'){filterEmp();}
   if(id==='kpi'){initKpiFilters();setKpiView('cards');renderKPI();}
   if(id==='attendance')renderAttWeek();
@@ -7743,7 +6802,6 @@ function showPage(id,el){
   }
   if(id==='att-summary')renderSummary();
   if(id==='att-analysis')renderAnaActive();
-  if(id==='salary-review'){const s=$('sr-dept');if(s.options.length<=1)departments.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;s.appendChild(o);});renderSR();}
   if(id==='accounts')renderAccs();
 }
 function closeM(id){$(id).classList.remove('open');}
@@ -8553,6 +7611,7 @@ const ES_DICT={
 '上一周':'Semana anterior',
 '下一周':'Semana siguiente',
 '按部门':'Por departamento',
+'按工序':'Por proceso','分析维度：':'Dimensión: ','各科室':'Secciones','各工序':'Procesos','离职率（本月）':'Tasa de rotación (mes actual)','工序汇总':'Resumen por proceso','以工序为单位（工序取自岗位设置，未配置归入「未分类工序」）':'por proceso (según el puesto; sin proceso → «未分类工序»)',
 '按科室':'Por sección',
 '出勤率':'Tasa de asistencia',
 '加载中':'Cargando',
@@ -9964,6 +9023,30 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
   let toY=null,toM=null;
+  let toView='dept'; // 'dept' 按部门（部门→科室） | 'proc' 按工序（工序→部门）
+  function procOf(e){try{if(typeof empProcess==='function')return empProcess(e)||'';}catch(_){}return '';}
+  function topKey(e){return toView==='proc'?(procOf(e)||'未分类工序'):gDept(e);}
+  function subKey(e){return toView==='proc'?gDept(e):effSec(e);}
+  function VL(){return toView==='proc'
+    ?{top:'工序',sub:'部门',name:'各工序',unit:'工序',sumLbl:'工序汇总',noSub:'—',scope:'以工序为单位（工序取自岗位设置，未配置归入「未分类工序」）'}
+    :{top:'部门',sub:'科室',name:'各科室',unit:'科室',sumLbl:'部门汇总',noSub:'部门直属',scope:'以科室为单位（无科室按部门）'};}
+  function applyViewLabels(){
+    const L=VL();
+    document.querySelectorAll('#page-turnover .to-th1').forEach(n=>n.textContent=L.top);
+    document.querySelectorAll('#page-turnover .to-th2').forEach(n=>n.textContent=L.sub);
+    document.querySelectorAll('#page-turnover .to-v-name').forEach(n=>n.textContent=L.name);
+    document.querySelectorAll('#page-turnover .to-v-unit').forEach(n=>n.textContent=L.unit);
+    const sc=$('to-scope');if(sc)sc.textContent=tr(L.scope);
+    const bd=$('to-view-dept'),bp=$('to-view-proc');
+    if(bd)bd.classList.toggle('btn-p',toView==='dept');
+    if(bp)bp.classList.toggle('btn-p',toView==='proc');
+  }
+  function setToView(v){
+    toView=v;applyViewLabels();
+    renderTurnover();
+    const wp=$('to-panel-week');
+    if(wp&&wp.style.display!=='none'&&wtoWeeks.length)renderTurnoverWeek();
+  }
   let _trendChart=null,_tenureChart=null,_catChart=null,_typeChart=null;
 
   function nowYM(){
@@ -10020,24 +9103,27 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
   // 按部门聚合：部门有科室分类时，输出一行「部门汇总」(isDept) + 各科室明细；
   // 部门无科室时，仅输出一行部门级。返回有序行描述数组。
-  function buildDeptRows(emps){
-    const byDept={};
-    emps.forEach(e=>{const d=gDept(e);if(!byDept[d])byDept[d]={dept:d,emps:[],secs:{}};byDept[d].emps.push(e);
-      const sec=effSec(e);const sk=sec||'__none__';
-      if(!byDept[d].secs[sk])byDept[d].secs[sk]={sec:sec||'部门直属',emps:[]};
-      byDept[d].secs[sk].emps.push(e);});
-    const deptList=Object.values(byDept).map(d=>({...d,st:monthStat(d.emps,toY,toM)}))
+  function buildDeptRows(emps,statFn){
+    statFn=statFn||(g=>monthStat(g,toY,toM));
+    const L=VL();
+    const byTop={};
+    emps.forEach(e=>{const d=topKey(e);if(!byTop[d])byTop[d]={dept:d,emps:[],secs:{}};byTop[d].emps.push(e);
+      const sec=subKey(e);const sk=sec||'__none__';
+      if(!byTop[d].secs[sk])byTop[d].secs[sk]={sec:sec||L.noSub,emps:[]};
+      byTop[d].secs[sk].emps.push(e);});
+    const deptList=Object.values(byTop).map(d=>({...d,st:statFn(d.emps)}))
       .sort((a,b)=>(b.st.rate||0)-(a.st.rate||0)||b.st.resigns-a.st.resigns||b.st.start-a.st.start);
     const out=[];
     deptList.forEach(d=>{
-      const hasRealSections=Object.keys(d.secs).some(k=>k!=='__none__');
+      const secList=Object.keys(d.secs);
+      const hasRealSections=toView==='proc'?secList.length>1:secList.some(k=>k!=='__none__');
       if(hasRealSections){
-        out.push({dept:d.dept,sec:'部门汇总',isDept:true,st:d.st});
-        Object.values(d.secs).map(s=>({sec:s.sec,st:monthStat(s.emps,toY,toM)}))
+        out.push({dept:d.dept,sec:L.sumLbl,isDept:true,st:d.st});
+        Object.values(d.secs).map(s=>({sec:s.sec,st:statFn(s.emps)}))
           .sort((a,b)=>(b.st.rate||0)-(a.st.rate||0)||b.st.resigns-a.st.resigns)
           .forEach(s=>out.push({dept:d.dept,sec:s.sec,isDept:false,st:s.st}));
       }else{
-        out.push({dept:d.dept,sec:'',isDept:true,single:true,st:d.st});
+        out.push({dept:d.dept,sec:toView==='proc'?d.secs[secList[0]].sec:'',isDept:true,single:true,st:d.st});
       }
     });
     return out;
@@ -10061,6 +9147,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
       const lbl=$('to-month-lbl');if(lbl)lbl.textContent='数据加载中...';
       setTimeout(renderTurnoverPage,500);return;
     }
+    applyViewLabels();
     // 部门下拉
     const sel=$('to-dept-f');
     if(sel){const cur=sel.value;const depts=[...new Set(mxAll().map(gDept))].sort();
@@ -10097,9 +9184,9 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
 
     // 分组表：按部门聚合，部门下列出各科室，并加部门级汇总行（加粗高亮）
     $('to-table').innerHTML=buildDeptRows(emps).map(rowHtml).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--color-text-tertiary);padding:18px">本月暂无数据</td></tr>`;
-    // 趋势图仍以科室为单位
+    // 趋势图：按部门视图以科室为单位，按工序视图以工序为单位
     const groups={};
-    emps.forEach(e=>{const k=gKey(e);if(!groups[k])groups[k]={dept:gDept(e),sec:gLabelSec(e),emps:[]};groups[k].emps.push(e);});
+    emps.forEach(e=>{if(toView==='proc'){const k='P|'+topKey(e);if(!groups[k])groups[k]={dept:topKey(e),sec:'—',emps:[]};groups[k].emps.push(e);return;}const k=gKey(e);if(!groups[k])groups[k]={dept:gDept(e),sec:gLabelSec(e),emps:[]};groups[k].emps.push(e);});
 
     renderTenureChart(emps);
     renderTrendChart(groups);
@@ -10245,28 +9332,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   function wDateStr(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
   function wtoLbl(wk,idx){return `第${idx+1}周 (${pad2(wk.start.getMonth()+1)}/${pad2(wk.start.getDate())}~${pad2(wk.end.getMonth()+1)}/${pad2(wk.end.getDate())})`;}
 
-  function buildDeptRowsWeek(emps,ws,we){
-    const byDept={};
-    emps.forEach(e=>{const d=gDept(e);if(!byDept[d])byDept[d]={dept:d,emps:[],secs:{}};byDept[d].emps.push(e);
-      const sec=effSec(e);const sk=sec||'__none__';
-      if(!byDept[d].secs[sk])byDept[d].secs[sk]={sec:sec||'部门直属',emps:[]};
-      byDept[d].secs[sk].emps.push(e);});
-    const deptList=Object.values(byDept).map(d=>({...d,st:weekStat(d.emps,ws,we)}))
-      .sort((a,b)=>(b.st.rate||0)-(a.st.rate||0)||b.st.resigns-a.st.resigns||b.st.start-a.st.start);
-    const out=[];
-    deptList.forEach(d=>{
-      const hasRealSections=Object.keys(d.secs).some(k=>k!=='__none__');
-      if(hasRealSections){
-        out.push({dept:d.dept,sec:'部门汇总',isDept:true,st:d.st});
-        Object.values(d.secs).map(s=>({sec:s.sec,st:weekStat(s.emps,ws,we)}))
-          .sort((a,b)=>(b.st.rate||0)-(a.st.rate||0)||b.st.resigns-a.st.resigns)
-          .forEach(s=>out.push({dept:d.dept,sec:s.sec,isDept:false,st:s.st}));
-      }else{
-        out.push({dept:d.dept,sec:'',isDept:true,single:true,st:d.st});
-      }
-    });
-    return out;
-  }
+  function buildDeptRowsWeek(emps,ws,we){return buildDeptRows(emps,g=>weekStat(g,ws,we));}
 
   function refreshWtoWeeks(){
     $('wto-month-lbl').textContent=mLbl(wtoY,wtoM);
@@ -10309,13 +9375,13 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   function exportTurnover(){
     if(typeof XLSX==='undefined'){if(window.toast)toast('导出组件未就绪');return;}
     const emps=curEmps();
-    const head=['部门','科室','月初人数','入职','离职','月末人数','月均人数','当月离职率'];
+    const head=[VL().top,VL().sub,'月初人数','入职','离职','月末人数','月均人数','当月离职率'];
     const aoa=[head];
-    buildDeptRows(emps).forEach(row=>{const r=row.st;aoa.push([row.isDept?row.dept:'',row.isDept?(row.single?row.dept+'（部门）':row.dept+'·部门汇总'):'  └ '+row.sec,r.start,r.hires,r.resigns,r.end,r.avg?+r.avg.toFixed(1):0,r.rate==null?'—':+r.rate.toFixed(1)+'%']);});
+    buildDeptRows(emps).forEach(row=>{const r=row.st;aoa.push([row.isDept?row.dept:'',row.isDept?(toView==='proc'?(row.single?row.sec:row.dept+'·工序汇总'):(row.single?row.dept+'（部门）':row.dept+'·部门汇总')):'  └ '+row.sec,r.start,r.hires,r.resigns,r.end,r.avg?+r.avg.toFixed(1):0,r.rate==null?'—':+r.rate.toFixed(1)+'%']);});
     const agg=monthStat(emps,toY,toM);
     aoa.push(['合计','',agg.start,agg.hires,agg.resigns,agg.end,agg.avg?+agg.avg.toFixed(1):0,agg.rate==null?'—':+agg.rate.toFixed(1)+'%']);
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),`${toY}-${pad2(toM)}离职率`);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),`${toY}-${pad2(toM)}${toView==='proc'?'工序':''}离职率`);
     // 离职名单 sheet
     const rl=[['工号','姓名','部门','科室','岗位','入职日期','离职日期','离职性质','离职类型','工龄(月)']];
     mxAll().filter(resignedOf).forEach(e=>{const t=tenureMonths(e);const cat=window.resignCategory?window.resignCategory(e.resignType):'';rl.push([e.id,e.name,e.dept||'',e.section||'',e.position||'',e.joinDate||'',e.resignDate||'',cat,e.resignType||'未分类',t==null?'':Math.round(t)]);});
@@ -10339,11 +9405,11 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     const emps=curEmps();
     const agg=monthStat(emps,toY,toM);
     const dF=$('to-dept-f')?$('to-dept-f').value:'';
-    let html='<table><thead><tr><th>部门</th><th>科室</th><th>月初人数</th><th>入职</th><th>离职</th><th>月末人数</th><th>月均人数</th><th>当月离职率</th></tr></thead><tbody>';
+    let html='<table><thead><tr><th>'+VL().top+'</th><th>'+VL().sub+'</th><th>月初人数</th><th>入职</th><th>离职</th><th>月末人数</th><th>月均人数</th><th>当月离职率</th></tr></thead><tbody>';
     buildDeptRows(emps).forEach(row=>{
       const r=row.st;
       const dept=row.isDept?row.dept:'';
-      const sec=row.isDept?(row.single?'':'部门汇总'):('└ '+row.sec);
+      const sec=row.isDept?(row.single?(toView==='proc'?row.sec:''):VL().sumLbl):('└ '+row.sec);
       const style=row.isDept?'font-weight:700;background:#eef2ff;':'';
       html+=`<tr style="${style}"><td>${esc(dept)}</td><td style="text-align:left">${esc(sec)}</td><td>${r.start}</td><td>${r.hires||'-'}</td><td>${r.resigns||'-'}</td><td>${r.end}</td><td>${r.avg?r.avg.toFixed(1):'-'}</td><td>${rateTxt(r.rate)}</td></tr>`;
     });
@@ -10357,7 +9423,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
     const ci=window.chartToImg;
     window.buildPDFReport({
       title:'离职率分析报表',
-      meta:`统计月份：${mLbl(toY,toM)}　·　范围：仅墨西哥工厂员工${dF?'　·　部门：'+dF:''}　·　以科室为单位（无科室按部门）　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
+      meta:`统计月份：${mLbl(toY,toM)}　·　范围：仅墨西哥工厂员工${dF?'　·　部门：'+dF:''}　·　${VL().scope}　·　生成时间：${new Date().toLocaleString('zh-CN')}`,
       sections:[
         {kind:'kpi',cards:[
           {label:'月初人数',value:agg.start},
@@ -10366,7 +9432,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
           {label:'月末人数',value:agg.end},
           {label:'当月离职率',value:rateTxt(agg.rate),color:'#b9770e'},
         ]},
-        {kind:'table',title:'各科室离职率（本月）',html:html},
+        {kind:'table',title:VL().name+'离职率（本月）',html:html},
         {kind:'kpi',cards:[
           {label:'本月离职',value:tc.total},
           {label:'主动离职',value:tc.act,color:'#b9770e'},
@@ -10375,7 +9441,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
         ]},
         {kind:'table',title:'离职类型分布（本月）',html:typeHtml},
         {kind:'charts',cols:2,images:[ci&&ci(_catChart,'主动 / 被动 占比'),ci&&ci(_typeChart,'各离职类型人数')]},
-        {kind:'charts',title:'其他图表',cols:2,images:[ci&&ci(_tenureChart,'离职人员工龄分布（本月）'),ci&&ci(_trendChart,'科室近 6 个月离职率趋势')]},
+        {kind:'charts',title:'其他图表',cols:2,images:[ci&&ci(_tenureChart,'离职人员工龄分布（本月）'),ci&&ci(_trendChart,VL().unit+'近 6 个月离职率趋势')]},
       ]
     });
     if(window.toast)toast('正在生成 PDF…请在打印窗口中选择「另存为 PDF」');
@@ -10389,6 +9455,7 @@ window.setLang=function(l){_origSetLang(l);if(l==='es')applyAll();else restoreAl
   window.exportTurnover=exportTurnover;
   window.exportTurnoverPDF=exportTurnoverPDF;
   window.switchToTab=switchToTab;
+  window.setToView=setToView;
   window.wtoChMonth=wtoChMonth;
   window.onWtoWeekChange=onWtoWeekChange;
   window.renderTurnoverWeek=renderTurnoverWeek;
